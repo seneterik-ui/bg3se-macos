@@ -6,13 +6,13 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 
 ## Status
 
-🚧 **Work in Progress** - Proof of Concept Working!
+🚧 **Work in Progress** - Function Hooking Working!
 
 | Phase | Status | Notes |
 |-------|--------|-------|
 | DYLD Injection | ✅ Complete | Working via `open --env` launch method |
 | Symbol Resolution | ✅ Complete | All 6/6 libOsiris symbols resolved |
-| Function Hooking | 🔄 In Progress | Dobby inline hooking integrated |
+| Function Hooking | ✅ Complete | Dobby inline hooking verified working |
 | Lua Runtime | ⏳ Pending | |
 | Mod Compatibility | ⏳ Pending | Target: More Reactive Companions |
 
@@ -22,11 +22,11 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 - ✅ Universal binary (ARM64 native + x86_64 Rosetta)
 - ✅ Game runs natively on Apple Silicon with injection
 - ✅ Game loads to main menu with injection active
-- ✅ **Successfully loaded saved games with injection active**
+- ✅ **Successfully loaded saved games with hooks active**
 - ✅ 533 loaded images enumerated
-- ✅ libOsiris.dylib symbol addresses resolved (6/6):
-  - `DebugHook`, `CreateRule`, `DefineFunction`, `SetInitSection`
-  - `COsiris::InitGame`, `COsiris::Load`
+- ✅ libOsiris.dylib symbol addresses resolved (6/6)
+- ✅ **Dobby inline hooks intercepting `COsiris::Load` calls**
+- ✅ **Hook return values properly preserved (game loads correctly)**
 
 ## Requirements
 
@@ -34,6 +34,7 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 - Apple Silicon or Intel Mac
 - Baldur's Gate 3 (Steam version)
 - Xcode Command Line Tools (`xcode-select --install`)
+- CMake (`brew install cmake`) - for building Dobby
 
 ## Quick Start
 
@@ -44,7 +45,7 @@ cd bg3se-macos
 ./scripts/build.sh
 ```
 
-This builds a universal binary supporting both ARM64 (native) and x86_64 (Rosetta).
+This builds a universal binary supporting both ARM64 (native) and x86_64 (Rosetta). Dobby will be built automatically if not present.
 
 ### Install
 
@@ -68,17 +69,27 @@ chmod +x /tmp/bg3w.sh
 
 4. Launch BG3 via Steam normally
 
+See `scripts/*.example` files for reference wrapper scripts.
+
 ### Verify
 
 Check `/tmp/bg3se_macos.log` for injection logs:
 ```
-=== BG3SE-macOS v0.3.0 ===
-[timestamp] === BG3SE-macOS v0.3.0 initialized ===
+=== BG3SE-macOS v0.4.0 ===
+[timestamp] === BG3SE-macOS v0.4.0 initialized ===
 [timestamp] Running in process: Baldur's Gate 3 (PID: XXXXX)
 [timestamp] Architecture: ARM64 (Apple Silicon)
+[timestamp] Dobby inline hooking: enabled
 [timestamp] Loaded images: 533
 [timestamp] libOsiris.dylib handle obtained!
 [timestamp] Found 6/6 key Osiris symbols
+[timestamp] Installing Dobby hooks...
+[timestamp]   COsiris::InitGame hooked successfully
+[timestamp]   COsiris::Load hooked successfully
+[timestamp] Hooks installed: 2/2
+...
+[timestamp] >>> COsiris::Load called! (count: 1, this: 0x..., buf: 0x...)
+[timestamp] >>> COsiris::Load returned: 1
 ```
 
 ## How It Works
@@ -87,7 +98,7 @@ BG3SE-macOS uses `DYLD_INSERT_LIBRARIES` to inject a dynamic library into the BG
 
 1. BG3 macOS has **no hardened runtime** (`flags=0x0`)
 2. DYLD injection is allowed for non-hardened apps
-3. libOsiris.dylib exports clean C symbols we can hook
+3. libOsiris.dylib exports clean C/C++ symbols we can hook
 
 ### Key Discoveries
 
@@ -109,6 +120,10 @@ The `open` command does **not** inherit environment variables from the parent sh
 
 BG3 can run either natively (ARM64) or under Rosetta (x86_64). The `open --env` method launches natively on Apple Silicon, so our dylib must be a universal binary containing both architectures.
 
+#### 4. Return Values Must Be Preserved
+
+When hooking C++ member functions, the return value must be captured and returned from the hook. Failing to do so causes the game to fail silently (e.g., returning to main menu after load).
+
 ### Architecture
 
 ```
@@ -116,15 +131,14 @@ BG3 can run either natively (ARM64) or under Rosetta (x86_64). The `open --env` 
 │                  BG3 Process                    │
 ├─────────────────────────────────────────────────┤
 │  ┌──────────────┐    ┌───────────────────────┐  │
-│  │ libOsiris    │◄───│ BG3SE Hooks           │  │
+│  │ libOsiris    │◄───│ BG3SE Hooks (Dobby)   │  │
 │  │ (Scripting)  │    │ - COsiris::InitGame   │  │
-│  └──────────────┘    │ - CreateRule          │  │
-│                      │ - DefineFunction      │  │
-│  ┌──────────────┐    └───────────────────────┘  │
-│  │ Main Game    │              ▲               │
-│  │ Executable   │              │               │
-│  └──────────────┘    ┌─────────┴─────────┐    │
-│                      │  Lua Runtime       │    │
+│  └──────────────┘    │ - COsiris::Load       │  │
+│                      └───────────────────────┘  │
+│  ┌──────────────┐              ▲               │
+│  │ Main Game    │              │               │
+│  │ Executable   │    ┌─────────┴─────────┐    │
+│  └──────────────┘    │  Lua Runtime       │    │
 │                      │  (Mod Scripts)     │    │
 │                      └───────────────────┘    │
 └─────────────────────────────────────────────────┘
@@ -136,15 +150,18 @@ BG3 can run either natively (ARM64) or under Rosetta (x86_64). The `open --env` 
 bg3se-macos/
 ├── src/
 │   └── injector/
-│       └── main.c          # Entry point & initialization
+│       └── main.c              # Entry point, hooks & initialization
 ├── lib/
-│   ├── fishhook/           # Symbol rebinding (for imported symbols)
-│   └── Dobby/              # Inline hooking (for internal functions)
+│   ├── fishhook/               # Symbol rebinding (for imported symbols)
+│   └── Dobby/                  # Inline hooking (for internal functions)
 ├── scripts/
-│   └── build.sh            # Build script (universal binary)
+│   ├── build.sh                # Build script (universal binary)
+│   ├── bg3-wrapper.sh.example  # Example Steam wrapper
+│   ├── launch_bg3.sh.example   # Example direct launcher
+│   └── launch_via_steam.sh.example  # Example Steam setup helper
 ├── build/
 │   └── lib/
-│       └── libbg3se.dylib  # Built dylib (universal: arm64 + x86_64)
+│       └── libbg3se.dylib      # Built dylib (universal: arm64 + x86_64)
 └── README.md
 ```
 
@@ -161,44 +178,41 @@ bg3se-macos/
 
 ### Hooking Strategy
 
-- **fishhook**: For imported symbols (PLT/GOT rebinding)
-- **Dobby**: For internal library functions (inline hooking)
+- **Dobby**: Inline hooking for internal library functions (C++ methods)
+- **fishhook**: Available for imported symbols (PLT/GOT rebinding) if needed
 
-Osiris functions like `DebugHook`, `CreateRule`, etc. are internal to `libOsiris.dylib`, requiring inline hooking via Dobby.
+Osiris functions like `COsiris::Load`, `COsiris::InitGame`, etc. are internal to `libOsiris.dylib`, requiring inline hooking via Dobby.
 
 ### Key libOsiris Symbols
 
 ```
-_DebugHook           - Debug interface
-_CreateRule          - Script rule creation
-_DefineFunction      - Function registration
-_SetInitSection      - Initialization hook
-_ZN7COsiris8InitGameEv    - COsiris::InitGame
-_ZN7COsiris4LoadER12COsiSmartBuf - COsiris::Load
+_DebugHook                      - Debug interface
+_CreateRule                     - Script rule creation
+_DefineFunction                 - Function registration
+_SetInitSection                 - Initialization hook
+_ZN7COsiris8InitGameEv          - COsiris::InitGame()
+_ZN7COsiris4LoadER12COsiSmartBuf - COsiris::Load(COsiSmartBuf&)
 ```
 
-### Sample Log Output (v0.3.0)
+### Sample Log Output (v0.4.0)
 
 ```
-=== BG3SE-macOS v0.3.0 ===
-Injection timestamp: 1764227581
-Process ID: 32878
-[2025-11-27 02:13:01] === BG3SE-macOS v0.3.0 initialized ===
-[2025-11-27 02:13:01] Running in process: Baldur's Gate 3 (PID: 32878)
-[2025-11-27 02:13:01] Architecture: ARM64 (Apple Silicon)
-[2025-11-27 02:13:01] Loaded images: 533
-[2025-11-27 02:13:01]   [0] .../libbg3se.dylib
-[2025-11-27 02:13:01]   [1] .../Baldur's Gate 3
-[2025-11-27 02:13:01]   [5] .../libOsiris.dylib
-[2025-11-27 02:13:01] libOsiris.dylib handle obtained!
-[2025-11-27 02:13:01] Osiris symbol addresses:
-[2025-11-27 02:13:01]   DebugHook: 0x113434b68
-[2025-11-27 02:13:01]   CreateRule: 0x113437570
-[2025-11-27 02:13:01]   DefineFunction: 0x113430b18
-[2025-11-27 02:13:01]   SetInitSection: 0x113432130
-[2025-11-27 02:13:01]   COsiris::InitGame: 0x11342d9b8
-[2025-11-27 02:13:01]   COsiris::Load: 0x11342b150
-[2025-11-27 02:13:01] Found 6/6 key Osiris symbols
+=== BG3SE-macOS v0.4.0 ===
+Injection timestamp: 1764286916
+Process ID: 46727
+[2025-11-27 18:41:56] === BG3SE-macOS v0.4.0 initialized ===
+[2025-11-27 18:41:56] Running in process: Baldur's Gate 3 (PID: 46727)
+[2025-11-27 18:41:56] Architecture: ARM64 (Apple Silicon)
+[2025-11-27 18:41:56] Dobby inline hooking: enabled
+[2025-11-27 18:41:56] Loaded images: 533
+[2025-11-27 18:41:56] libOsiris.dylib handle obtained!
+[2025-11-27 18:41:56] Found 6/6 key Osiris symbols
+[2025-11-27 18:41:56] Installing Dobby hooks...
+[2025-11-27 18:41:56]   COsiris::InitGame hooked successfully (orig: 0x10f754000)
+[2025-11-27 18:41:56]   COsiris::Load hooked successfully (orig: 0x10f754020)
+[2025-11-27 18:41:56] Hooks installed: 2/2
+[2025-11-27 18:42:20] >>> COsiris::Load called! (count: 1, this: 0x60001a6fe360, buf: 0x45f462098)
+[2025-11-27 18:42:21] >>> COsiris::Load returned: 1
 ```
 
 ## Target Mod
@@ -226,6 +240,13 @@ Required SE APIs:
 2. Verify dylib is universal binary (check with `file` command)
 3. Try running without injection: clear Steam launch options
 4. Check Console.app for crash reports
+
+### Game Returns to Menu After Loading
+
+If the game loads but immediately returns to the main menu:
+1. This usually means a hook isn't preserving the return value
+2. Check that hooked functions return the original function's return value
+3. Review `/tmp/bg3se_macos.log` for hook call/return messages
 
 ### Architecture Mismatch Error
 

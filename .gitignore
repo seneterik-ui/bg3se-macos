@@ -28,3 +28,12 @@ Makefile
 *.tmp
 *.swp
 *~
+
+# Dobby build artifacts (keep source, ignore builds)
+lib/Dobby/build-*/
+lib/Dobby/libdobby-universal.a
+
+# Local scripts with hardcoded paths (use .example versions)
+scripts/bg3-wrapper.sh
+scripts/launch_bg3.sh
+scripts/launch_via_steam.sh

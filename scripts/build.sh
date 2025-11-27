@@ -1,7 +1,7 @@
 #!/bin/bash
 #
 # Build script for BG3SE-macOS
-# Builds x86_64 binary (BG3 runs under Rosetta)
+# Builds universal binary (ARM64 + x86_64)
 #
 
 set -e
@@ -20,30 +20,63 @@ echo "=========================================="
 mkdir -p "${BUILD_DIR}/lib"
 mkdir -p "${BUILD_DIR}/obj"
 
-# Source files - minimal build
+# Check for Dobby library
+DOBBY_LIB="${LIB_DIR}/Dobby/libdobby-universal.a"
+if [ ! -f "$DOBBY_LIB" ]; then
+    echo ""
+    echo "Dobby universal library not found. Building..."
+
+    # Build ARM64
+    echo "  Building Dobby for ARM64..."
+    cd "${LIB_DIR}/Dobby"
+    mkdir -p build-arm64
+    cd build-arm64
+    cmake .. -DCMAKE_OSX_ARCHITECTURES=arm64 -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1
+    make -j8 > /dev/null 2>&1
+
+    # Build x86_64
+    echo "  Building Dobby for x86_64..."
+    cd "${LIB_DIR}/Dobby"
+    mkdir -p build-x86_64
+    cd build-x86_64
+    cmake .. -DCMAKE_OSX_ARCHITECTURES=x86_64 -DCMAKE_BUILD_TYPE=Release > /dev/null 2>&1
+    make -j8 > /dev/null 2>&1
+
+    # Create universal library
+    echo "  Creating universal library..."
+    cd "${LIB_DIR}/Dobby"
+    lipo -create build-arm64/libdobby.a build-x86_64/libdobby.a -output libdobby-universal.a
+
+    echo "  Dobby built successfully!"
+    cd "${PROJECT_ROOT}"
+fi
+
+# Source files
 SOURCES=(
     "${SRC_DIR}/injector/main.c"
 )
 
 echo ""
-echo "Compiling sources for x86_64..."
+echo "Compiling sources for universal binary (ARM64 + x86_64)..."
 for src in "${SOURCES[@]}"; do
     echo "  - $(basename "$src")"
 done
 
-# Compile universal binary (both x86_64 for Rosetta and arm64 for native)
-clang \
+# Compile universal binary with Dobby
+clang++ \
     -arch x86_64 \
     -arch arm64 \
     -dynamiclib \
     -o "${BUILD_DIR}/lib/libbg3se.dylib" \
     -I"${SRC_DIR}" \
     -I"${LIB_DIR}" \
+    -L"${LIB_DIR}/Dobby" \
     -Wall -Wextra \
     -O2 \
     -fvisibility=hidden \
-    -undefined dynamic_lookup \
-    "${SOURCES[@]}"
+    "${SOURCES[@]}" \
+    "${DOBBY_LIB}" \
+    -lc++
 
 echo ""
 echo "Build successful!"

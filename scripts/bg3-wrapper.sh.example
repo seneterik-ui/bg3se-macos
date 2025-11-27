@@ -1,0 +1,7 @@
+#!/bin/bash
+# BG3SE Wrapper - Steam calls this, we inject and launch
+#
+# Copy this to bg3-wrapper.sh and update the path to your dylib
+#
+export DYLD_INSERT_LIBRARIES="/path/to/bg3se-macos/build/lib/libbg3se.dylib"
+exec "$@"
