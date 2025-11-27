@@ -31,9 +31,10 @@ for src in "${SOURCES[@]}"; do
     echo "  - $(basename "$src")"
 done
 
-# Compile for x86_64 (BG3 runs under Rosetta)
+# Compile universal binary (both x86_64 for Rosetta and arm64 for native)
 clang \
     -arch x86_64 \
+    -arch arm64 \
     -dynamiclib \
     -o "${BUILD_DIR}/lib/libbg3se.dylib" \
     -I"${SRC_DIR}" \
