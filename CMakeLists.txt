@@ -16,8 +16,17 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin)
 # ============================================
 # Main injection dylib
 # ============================================
+
+# Include paths
+include_directories(
+    ${CMAKE_SOURCE_DIR}/lib
+    ${CMAKE_SOURCE_DIR}/lib/Dobby/include
+    ${CMAKE_SOURCE_DIR}/lib/lua/src
+)
+
 add_library(bg3se SHARED
     src/injector/main.c
+    lib/lz4/lz4.c
 )
 
 target_compile_options(bg3se PRIVATE
@@ -27,10 +36,13 @@ target_compile_options(bg3se PRIVATE
     -fvisibility=hidden
 )
 
-# Link against required frameworks
+# Link against required frameworks and libraries
 target_link_libraries(bg3se PRIVATE
     "-framework Foundation"
     "-framework CoreFoundation"
+    ${CMAKE_SOURCE_DIR}/lib/Dobby/libdobby-universal.a
+    ${CMAKE_SOURCE_DIR}/lib/lua/liblua-universal.a
+    z  # zlib for compression
 )
 
 # Set dylib properties

@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
 // Version info
-#define BG3SE_VERSION "0.9.3"
+#define BG3SE_VERSION "0.9.4"
 #define BG3SE_NAME "BG3SE-macOS"
 
 // Log file for debugging
@@ -54,6 +54,16 @@ static void install_hooks(void);
 static void init_lua(void);
 static void shutdown_lua(void);
 static void detect_enabled_mods(void);
+
+// Forward declarations for Osiris wrappers (defined later in file)
+struct OsiArgumentDesc;  // Forward declare for function signatures
+static uint32_t lookup_function_by_name(const char *name);
+static struct OsiArgumentDesc *alloc_args(int count);
+static void set_arg_string(struct OsiArgumentDesc *arg, const char *value, int isGuid);
+static int osiris_query_by_id(uint32_t funcId, struct OsiArgumentDesc *args);
+static int osi_is_tagged(const char *character, const char *tag);
+static float osi_get_distance_to(const char *char1, const char *char2);
+static void osi_dialog_request_stop(const char *dialog);
 
 // Original function pointers (filled by Dobby)
 static void *orig_InitGame = NULL;
@@ -1809,7 +1819,7 @@ static int lua_gethostcharacter(lua_State *L) {
 
 /**
  * Osi.IsTagged(character, tag) - Check if character has a tag
- * Returns true for known players when checking dialog-related tags
+ * Uses real Osiris query when available, falls back to heuristics
  */
 static int lua_osi_istagged(lua_State *L) {
     const char *character = luaL_checkstring(L, 1);
@@ -1817,8 +1827,20 @@ static int lua_osi_istagged(lua_State *L) {
 
     int result = 0;
 
-    // Check if this is the dialog involvement tag MRC uses
-    // Tag 306b9b05-1057-4770-aa17-01af21acd650 seems to be checking dialog participation
+    // Try real Osiris query first
+    if (pfn_InternalQuery) {
+        int osi_result = osi_is_tagged(character, tag);
+        if (osi_result >= 0) {
+            // Real query succeeded
+            log_message("[Lua] Osi.IsTagged('%s', '%s') -> %d (via Osiris)", character, tag, osi_result);
+            lua_pushboolean(L, osi_result);
+            return 1;
+        }
+        // Fall through to heuristic if function not found
+    }
+
+    // Fallback: heuristic for dialog-related tags
+    // Tag 306b9b05-1057-4770-aa17-01af21acd650 checks dialog participation
     if (strcmp(tag, "306b9b05-1057-4770-aa17-01af21acd650") == 0) {
         // Return true for any known player character when in a dialog
         if (g_currentDialogResource[0] != '\0') {
@@ -1832,19 +1854,31 @@ static int lua_osi_istagged(lua_State *L) {
         }
     }
 
-    log_message("[Lua] Osi.IsTagged('%s', '%s') -> %d", character, tag, result);
+    log_message("[Lua] Osi.IsTagged('%s', '%s') -> %d (heuristic)", character, tag, result);
     lua_pushboolean(L, result);
     return 1;
 }
 
 /**
  * Osi.GetDistanceTo(char1, char2) - Get distance between characters
- * Stub: always returns 0
+ * Uses real Osiris query when available, falls back to 0
  */
 static int lua_osi_getdistanceto(lua_State *L) {
     const char *char1 = luaL_checkstring(L, 1);
     const char *char2 = luaL_checkstring(L, 2);
-    log_message("[Lua] Osi.GetDistanceTo('%s', '%s') called (stub)", char1, char2);
+
+    // Try real Osiris query first
+    if (pfn_InternalQuery) {
+        float distance = osi_get_distance_to(char1, char2);
+        if (distance >= 0.0f) {
+            log_message("[Lua] Osi.GetDistanceTo('%s', '%s') -> %.2f (via Osiris)", char1, char2, distance);
+            lua_pushnumber(L, distance);
+            return 1;
+        }
+        // Fall through if function not found
+    }
+
+    log_message("[Lua] Osi.GetDistanceTo('%s', '%s') -> 0.0 (fallback)", char1, char2);
     lua_pushnumber(L, 0.0);
     return 1;
 }
@@ -1892,21 +1926,54 @@ static int lua_osi_speakergetdialog(lua_State *L) {
 }
 
 /**
- * Osi.DialogRequestStop(character) - Stop a dialog
- * Stub: does nothing
+ * Osi.DialogRequestStop(dialog) - Stop a dialog
+ * Uses real Osiris call when available
  */
 static int lua_osi_dialogrequeststop(lua_State *L) {
-    (void)L;  // Unused parameter
-    log_message("[Lua] Osi.DialogRequestStop() called (stub)");
+    const char *dialog = NULL;
+    if (lua_gettop(L) >= 1 && lua_isstring(L, 1)) {
+        dialog = lua_tostring(L, 1);
+    }
+
+    // Try real Osiris call first
+    if (pfn_InternalCall && dialog) {
+        log_message("[Lua] Osi.DialogRequestStop('%s') - calling Osiris", dialog);
+        osi_dialog_request_stop(dialog);
+    } else {
+        log_message("[Lua] Osi.DialogRequestStop() called (no-op: %s)",
+                    dialog ? "InternalCall not available" : "no dialog specified");
+    }
+
     return 0;
 }
 
 /**
  * Osi.QRY_StartDialog_Fixed(resource, character) - Start a dialog
- * Stub: returns false
+ * Uses real Osiris query when available
  */
 static int lua_osi_qry_startdialog_fixed(lua_State *L) {
-    log_message("[Lua] Osi.QRY_StartDialog_Fixed() called (stub)");
+    const char *resource = luaL_optstring(L, 1, NULL);
+    const char *character = luaL_optstring(L, 2, NULL);
+
+    // Try real Osiris query first
+    if (pfn_InternalQuery && resource && character) {
+        uint32_t funcId = lookup_function_by_name("QRY_StartDialog_Fixed");
+        if (funcId != INVALID_FUNCTION_ID) {
+            OsiArgumentDesc *args = alloc_args(2);
+            if (args) {
+                set_arg_string(&args[0], resource, 0);   // String (resource)
+                set_arg_string(&args[1], character, 1);  // GUID
+                int result = osiris_query_by_id(funcId, args);
+                log_message("[Lua] Osi.QRY_StartDialog_Fixed('%s', '%s') -> %d (via Osiris)",
+                           resource, character, result);
+                lua_pushboolean(L, result);
+                return 1;
+            }
+        }
+    }
+
+    log_message("[Lua] Osi.QRY_StartDialog_Fixed('%s', '%s') -> false (fallback)",
+                resource ? resource : "nil", character ? character : "nil");
     lua_pushboolean(L, 0);
     return 1;
 }
@@ -2559,6 +2626,255 @@ static const char *get_function_name(uint32_t funcId) {
 }
 
 /**
+ * Look up function ID by name
+ * Returns INVALID_FUNCTION_ID if not found
+ */
+static uint32_t lookup_function_by_name(const char *name) {
+    if (!name) return INVALID_FUNCTION_ID;
+
+    // Check known events first (fast path for common names)
+    for (int i = 0; g_knownEvents[i].name != NULL; i++) {
+        if (strcmp(g_knownEvents[i].name, name) == 0 && g_knownEvents[i].funcId != 0) {
+            return g_knownEvents[i].funcId;
+        }
+    }
+
+    // Search dynamic cache
+    for (int i = 0; i < g_funcCacheCount; i++) {
+        if (strcmp(g_funcCache[i].name, name) == 0) {
+            return g_funcCache[i].id;
+        }
+    }
+
+    return INVALID_FUNCTION_ID;
+}
+
+/**
+ * Get function info (arity and type) by name
+ * Returns 1 on success, 0 if not found
+ */
+static int get_function_info(const char *name, uint8_t *out_arity, uint8_t *out_type) {
+    if (!name) return 0;
+
+    // Check known events
+    for (int i = 0; g_knownEvents[i].name != NULL; i++) {
+        if (strcmp(g_knownEvents[i].name, name) == 0) {
+            if (out_arity) *out_arity = g_knownEvents[i].expectedArity;
+            if (out_type) *out_type = OSI_FUNC_EVENT;
+            return 1;
+        }
+    }
+
+    // Search dynamic cache
+    for (int i = 0; i < g_funcCacheCount; i++) {
+        if (strcmp(g_funcCache[i].name, name) == 0) {
+            if (out_arity) *out_arity = g_funcCache[i].arity;
+            if (out_type) *out_type = g_funcCache[i].type;
+            return 1;
+        }
+    }
+
+    return 0;
+}
+
+// ============================================================================
+// Osiris Direct Query/Call Wrappers
+// ============================================================================
+
+// Pool of reusable argument descriptors (avoids malloc per call)
+#define ARG_POOL_SIZE 32
+static OsiArgumentDesc g_argPool[ARG_POOL_SIZE];
+static int g_argPoolUsed = 0;
+
+/**
+ * Allocate argument descriptors from pool
+ * Returns NULL if pool exhausted
+ */
+static OsiArgumentDesc *alloc_args(int count) {
+    if (count <= 0 || count > ARG_POOL_SIZE) return NULL;
+    if (g_argPoolUsed + count > ARG_POOL_SIZE) {
+        // Pool exhausted - reset (not thread safe, but BG3 is single-threaded for Osiris)
+        g_argPoolUsed = 0;
+    }
+
+    OsiArgumentDesc *args = &g_argPool[g_argPoolUsed];
+    g_argPoolUsed += count;
+
+    // Initialize and link
+    memset(args, 0, count * sizeof(OsiArgumentDesc));
+    for (int i = 0; i < count - 1; i++) {
+        args[i].nextParam = &args[i + 1];
+    }
+    args[count - 1].nextParam = NULL;
+
+    return args;
+}
+
+/**
+ * Set argument value as string/GUID
+ */
+static void set_arg_string(OsiArgumentDesc *arg, const char *value, int isGuid) {
+    if (!arg) return;
+    arg->value.typeId = isGuid ? OSI_TYPE_GUIDSTRING : OSI_TYPE_STRING;
+    arg->value.stringVal = (char *)value;  // Note: caller must ensure lifetime
+}
+
+/**
+ * Set argument value as integer
+ */
+static void set_arg_int(OsiArgumentDesc *arg, int32_t value) {
+    if (!arg) return;
+    arg->value.typeId = OSI_TYPE_INTEGER;
+    arg->value.int32Val = value;
+}
+
+/**
+ * Set argument value as real (float)
+ */
+static void set_arg_real(OsiArgumentDesc *arg, float value) {
+    if (!arg) return;
+    arg->value.typeId = OSI_TYPE_REAL;
+    arg->value.floatVal = value;
+}
+
+/**
+ * Execute an Osiris query by function ID
+ * Returns 1 on success, 0 on failure
+ * Output values are written back to args
+ */
+static int osiris_query_by_id(uint32_t funcId, OsiArgumentDesc *args) {
+    if (!pfn_InternalQuery) {
+        log_message("[OsiQuery] ERROR: InternalQuery not resolved");
+        return 0;
+    }
+
+    int result = pfn_InternalQuery(funcId, args);
+    return result;
+}
+
+/**
+ * Execute an Osiris query by name
+ * Returns 1 on success, 0 on failure
+ */
+static int osiris_query(const char *funcName, OsiArgumentDesc *args) {
+    uint32_t funcId = lookup_function_by_name(funcName);
+    if (funcId == INVALID_FUNCTION_ID) {
+        log_message("[OsiQuery] Function '%s' not found in cache", funcName);
+        return 0;
+    }
+
+    log_message("[OsiQuery] Calling %s (id=0x%x)", funcName, funcId);
+    return osiris_query_by_id(funcId, args);
+}
+
+/**
+ * Execute an Osiris call (proc/event) by function ID
+ * Returns 1 on success, 0 on failure
+ */
+static int osiris_call_by_id(uint32_t funcId, OsiArgumentDesc *args) {
+    if (!pfn_InternalCall) {
+        log_message("[OsiCall] ERROR: InternalCall not resolved");
+        return 0;
+    }
+
+    // Note: InternalCall takes COsipParameterList, not OsiArgumentDesc
+    // For now, this may need adjustment based on actual signature
+    int result = pfn_InternalCall(funcId, (void *)args);
+    return result;
+}
+
+/**
+ * Execute an Osiris call by name
+ * Returns 1 on success, 0 on failure
+ */
+static int osiris_call(const char *funcName, OsiArgumentDesc *args) {
+    uint32_t funcId = lookup_function_by_name(funcName);
+    if (funcId == INVALID_FUNCTION_ID) {
+        log_message("[OsiCall] Function '%s' not found in cache", funcName);
+        return 0;
+    }
+
+    log_message("[OsiCall] Calling %s (id=0x%x)", funcName, funcId);
+    return osiris_call_by_id(funcId, args);
+}
+
+// ============================================================================
+// Convenience wrappers for common Osiris functions
+// ============================================================================
+
+/**
+ * QRY_IsTagged(character, tag) - Check if character has a tag
+ * Returns 1 if tagged, 0 if not or on error
+ */
+static int osi_is_tagged(const char *character, const char *tag) {
+    // Look up QRY_IsTagged or IsTagged
+    uint32_t funcId = lookup_function_by_name("QRY_IsTagged");
+    if (funcId == INVALID_FUNCTION_ID) {
+        funcId = lookup_function_by_name("IsTagged");
+    }
+    if (funcId == INVALID_FUNCTION_ID) {
+        // Function not yet discovered
+        return -1;  // Unknown
+    }
+
+    OsiArgumentDesc *args = alloc_args(2);
+    if (!args) return -1;
+
+    set_arg_string(&args[0], character, 1);  // GUID
+    set_arg_string(&args[1], tag, 1);        // GUID
+
+    return osiris_query_by_id(funcId, args);
+}
+
+/**
+ * GetDistanceTo(char1, char2) - Get distance between characters
+ * Returns distance in meters, or -1.0 on error
+ */
+static float osi_get_distance_to(const char *char1, const char *char2) {
+    uint32_t funcId = lookup_function_by_name("QRY_GetDistance");
+    if (funcId == INVALID_FUNCTION_ID) {
+        funcId = lookup_function_by_name("GetDistanceTo");
+    }
+    if (funcId == INVALID_FUNCTION_ID) {
+        return -1.0f;
+    }
+
+    // This query returns a float as out param
+    OsiArgumentDesc *args = alloc_args(3);
+    if (!args) return -1.0f;
+
+    set_arg_string(&args[0], char1, 1);  // GUID
+    set_arg_string(&args[1], char2, 1);  // GUID
+    args[2].value.typeId = OSI_TYPE_REAL;  // Out param
+
+    if (osiris_query_by_id(funcId, args)) {
+        return args[2].value.floatVal;
+    }
+
+    return -1.0f;
+}
+
+/**
+ * DialogRequestStop(dialog) - Stop a dialog
+ */
+static void osi_dialog_request_stop(const char *dialog) {
+    uint32_t funcId = lookup_function_by_name("DialogRequestStop");
+    if (funcId == INVALID_FUNCTION_ID) {
+        funcId = lookup_function_by_name("Proc_DialogRequestStop");
+    }
+    if (funcId == INVALID_FUNCTION_ID) {
+        log_message("[OsiCall] DialogRequestStop not found");
+        return;
+    }
+
+    OsiArgumentDesc *args = alloc_args(1);
+    if (!args) return;
+
+    set_arg_string(&args[0], dialog, 1);
+    osiris_call_by_id(funcId, args);
+}
+
+/**
  * Count arguments in an OsiArgumentDesc chain
  */
 static int count_osi_args(OsiArgumentDesc *args) {
@@ -2864,17 +3180,33 @@ static void install_hooks(void) {
     }
     log_message("=== End Pattern Scanner Test ===");
 
-    // Also resolve function pointers for Osiris calls (not hooked, just called)
-    pfn_InternalQuery = (InternalQueryFn)dlsym(osiris, "_Z13InternalQueryjP16COsiArgumentDesc");
-    pfn_InternalCall = (InternalCallFn)dlsym(osiris, "_Z12InternalCalljP18COsipParameterList");
+    // Resolve function pointers for Osiris calls (not hooked, just called)
+    // Use pattern-based fallback if dlsym fails
+    log_message("Resolving Osiris function pointers...");
+
+    // InternalQuery - try dlsym first, then pattern scan
+    pfn_InternalQuery = (InternalQueryFn)resolve_osiris_symbol(osiris, &g_osirisPatterns[0]);
+    if (!pfn_InternalQuery) {
+        log_message("  WARNING: InternalQuery not found");
+    }
+
+    // InternalCall - try dlsym first, then pattern scan
+    pfn_InternalCall = (InternalCallFn)resolve_osiris_symbol(osiris, &g_osirisPatterns[1]);
+    if (!pfn_InternalCall) {
+        log_message("  WARNING: InternalCall not found");
+    }
+
+    // pFunctionData - direct dlsym only (no pattern yet)
     pfn_pFunctionData = (pFunctionDataFn)dlsym(osiris, "_ZN15COsiFunctionMan13pFunctionDataEj");
 
     // Get the global OsiFunctionMan pointer
     g_pOsiFunctionMan = (void **)dlsym(osiris, "_OsiFunctionMan");
 
     log_message("Osiris function pointers:");
-    log_message("  InternalQuery: %p", (void*)pfn_InternalQuery);
-    log_message("  InternalCall: %p", (void*)pfn_InternalCall);
+    log_message("  InternalQuery: %p%s", (void*)pfn_InternalQuery,
+                pfn_InternalQuery ? "" : " (NOT FOUND)");
+    log_message("  InternalCall: %p%s", (void*)pfn_InternalCall,
+                pfn_InternalCall ? "" : " (NOT FOUND)");
     log_message("  pFunctionData: %p", (void*)pfn_pFunctionData);
     log_message("  OsiFunctionMan global: %p", (void*)g_pOsiFunctionMan);
     if (g_pOsiFunctionMan) {
