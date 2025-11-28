@@ -15,6 +15,7 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 | Function Hooking | ✅ Complete | Dobby inline hooking verified working |
 | Lua Runtime | ✅ Complete | Lua 5.4 with Ext API |
 | Mod Detection | ✅ Complete | Reads modsettings.lsx at startup |
+| SE Mod Auto-Detection | ✅ Complete | Scans Config.json for "Lua" feature flag |
 | Ext.Require | ✅ Complete | Module loading from mod directories |
 | Ext.Osiris | ✅ Complete | Event listener registration |
 | Osi.* Functions | ⏳ Stubs | Osiris bindings (stubs only) |
@@ -33,6 +34,7 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 - ✅ **Lua 5.4 runtime initialized and executing scripts**
 - ✅ **Ext API functions working (Print, GetVersion, IsClient, IsServer)**
 - ✅ **Mod list detection from modsettings.lsx**
+- ✅ **Auto-detection of SE mods via Config.json scanning**
 - ✅ **Hooks triggering Lua callbacks on game events**
 - ✅ **Ext.Require() loading mod modules**
 - ✅ **Ext.Osiris.RegisterListener() registering event callbacks**
@@ -96,26 +98,29 @@ python3 tools/extract_pak.py path/to/ModName.pak /tmp/ModName_extracted
 
 Check `/tmp/bg3se_macos.log` for injection and mod loading logs:
 ```
-=== BG3SE-macOS v0.7.0 ===
-[timestamp] === BG3SE-macOS v0.7.0 initialized ===
+=== BG3SE-macOS v0.8.0 ===
+[timestamp] === BG3SE-macOS v0.8.0 initialized ===
 [timestamp] Running in process: Baldur's Gate 3 (PID: XXXXX)
 [timestamp] Architecture: ARM64 (Apple Silicon)
 [timestamp] Dobby inline hooking: enabled
 [timestamp] === Enabled Mods ===
 [timestamp]   [1] GustavX (base game)
 [timestamp]   [2] YourMod1
-[timestamp] Total mods: 2 (1 user mods)
+[timestamp]   [3] MoreReactiveCompanions_Configurable
+[timestamp] Total mods: 3 (2 user mods)
 [timestamp] ====================
+[timestamp] === Scanning for SE Mods ===
+[timestamp] [SE] Found Config.json with Lua for MoreReactiveCompanions_Configurable at: /tmp/mrc_extracted/...
+[timestamp]   [SE] MoreReactiveCompanions_Configurable
+[timestamp] Total SE mods: 1
+[timestamp] ============================
 [timestamp] Initializing Lua runtime...
-[timestamp] Ext API registered in Lua
-[timestamp] Ext.Osiris API registered
-[timestamp] Osi namespace registered (stubs)
-[timestamp] [Lua] BG3SE-macOS Lua runtime initialized!
 ...
 [timestamp] >>> COsiris::Load called! (count: 1, this: 0x..., buf: 0x...)
 [timestamp] >>> COsiris::Load returned: 1
 [timestamp] [Lua] Story/save data loaded!
 [timestamp] === Loading Mod Scripts ===
+[timestamp] [Lua] Loading 1 detected SE mod(s)...
 [timestamp] [Lua] Ext.Require('Server/YourMod.lua')
 [timestamp] [Lua] HERE IN THE MOD
 [timestamp] [Lua] Registered Osiris listener: SomeEvent (arity=2, timing=before)
@@ -298,10 +303,13 @@ This is useful for examining mod structure and Lua scripts, and currently requir
 
 ### Next Steps
 
-1. **Real Osiris Bindings** - Hook into Osiris database to implement real `Osi.*` functions
-2. **PAK File Reading** - Load scripts directly from .pak files without extraction
-3. **Steam Workshop Support** - Auto-detect mods from workshop folder
-4. **Auto-detection** - Scan for SE-enabled mods via Config.json
+1. **Steam Workshop Support** - Auto-detect mods from `~/Library/Application Support/Steam/steamapps/workshop/content/1086940/`
+2. **PAK File Reading** - Load scripts directly from .pak files without manual extraction
+3. **Real Osiris Bindings** - Hook into Osiris database to implement real `Osi.*` functions
+
+### Completed
+
+- ✅ Auto-detection of SE mods via Config.json scanning (v0.8.0)
 
 ## Troubleshooting
 
@@ -328,10 +336,11 @@ If the game loads but immediately returns to the main menu:
 
 ### Mod Not Loading
 
-1. Ensure the mod is extracted to `/tmp/<ModName>_extracted/`
-2. Check that the path structure is: `Mods/<ModName>/ScriptExtender/Lua/BootstrapServer.lua`
-3. Review the log for "Loading Mod Scripts" section
-4. Verify the mod name matches what's hardcoded (currently `MoreReactiveCompanions_Configurable`)
+1. Ensure the mod is enabled in modsettings.lsx (use in-game mod manager or BG3 Mod Manager)
+2. Extract the mod to `/tmp/<ModName>_extracted/` using `tools/extract_pak.py`
+3. Check that the mod has `ScriptExtender/Config.json` with `"Lua"` in FeatureFlags
+4. Check that the path structure is: `Mods/<ModName>/ScriptExtender/Lua/BootstrapServer.lua`
+5. Review the log for "Scanning for SE Mods" and "Loading Mod Scripts" sections
 
 ### Architecture Mismatch Error
 

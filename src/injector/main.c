@@ -32,7 +32,7 @@ extern "C" {
 #endif
 
 // Version info
-#define BG3SE_VERSION "0.7.0"
+#define BG3SE_VERSION "0.8.0"
 #define BG3SE_NAME "BG3SE-macOS"
 
 // Log file for debugging
@@ -73,6 +73,16 @@ static char current_mod_name[256] = "";
 static char current_mod_lua_base[MAX_PATH_LEN] = "";  // Base path for current mod's Lua folder
 static char mods_base_path[MAX_PATH_LEN] = "";
 
+// Detected mods from modsettings.lsx
+#define MAX_MODS 128
+#define MAX_MOD_NAME_LEN 256
+static char detected_mods[MAX_MODS][MAX_MOD_NAME_LEN];
+static int detected_mod_count = 0;
+
+// Detected SE mods (mods with ScriptExtender/Config.json containing "Lua")
+static char se_mods[MAX_MODS][MAX_MOD_NAME_LEN];
+static int se_mod_count = 0;
+
 /**
  * Write to both syslog and our log file
  */
@@ -104,10 +114,95 @@ static void log_message(const char *format, ...) {
 // ============================================================================
 
 /**
- * Parse modsettings.lsx and log enabled mods
+ * Check if a file contains a specific string
+ * Returns 1 if found, 0 if not found or file doesn't exist
+ */
+static int file_contains_string(const char *filepath, const char *search_str) {
+    FILE *f = fopen(filepath, "r");
+    if (!f) return 0;
+
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+
+    if (size <= 0 || size > 1024 * 1024) {  // Sanity check: max 1MB
+        fclose(f);
+        return 0;
+    }
+
+    char *content = (char *)malloc(size + 1);
+    if (!content) {
+        fclose(f);
+        return 0;
+    }
+
+    fread(content, 1, size, f);
+    content[size] = '\0';
+    fclose(f);
+
+    int found = (strstr(content, search_str) != NULL);
+    free(content);
+    return found;
+}
+
+/**
+ * Check if a mod has ScriptExtender support by looking for Config.json
+ * with "Lua" in FeatureFlags. Checks multiple possible locations.
+ * Returns 1 if found, 0 if not an SE mod
+ */
+static int check_mod_has_script_extender(const char *mod_name) {
+    char config_path[MAX_PATH_LEN];
+
+    // Location 1: Extracted mod in /tmp/<ModName>_extracted/
+    snprintf(config_path, sizeof(config_path),
+             "/tmp/%s_extracted/Mods/%s/ScriptExtender/Config.json",
+             mod_name, mod_name);
+    if (file_contains_string(config_path, "\"Lua\"")) {
+        log_message("[SE] Found Config.json with Lua for %s at: %s", mod_name, config_path);
+        return 1;
+    }
+
+    // Location 2: Short extracted name (e.g., mrc_extracted for MoreReactiveCompanions_Configurable)
+    // Try a few common short names
+    const char *short_names[] = {"mrc", "se", "mod", NULL};
+    for (int i = 0; short_names[i] != NULL; i++) {
+        snprintf(config_path, sizeof(config_path),
+                 "/tmp/%s_extracted/Mods/%s/ScriptExtender/Config.json",
+                 short_names[i], mod_name);
+        if (file_contains_string(config_path, "\"Lua\"")) {
+            log_message("[SE] Found Config.json with Lua for %s at: %s", mod_name, config_path);
+            return 1;
+        }
+    }
+
+    // Location 3: User's Mods folder (unpacked mod)
+    const char *home = getenv("HOME");
+    if (home) {
+        snprintf(config_path, sizeof(config_path),
+                 "%s/Documents/Larian Studios/Baldur's Gate 3/Mods/%s/ScriptExtender/Config.json",
+                 home, mod_name);
+        if (file_contains_string(config_path, "\"Lua\"")) {
+            log_message("[SE] Found Config.json with Lua for %s at: %s", mod_name, config_path);
+            return 1;
+        }
+    }
+
+    // Location 4: Steam Workshop (will be expanded in Steam Workshop support task)
+    // For now, just a placeholder
+
+    return 0;
+}
+
+/**
+ * Parse modsettings.lsx and detect enabled mods
+ * Also identifies which mods have ScriptExtender support
  * The file is XML-based, we do simple string parsing to extract mod names
  */
 static void detect_enabled_mods(void) {
+    // Reset detected mods
+    detected_mod_count = 0;
+    se_mod_count = 0;
+
     // Build path to modsettings.lsx
     const char *home = getenv("HOME");
     if (!home) {
@@ -158,10 +253,15 @@ static void detect_enabled_mods(void) {
         char *end = strchr(ptr, '"');
         if (end) {
             size_t name_len = end - ptr;
-            if (name_len < 256) {
-                char mod_name[256];
+            if (name_len < MAX_MOD_NAME_LEN && detected_mod_count < MAX_MODS) {
+                char mod_name[MAX_MOD_NAME_LEN];
                 strncpy(mod_name, ptr, name_len);
                 mod_name[name_len] = '\0';
+
+                // Store in detected mods array
+                strncpy(detected_mods[detected_mod_count], mod_name, MAX_MOD_NAME_LEN - 1);
+                detected_mods[detected_mod_count][MAX_MOD_NAME_LEN - 1] = '\0';
+                detected_mod_count++;
 
                 mod_count++;
                 // Skip GustavX as it's the base game, but still count it
@@ -179,6 +279,29 @@ static void detect_enabled_mods(void) {
     log_message("====================");
 
     free(content);
+
+    // Now check which mods have Script Extender support
+    log_message("=== Scanning for SE Mods ===");
+    for (int i = 0; i < detected_mod_count; i++) {
+        // Skip base game
+        if (strcmp(detected_mods[i], "GustavX") == 0) continue;
+
+        if (check_mod_has_script_extender(detected_mods[i])) {
+            if (se_mod_count < MAX_MODS) {
+                strncpy(se_mods[se_mod_count], detected_mods[i], MAX_MOD_NAME_LEN - 1);
+                se_mods[se_mod_count][MAX_MOD_NAME_LEN - 1] = '\0';
+                se_mod_count++;
+                log_message("  [SE] %s", detected_mods[i]);
+            }
+        }
+    }
+
+    if (se_mod_count == 0) {
+        log_message("  No SE mods detected (ensure mods are extracted to /tmp/)");
+    } else {
+        log_message("Total SE mods: %d", se_mod_count);
+    }
+    log_message("============================");
 }
 
 // ============================================================================
@@ -1066,7 +1189,7 @@ static int load_mod_bootstrap(lua_State *L, const char *mod_name, const char *bo
 
 /**
  * Load all mod bootstraps for SE-enabled mods
- * Currently we manually specify mods to load, future: read from Config.json
+ * Uses the dynamically detected se_mods[] array populated by detect_enabled_mods()
  */
 static void load_mod_scripts(lua_State *L) {
     log_message("=== Loading Mod Scripts ===");
@@ -1074,14 +1197,16 @@ static void load_mod_scripts(lua_State *L) {
     // Initialize the mods base path
     init_mods_base_path();
 
-    // For now, we'll try to load the More Reactive Companions mod
-    // In the future, this should scan modsettings.lsx and Config.json
-    const char *se_mods[] = {
-        "MoreReactiveCompanions_Configurable",
-        NULL
-    };
+    // Check if we have any SE mods detected
+    if (se_mod_count == 0) {
+        log_message("[Lua] No SE mods detected to load");
+        log_message("=== Mod Script Loading Complete ===");
+        return;
+    }
 
-    for (int i = 0; se_mods[i] != NULL; i++) {
+    log_message("[Lua] Loading %d detected SE mod(s)...", se_mod_count);
+
+    for (int i = 0; i < se_mod_count; i++) {
         const char *mod_name = se_mods[i];
         log_message("[Lua] Attempting to load SE mod: %s", mod_name);
 
