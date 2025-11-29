@@ -22,8 +22,12 @@
 // LZ4 decompression
 #include "lz4/lz4.h"
 
-// Dobby hooking framework
+// Dobby hooking framework (suppress warnings from third-party header)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wvariadic-macros"
+#pragma clang diagnostic ignored "-Wstrict-prototypes"
 #include "Dobby/include/dobby.h"
+#pragma clang diagnostic pop
 
 // Lua runtime (C library, needs extern "C" for C++ linkage)
 #ifdef __cplusplus
@@ -37,7 +41,7 @@ extern "C" {
 #endif
 
 // Version info
-#define BG3SE_VERSION "0.9.5"
+#define BG3SE_VERSION "0.9.9"
 #define BG3SE_NAME "BG3SE-macOS"
 
 // Log file for debugging
@@ -60,6 +64,8 @@ struct OsiArgumentDesc;  // Forward declare for function signatures
 static uint32_t lookup_function_by_name(const char *name);
 static struct OsiArgumentDesc *alloc_args(int count);
 static void set_arg_string(struct OsiArgumentDesc *arg, const char *value, int isGuid);
+static void set_arg_int(struct OsiArgumentDesc *arg, int32_t value);
+static void set_arg_real(struct OsiArgumentDesc *arg, float value);
 static int osiris_query_by_id(uint32_t funcId, struct OsiArgumentDesc *args);
 static int osi_is_tagged(const char *character, const char *tag);
 static float osi_get_distance_to(const char *char1, const char *char2);
@@ -67,6 +73,7 @@ static void osi_dialog_request_stop(const char *dialog);
 static void enumerate_osiris_functions(void);
 static void try_cache_function_from_event(uint32_t funcId);
 static const char *get_function_name(uint32_t funcId);
+static int get_function_info(const char *name, uint8_t *out_arity, uint8_t *out_type);
 
 // Original function pointers (filled by Dobby)
 static void *orig_InitGame = NULL;
@@ -148,6 +155,7 @@ static int g_dialogParticipantCount = 0;
 
 // Function types (based on Windows BG3SE)
 typedef enum {
+    OSI_FUNC_UNKNOWN = 0,
     OSI_FUNC_EVENT = 1,
     OSI_FUNC_QUERY = 2,
     OSI_FUNC_CALL = 3,
@@ -2036,14 +2044,181 @@ static int lua_osi_db_players_get(lua_State *L) {
     return 1;
 }
 
+// ============================================================================
+// Dynamic Osi.* Metatable Implementation
+// ============================================================================
+
 /**
- * Register Osi namespace with stub functions
+ * Dynamic Osiris function dispatcher
+ * This closure is returned by Osi.__index for unknown function names.
+ * The function name is stored as upvalue 1.
+ */
+static int osi_dynamic_call(lua_State *L) {
+    // Get function name from upvalue
+    const char *funcName = lua_tostring(L, lua_upvalueindex(1));
+    if (!funcName) {
+        return luaL_error(L, "Osi function name not found in upvalue");
+    }
+
+    // Look up function ID
+    uint32_t funcId = lookup_function_by_name(funcName);
+    if (funcId == INVALID_FUNCTION_ID) {
+        // Function not yet discovered - return nil gracefully
+        log_message("[Osi.%s] Function not found in cache (not yet discovered)", funcName);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Get function info to determine type
+    uint8_t arity = 0;
+    uint8_t funcType = OSI_FUNC_UNKNOWN;
+    get_function_info(funcName, &arity, &funcType);
+
+    int numArgs = lua_gettop(L);
+    log_message("[Osi.%s] Called with %d args (funcId=0x%x, type=%d)",
+                funcName, numArgs, funcId, funcType);
+
+    // Check if we have the required function pointers
+    if (!pfn_InternalQuery && !pfn_InternalCall) {
+        log_message("[Osi.%s] ERROR: No Osiris function pointers available", funcName);
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Allocate arguments
+    OsiArgumentDesc *args = NULL;
+    if (numArgs > 0) {
+        args = alloc_args(numArgs);
+        if (!args) {
+            return luaL_error(L, "Failed to allocate Osiris arguments");
+        }
+
+        // Convert Lua arguments to Osiris arguments
+        for (int i = 0; i < numArgs; i++) {
+            int argIdx = i + 1;  // Lua indices start at 1
+            int luaType = lua_type(L, argIdx);
+
+            switch (luaType) {
+                case LUA_TSTRING: {
+                    const char *str = lua_tostring(L, argIdx);
+                    // Check if it looks like a GUID
+                    int isGuid = (str && strlen(str) >= 36 &&
+                                  strchr(str, '-') != NULL);
+                    set_arg_string(&args[i], str, isGuid);
+                    break;
+                }
+                case LUA_TNUMBER: {
+                    if (lua_isinteger(L, argIdx)) {
+                        set_arg_int(&args[i], (int32_t)lua_tointeger(L, argIdx));
+                    } else {
+                        set_arg_real(&args[i], (float)lua_tonumber(L, argIdx));
+                    }
+                    break;
+                }
+                case LUA_TBOOLEAN: {
+                    set_arg_int(&args[i], lua_toboolean(L, argIdx) ? 1 : 0);
+                    break;
+                }
+                case LUA_TNIL: {
+                    // Nil treated as empty string
+                    set_arg_string(&args[i], "", 0);
+                    break;
+                }
+                default: {
+                    log_message("[Osi.%s] Warning: Unsupported arg type %d at position %d",
+                                funcName, luaType, argIdx);
+                    set_arg_string(&args[i], "", 0);
+                    break;
+                }
+            }
+        }
+    }
+
+    // Call the appropriate function based on type
+    int result = 0;
+    if (funcType == OSI_FUNC_QUERY && pfn_InternalQuery) {
+        result = pfn_InternalQuery(funcId, args);
+        log_message("[Osi.%s] InternalQuery returned %d", funcName, result);
+        lua_pushboolean(L, result);
+        return 1;
+    } else if (pfn_InternalCall) {
+        result = pfn_InternalCall(funcId, (void *)args);
+        log_message("[Osi.%s] InternalCall returned %d", funcName, result);
+        // Calls don't return values
+        return 0;
+    }
+
+    // Fallback - try query first, then call
+    if (pfn_InternalQuery) {
+        result = pfn_InternalQuery(funcId, args);
+        if (result) {
+            log_message("[Osi.%s] Query succeeded", funcName);
+            lua_pushboolean(L, 1);
+            return 1;
+        }
+    }
+
+    lua_pushnil(L);
+    return 1;
+}
+
+/**
+ * Osi table __index metamethod
+ * Called when accessing Osi.FuncName for unknown keys.
+ * Returns a closure that will call the Osiris function dynamically.
+ */
+static int osi_index_handler(lua_State *L) {
+    // Stack: Osi table (1), key (2)
+    const char *key = lua_tostring(L, 2);
+    if (!key) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    log_message("[Osi.__index] Looking up '%s'", key);
+
+    // Special case: DB_Players returns a table with :Get() method
+    if (strcmp(key, "DB_Players") == 0) {
+        lua_newtable(L);
+        lua_pushcfunction(L, lua_osi_db_players_get);
+        lua_setfield(L, -2, "Get");
+        // Cache it in the Osi table
+        lua_pushvalue(L, -1);  // Duplicate the table
+        lua_setfield(L, 1, "DB_Players");  // Osi.DB_Players = table
+        return 1;
+    }
+
+    // Check if function is in our cache
+    uint32_t funcId = lookup_function_by_name(key);
+    if (funcId == INVALID_FUNCTION_ID) {
+        // Function not discovered yet - return a closure anyway
+        // It will return nil when called if still not found
+        log_message("[Osi.__index] '%s' not yet discovered, returning lazy closure", key);
+    } else {
+        log_message("[Osi.__index] '%s' found (funcId=0x%x)", key, funcId);
+    }
+
+    // Create a closure with the function name as upvalue
+    lua_pushstring(L, key);  // Push function name as upvalue
+    lua_pushcclosure(L, osi_dynamic_call, 1);  // Create closure with 1 upvalue
+
+    // Cache the closure in the Osi table for future accesses
+    lua_pushvalue(L, -1);  // Duplicate the closure
+    lua_setfield(L, 1, key);  // Osi[key] = closure
+
+    return 1;
+}
+
+/**
+ * Register Osi namespace with dynamic metatable
  */
 static void register_osi_namespace(lua_State *L) {
     // Create Osi table
     lua_newtable(L);
 
-    // Basic Osiris functions
+    // Pre-register known functions that have special implementations
+    // These override the dynamic lookup for better behavior
+
     lua_pushcfunction(L, lua_osi_istagged);
     lua_setfield(L, -2, "IsTagged");
 
@@ -2068,6 +2243,12 @@ static void register_osi_namespace(lua_State *L) {
     lua_setfield(L, -2, "Get");
     lua_setfield(L, -2, "DB_Players");
 
+    // Create metatable for Osi with __index handler for dynamic function lookup
+    lua_newtable(L);  // metatable
+    lua_pushcfunction(L, osi_index_handler);
+    lua_setfield(L, -2, "__index");  // metatable.__index = osi_index_handler
+    lua_setmetatable(L, -2);  // setmetatable(Osi, metatable)
+
     // Set Osi as global
     lua_setglobal(L, "Osi");
 
@@ -2075,7 +2256,7 @@ static void register_osi_namespace(lua_State *L) {
     lua_pushcfunction(L, lua_gethostcharacter);
     lua_setglobal(L, "GetHostCharacter");
 
-    log_message("Osi namespace registered (stubs)");
+    log_message("Osi namespace registered with dynamic metatable");
 }
 
 /**
