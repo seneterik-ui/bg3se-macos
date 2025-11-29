@@ -14,6 +14,8 @@ This document tracks the development roadmap for achieving feature parity with W
 - Query output parameters (queries return values, not just bool)
 - PAK file extraction and Lua script loading
 - Player GUID tracking from observed events
+- **Entity Component System** - EntityWorld capture, GUID lookup, component access
+- **Ext.Entity API** - Get(guid), IsReady(), entity.Transform, GetComponent()
 
 ---
 
@@ -44,42 +46,50 @@ Lazy function lookup matching Windows BG3SE's OsirisBinding pattern:
 ## Phase 2: Entity/Component System
 
 ### 2.1 Ext.Entity API
-**Status:** Not Started
+**Status:** ✅ Complete (v0.10.0)
 
 The entity system is fundamental to BG3 modding. Entities are game objects (characters, items, projectiles) with attached components.
 
-**Target API:**
+**Implemented API:**
 ```lua
 -- Get entity by GUID
 local entity = Ext.Entity.Get(guid)
 
--- Access components
-local transform = entity.Transform
-local health = entity.Health
-local stats = entity.Stats
+-- Check if entity system is ready
+if Ext.Entity.IsReady() then
+    -- Access components
+    local transform = entity.Transform  -- Position, Rotation, Scale
+    local component = entity:GetComponent("Transform")
 
--- Iterate entities
-for _, entity in pairs(Ext.Entity.GetAllEntitiesWithComponent("Health")) do
-    -- process
+    -- Entity properties
+    local handle = entity:GetHandle()
+    local alive = entity:IsAlive()
 end
 ```
 
-**Implementation approach:**
-- Hook entity manager functions in the game binary
-- Create Lua userdata proxies for entities
-- Lazy component loading via `__index`
-- Component type registry mapping C++ types to Lua
+**Implementation details:**
+- [x] Hook `LEGACY_IsInCombat` to capture EntityWorld pointer
+- [x] Reverse-engineered HashMap<Guid, EntityHandle> structure
+- [x] TryGetSingleton for UuidToHandleMappingComponent
+- [x] Lua userdata proxies for entities with `__index` metamethod
+- [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access
-**Status:** Not Started
+**Status:** 🔄 Partial (core components working)
 
-Key components to support:
-- Transform (position, rotation, scale)
-- Health (HP, max HP, temp HP)
-- Stats (abilities, skills, proficiencies)
-- Inventory (items, equipment)
-- StatusContainer (active statuses/buffs/debuffs)
-- SpellBook (known spells, spell slots)
+**Implemented components:**
+- [x] Transform (position, rotation, scale) - `0x10010d5b00`
+- [x] Level - `0x10010d588c`
+- [x] Physics - `0x101ba0898`
+- [x] Visual - `0x102e56350`
+
+**Remaining components (need Ghidra analysis for addresses):**
+- [ ] Stats (abilities, skills, proficiencies) - string at `0x107b7ca22`
+- [ ] BaseHp (HP, max HP, temp HP) - string at `0x107b84c63`
+- [ ] Armor - string at `0x107b7c9e7`
+- [ ] Inventory (items, equipment)
+- [ ] StatusContainer (active statuses/buffs/debuffs)
+- [ ] SpellBook (known spells, spell slots)
 
 ---
 
@@ -280,7 +290,7 @@ Complete Lua type annotations for IDE support and runtime validation.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.10.0 | 2025-11-28 | Query output parameters, enhanced dynamic dispatch |
+| v0.10.0 | 2025-11-29 | Entity System complete - EntityWorld capture, GUID lookup, Ext.Entity API |
 | v0.9.9 | 2025-11-28 | Dynamic Osi.* metatable, lazy function lookup |
 | v0.9.5 | 2025-11-28 | Stable event observation, MRC mod support |
 | v0.9.0 | 2025-11-27 | Initial Lua runtime, basic Ext.* API |
