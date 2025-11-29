@@ -55,6 +55,11 @@ extern "C" {
 // PAK file reading
 #include "pak_reader.h"
 
+// Lua modules
+#include "lua_ext.h"
+#include "lua_json.h"
+#include "lua_osiris.h"
+
 // Enable hooks (set to 0 to disable for testing)
 #define ENABLE_HOOKS 1
 
@@ -567,57 +572,8 @@ static void detect_enabled_mods(void) {
 }
 
 // ============================================================================
-// Lua API: Ext namespace functions
+// Module Loading Helpers
 // ============================================================================
-
-/**
- * Ext.Print(...) - Print to BG3SE log
- */
-static int lua_ext_print(lua_State *L) {
-    int n = lua_gettop(L);
-    luaL_Buffer b;
-    luaL_buffinit(L, &b);
-
-    for (int i = 1; i <= n; i++) {
-        size_t len;
-        const char *s = luaL_tolstring(L, i, &len);
-        if (i > 1) luaL_addchar(&b, '\t');
-        luaL_addlstring(&b, s, len);
-        lua_pop(L, 1);  // pop the string from luaL_tolstring
-    }
-
-    luaL_pushresult(&b);
-    const char *msg = lua_tostring(L, -1);
-    log_message("[Lua] %s", msg);
-
-    return 0;
-}
-
-/**
- * Ext.GetVersion() - Return BG3SE version
- */
-static int lua_ext_getversion(lua_State *L) {
-    lua_pushstring(L, BG3SE_VERSION);
-    return 1;
-}
-
-/**
- * Ext.IsServer() - Check if running on server context
- */
-static int lua_ext_isserver(lua_State *L) {
-    // For now, always return false (client-side)
-    lua_pushboolean(L, 0);
-    return 1;
-}
-
-/**
- * Ext.IsClient() - Check if running on client context
- */
-static int lua_ext_isclient(lua_State *L) {
-    // For now, always return true (client-side)
-    lua_pushboolean(L, 1);
-    return 1;
-}
 
 /**
  * Check if a module has already been loaded
@@ -778,317 +734,6 @@ static int lua_ext_require(lua_State *L) {
     return 1;
 }
 
-// Ext.IO namespace
-static int lua_ext_io_loadfile(lua_State *L) {
-    const char *path = luaL_checkstring(L, 1);
-    log_message("[Lua] Ext.IO.LoadFile('%s')", path);
-
-    FILE *f = fopen(path, "r");
-    if (!f) {
-        lua_pushnil(L);
-        lua_pushstring(L, "File not found");
-        return 2;
-    }
-
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    fseek(f, 0, SEEK_SET);
-
-    char *content = (char *)malloc(size + 1);
-    if (!content) {
-        fclose(f);
-        lua_pushnil(L);
-        lua_pushstring(L, "Out of memory");
-        return 2;
-    }
-
-    fread(content, 1, size, f);
-    content[size] = '\0';
-    fclose(f);
-
-    lua_pushstring(L, content);
-    free(content);
-    return 1;
-}
-
-static int lua_ext_io_savefile(lua_State *L) {
-    const char *path = luaL_checkstring(L, 1);
-    const char *content = luaL_checkstring(L, 2);
-    log_message("[Lua] Ext.IO.SaveFile('%s')", path);
-
-    FILE *f = fopen(path, "w");
-    if (!f) {
-        lua_pushboolean(L, 0);
-        return 1;
-    }
-
-    fputs(content, f);
-    fclose(f);
-
-    lua_pushboolean(L, 1);
-    return 1;
-}
-
-// ============================================================================
-// Simple JSON Parser
-// ============================================================================
-
-// Forward declarations for recursive parsing
-static const char *json_parse_value(lua_State *L, const char *json);
-static const char *json_skip_whitespace(const char *json);
-
-static const char *json_skip_whitespace(const char *json) {
-    while (*json && (*json == ' ' || *json == '\t' || *json == '\n' || *json == '\r')) {
-        json++;
-    }
-    return json;
-}
-
-static const char *json_parse_string(lua_State *L, const char *json) {
-    if (*json != '"') return NULL;
-    json++;  // skip opening quote
-
-    luaL_Buffer b;
-    luaL_buffinit(L, &b);
-
-    while (*json && *json != '"') {
-        if (*json == '\\' && json[1]) {
-            json++;
-            switch (*json) {
-                case '"': luaL_addchar(&b, '"'); break;
-                case '\\': luaL_addchar(&b, '\\'); break;
-                case '/': luaL_addchar(&b, '/'); break;
-                case 'b': luaL_addchar(&b, '\b'); break;
-                case 'f': luaL_addchar(&b, '\f'); break;
-                case 'n': luaL_addchar(&b, '\n'); break;
-                case 'r': luaL_addchar(&b, '\r'); break;
-                case 't': luaL_addchar(&b, '\t'); break;
-                default: luaL_addchar(&b, *json); break;
-            }
-        } else {
-            luaL_addchar(&b, *json);
-        }
-        json++;
-    }
-
-    if (*json != '"') return NULL;
-    luaL_pushresult(&b);
-    return json + 1;  // skip closing quote
-}
-
-static const char *json_parse_number(lua_State *L, const char *json) {
-    const char *start = json;
-    if (*json == '-') json++;
-    while (*json >= '0' && *json <= '9') json++;
-    if (*json == '.') {
-        json++;
-        while (*json >= '0' && *json <= '9') json++;
-    }
-    if (*json == 'e' || *json == 'E') {
-        json++;
-        if (*json == '+' || *json == '-') json++;
-        while (*json >= '0' && *json <= '9') json++;
-    }
-
-    char *endptr;
-    double num = strtod(start, &endptr);
-    lua_pushnumber(L, num);
-    return json;
-}
-
-static const char *json_parse_object(lua_State *L, const char *json) {
-    if (*json != '{') return NULL;
-    json = json_skip_whitespace(json + 1);
-
-    lua_newtable(L);
-
-    if (*json == '}') return json + 1;
-
-    while (1) {
-        json = json_skip_whitespace(json);
-        if (*json != '"') return NULL;
-
-        // Parse key
-        json = json_parse_string(L, json);
-        if (!json) return NULL;
-
-        json = json_skip_whitespace(json);
-        if (*json != ':') return NULL;
-        json = json_skip_whitespace(json + 1);
-
-        // Parse value
-        json = json_parse_value(L, json);
-        if (!json) return NULL;
-
-        // Set table[key] = value
-        lua_settable(L, -3);
-
-        json = json_skip_whitespace(json);
-        if (*json == '}') return json + 1;
-        if (*json != ',') return NULL;
-        json++;
-    }
-}
-
-static const char *json_parse_array(lua_State *L, const char *json) {
-    if (*json != '[') return NULL;
-    json = json_skip_whitespace(json + 1);
-
-    lua_newtable(L);
-    int index = 1;
-
-    if (*json == ']') return json + 1;
-
-    while (1) {
-        json = json_skip_whitespace(json);
-        json = json_parse_value(L, json);
-        if (!json) return NULL;
-
-        lua_rawseti(L, -2, index++);
-
-        json = json_skip_whitespace(json);
-        if (*json == ']') return json + 1;
-        if (*json != ',') return NULL;
-        json++;
-    }
-}
-
-static const char *json_parse_value(lua_State *L, const char *json) {
-    json = json_skip_whitespace(json);
-
-    if (*json == '"') {
-        return json_parse_string(L, json);
-    } else if (*json == '{') {
-        return json_parse_object(L, json);
-    } else if (*json == '[') {
-        return json_parse_array(L, json);
-    } else if (*json == 't' && strncmp(json, "true", 4) == 0) {
-        lua_pushboolean(L, 1);
-        return json + 4;
-    } else if (*json == 'f' && strncmp(json, "false", 5) == 0) {
-        lua_pushboolean(L, 0);
-        return json + 5;
-    } else if (*json == 'n' && strncmp(json, "null", 4) == 0) {
-        lua_pushnil(L);
-        return json + 4;
-    } else if (*json == '-' || (*json >= '0' && *json <= '9')) {
-        return json_parse_number(L, json);
-    }
-
-    return NULL;
-}
-
-// Ext.Json namespace
-static int lua_ext_json_parse(lua_State *L) {
-    const char *json = luaL_checkstring(L, 1);
-    log_message("[Lua] Ext.Json.Parse called (len: %zu)", strlen(json));
-
-    const char *result = json_parse_value(L, json);
-    if (!result) {
-        lua_pushnil(L);
-        log_message("[Lua] Ext.Json.Parse failed");
-    }
-    return 1;
-}
-
-static int lua_ext_json_stringify(lua_State *L);  // Forward declaration
-
-static void json_stringify_value(lua_State *L, int index, luaL_Buffer *b);
-
-static void json_stringify_table(lua_State *L, int index, luaL_Buffer *b) {
-    // Check if it's an array (sequential integer keys starting from 1)
-    int is_array = 1;
-    int max_index = 0;
-
-    lua_pushnil(L);
-    while (lua_next(L, index) != 0) {
-        if (lua_type(L, -2) != LUA_TNUMBER || lua_tointeger(L, -2) != max_index + 1) {
-            is_array = 0;
-        }
-        max_index++;
-        lua_pop(L, 1);
-    }
-
-    if (is_array && max_index > 0) {
-        luaL_addchar(b, '[');
-        for (int i = 1; i <= max_index; i++) {
-            if (i > 1) luaL_addchar(b, ',');
-            lua_rawgeti(L, index, i);
-            json_stringify_value(L, lua_gettop(L), b);
-            lua_pop(L, 1);
-        }
-        luaL_addchar(b, ']');
-    } else {
-        luaL_addchar(b, '{');
-        int first = 1;
-        lua_pushnil(L);
-        while (lua_next(L, index) != 0) {
-            if (!first) luaL_addchar(b, ',');
-            first = 0;
-
-            // Key
-            luaL_addchar(b, '"');
-            if (lua_type(L, -2) == LUA_TSTRING) {
-                luaL_addstring(b, lua_tostring(L, -2));
-            } else {
-                lua_pushvalue(L, -2);
-                luaL_addstring(b, lua_tostring(L, -1));
-                lua_pop(L, 1);
-            }
-            luaL_addchar(b, '"');
-            luaL_addchar(b, ':');
-
-            // Value
-            json_stringify_value(L, lua_gettop(L), b);
-            lua_pop(L, 1);
-        }
-        luaL_addchar(b, '}');
-    }
-}
-
-static void json_stringify_value(lua_State *L, int index, luaL_Buffer *b) {
-    int t = lua_type(L, index);
-    switch (t) {
-        case LUA_TSTRING: {
-            const char *s = lua_tostring(L, index);
-            luaL_addchar(b, '"');
-            while (*s) {
-                if (*s == '"' || *s == '\\') {
-                    luaL_addchar(b, '\\');
-                }
-                luaL_addchar(b, *s);
-                s++;
-            }
-            luaL_addchar(b, '"');
-            break;
-        }
-        case LUA_TNUMBER: {
-            char buf[64];
-            snprintf(buf, sizeof(buf), "%g", lua_tonumber(L, index));
-            luaL_addstring(b, buf);
-            break;
-        }
-        case LUA_TBOOLEAN:
-            luaL_addstring(b, lua_toboolean(L, index) ? "true" : "false");
-            break;
-        case LUA_TTABLE:
-            json_stringify_table(L, index, b);
-            break;
-        case LUA_TNIL:
-        default:
-            luaL_addstring(b, "null");
-            break;
-    }
-}
-
-static int lua_ext_json_stringify(lua_State *L) {
-    luaL_Buffer b;
-    luaL_buffinit(L, &b);
-    json_stringify_value(L, 1, &b);
-    luaL_pushresult(&b);
-    return 1;
-}
-
 /**
  * Register the Ext API in Lua
  */
@@ -1096,111 +741,23 @@ static void register_ext_api(lua_State *L) {
     // Create Ext table
     lua_newtable(L);
 
-    // Basic functions
-    lua_pushcfunction(L, lua_ext_print);
-    lua_setfield(L, -2, "Print");
+    // Basic functions (via lua_ext module)
+    lua_ext_register_basic(L, -1);
 
-    lua_pushcfunction(L, lua_ext_getversion);
-    lua_setfield(L, -2, "GetVersion");
-
-    lua_pushcfunction(L, lua_ext_isserver);
-    lua_setfield(L, -2, "IsServer");
-
-    lua_pushcfunction(L, lua_ext_isclient);
-    lua_setfield(L, -2, "IsClient");
-
+    // Ext.Require (stays in main.c due to mod loading dependencies)
     lua_pushcfunction(L, lua_ext_require);
     lua_setfield(L, -2, "Require");
 
-    // Create Ext.IO table
-    lua_newtable(L);
-    lua_pushcfunction(L, lua_ext_io_loadfile);
-    lua_setfield(L, -2, "LoadFile");
-    lua_pushcfunction(L, lua_ext_io_savefile);
-    lua_setfield(L, -2, "SaveFile");
-    lua_setfield(L, -2, "IO");
+    // Ext.IO namespace (via lua_ext module)
+    lua_ext_register_io(L, -1);
 
-    // Create Ext.Json table
-    lua_newtable(L);
-    lua_pushcfunction(L, lua_ext_json_parse);
-    lua_setfield(L, -2, "Parse");
-    lua_pushcfunction(L, lua_ext_json_stringify);
-    lua_setfield(L, -2, "Stringify");
-    lua_setfield(L, -2, "Json");
+    // Ext.Json namespace (via lua_json module)
+    lua_json_register(L, -1);
 
     // Set Ext as global
     lua_setglobal(L, "Ext");
 
     log_message("Ext API registered in Lua");
-}
-
-// ============================================================================
-// Ext.Osiris namespace - Event listener registration
-// ============================================================================
-
-// Storage for registered Osiris listeners
-#define MAX_OSIRIS_LISTENERS 64
-typedef struct {
-    char event_name[128];
-    int arity;
-    char timing[16];  // "before" or "after"
-    int callback_ref;  // Lua registry reference
-} OsirisListener;
-
-static OsirisListener osiris_listeners[MAX_OSIRIS_LISTENERS];
-static int osiris_listener_count = 0;
-
-/**
- * Ext.Osiris.RegisterListener(event, arity, timing, callback)
- * Registers a callback for an Osiris event
- */
-static int lua_ext_osiris_registerlistener(lua_State *L) {
-    const char *event = luaL_checkstring(L, 1);
-    int arity = (int)luaL_checkinteger(L, 2);
-    const char *timing = luaL_checkstring(L, 3);
-    luaL_checktype(L, 4, LUA_TFUNCTION);
-
-    if (osiris_listener_count >= MAX_OSIRIS_LISTENERS) {
-        log_message("[Lua] Warning: Max Osiris listeners reached");
-        return 0;
-    }
-
-    // Store the listener
-    OsirisListener *listener = &osiris_listeners[osiris_listener_count];
-    strncpy(listener->event_name, event, sizeof(listener->event_name) - 1);
-    listener->arity = arity;
-    strncpy(listener->timing, timing, sizeof(listener->timing) - 1);
-
-    // Store callback reference in Lua registry
-    lua_pushvalue(L, 4);  // Push the function
-    listener->callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
-
-    osiris_listener_count++;
-
-    log_message("[Lua] Registered Osiris listener: %s (arity=%d, timing=%s)",
-                event, arity, timing);
-
-    return 0;
-}
-
-/**
- * Register Ext.Osiris namespace
- */
-static void register_ext_osiris(lua_State *L) {
-    // Get Ext table
-    lua_getglobal(L, "Ext");
-
-    // Create Ext.Osiris table
-    lua_newtable(L);
-
-    lua_pushcfunction(L, lua_ext_osiris_registerlistener);
-    lua_setfield(L, -2, "RegisterListener");
-
-    lua_setfield(L, -2, "Osiris");
-
-    lua_pop(L, 1);  // Pop Ext table
-
-    log_message("Ext.Osiris API registered");
 }
 
 // ============================================================================
@@ -1959,8 +1516,8 @@ static void init_lua(void) {
     // Register our Ext API
     register_ext_api(L);
 
-    // Register Ext.Osiris namespace
-    register_ext_osiris(L);
+    // Register Ext.Osiris namespace (via lua_osiris module)
+    lua_osiris_register(L);
 
     // Register Osi namespace (stub functions)
     register_osi_namespace(L);
@@ -2317,8 +1874,10 @@ static void dispatch_event_to_lua(const char *eventName, int arity,
     (void)arity;  // Currently unused - listener uses its own requested arity
     if (!L || !eventName) return;
 
-    for (int i = 0; i < osiris_listener_count; i++) {
-        OsirisListener *listener = &osiris_listeners[i];
+    int listener_count = lua_osiris_get_listener_count();
+    for (int i = 0; i < listener_count; i++) {
+        OsirisListener *listener = lua_osiris_get_listener(i);
+        if (!listener) continue;
 
         // Match by name and timing only - arity is how many args listener wants
         if (strcmp(listener->event_name, eventName) == 0 &&
