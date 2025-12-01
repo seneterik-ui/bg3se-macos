@@ -7,6 +7,7 @@
 
 #include "component_registry.h"
 #include "component_templates.h"
+#include "component_lookup.h"
 #include "arm64_call.h"
 #include "entity_system.h"
 #include "../core/logging.h"
@@ -340,7 +341,33 @@ void *component_get_by_name(void *entityWorld, uint64_t entityHandle,
         return NULL;
     }
 
-    // Strategy 1: Try direct template call if we have a known address
+    // Strategy 1: Data structure traversal (macOS primary method)
+    // This is the ONLY reliable method on macOS since template functions are inlined.
+    // We traverse: EntityWorld->Storage->TryGet(handle)->HashMap lookups->component buffer
+    if (component_lookup_ready()) {
+        const ComponentInfo *info = component_registry_lookup(componentName);
+        if (info && info->discovered && info->index != COMPONENT_INDEX_UNDEFINED) {
+            log_registry("Using data structure traversal for %s (index=%u, size=%u)",
+                         componentName, (unsigned)info->index, (unsigned)info->size);
+
+            void *result = component_lookup_by_index(entityHandle, info->index,
+                                                      info->size, info->is_proxy);
+            if (result) {
+                log_registry("Data structure lookup succeeded: %s -> %p", componentName, result);
+                return result;
+            }
+            // Fall through to try other methods if this fails
+            log_registry("Data structure lookup returned NULL for %s", componentName);
+        } else {
+            log_registry("Component %s not in registry (discovered=%d, index=%u)",
+                         componentName, info ? info->discovered : 0,
+                         info ? (unsigned)info->index : 0xFFFF);
+        }
+    }
+
+    // Strategy 2: Try direct template call if we have a known address
+    // Note: On macOS, template functions are inlined so this DOES NOT WORK.
+    // Keeping for potential future use if we find non-inlined templates.
     uintptr_t ghidra_addr = component_template_lookup(componentName);
     if (ghidra_addr != 0) {
         void *binary_base = entity_get_binary_base();
@@ -348,30 +375,32 @@ void *component_get_by_name(void *entityWorld, uint64_t entityHandle,
             // Calculate runtime address: ghidra_addr - GHIDRA_BASE + actual_base
             uintptr_t runtime_addr = ghidra_addr - GHIDRA_BASE_ADDRESS + (uintptr_t)binary_base;
 
-            log_registry("Calling GetComponent<%s> at %p (Ghidra: 0x%llx)",
-                         componentName, (void*)runtime_addr,
-                         (unsigned long long)ghidra_addr);
+            log_registry("Trying template call (likely to fail on macOS) GetComponent<%s> at %p",
+                         componentName, (void*)runtime_addr);
 
             void *result = call_get_component_template((void*)runtime_addr,
                                                         entityWorld, entityHandle);
             if (result) {
-                log_registry("GetComponent<%s> returned: %p", componentName, result);
+                log_registry("Template call succeeded (unexpected!): %s -> %p", componentName, result);
+                return result;
             }
-            return result;
-        } else {
-            log_registry("Template address known but binary base not available");
         }
     }
 
-    // Strategy 2: Try registered component via GetRawComponent (if available)
+    // Strategy 3: Try registered component via GetRawComponent (Windows fallback)
+    // On macOS this won't work since GetRawComponent doesn't exist.
     const ComponentInfo *info = component_registry_lookup(componentName);
     if (info && info->discovered) {
-        return component_get_raw(entityWorld, entityHandle,
-                                 info->index, info->size, info->is_proxy);
+        void *result = component_get_raw(entityWorld, entityHandle,
+                                         info->index, info->size, info->is_proxy);
+        if (result) {
+            log_registry("GetRawComponent succeeded: %s -> %p", componentName, result);
+            return result;
+        }
     }
 
-    // Component not found via either method
-    log_registry("Component not accessible: %s (no template and not discovered)", componentName);
+    // Component not found via any method
+    log_registry("Component not accessible: %s", componentName);
     return NULL;
 }
 

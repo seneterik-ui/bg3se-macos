@@ -7,6 +7,7 @@
 
 #include "entity_system.h"
 #include "component_registry.h"
+#include "component_lookup.h"
 #include "arm64_call.h"
 #include "logging.h"
 
@@ -112,8 +113,8 @@ static int g_GuidCacheCount = 0;
 #define OFFSET_GET_ARMOR_COMPONENT    0  // Was 0x10b2fe2c4 - WRONG
 #define OFFSET_GET_CLASSES_COMPONENT  0  // Not yet located
 
-// Ghidra base address (macOS ARM64)
-#define GHIDRA_BASE_ADDRESS 0x100000000
+// Ghidra base address (macOS ARM64) - defined in entity_storage.h
+// #define GHIDRA_BASE_ADDRESS 0x100000000  // Use entity_storage.h definition
 
 // ============================================================================
 // Component Accessor Function Types
@@ -475,6 +476,13 @@ bool entity_discover_world(void) {
                 log_entity("Component registry initialized");
             }
 
+            // Initialize component lookup (data structure traversal for macOS)
+            if (component_lookup_init(g_EntityWorld, g_MainBinaryBase)) {
+                log_entity("Component lookup initialized (data structure traversal enabled)");
+            } else {
+                log_entity("WARNING: Component lookup init failed - GetComponent may not work");
+            }
+
             return true;
         } else {
             log_entity("Found EoCServer but EntityWorld at +0x288 is NULL or invalid");
@@ -498,6 +506,7 @@ static EocServerStartUpFn orig_EocServerStartUp = NULL;
 // Hook: Capture EoCServer Singleton on Startup
 // ============================================================================
 
+__attribute__((unused))
 static void hook_EocServerStartUp(void *eocServer, void *serverInit) {
     // Capture EoCServer pointer (this) on first call
     if (!g_EoCServer && eocServer) {
@@ -1303,7 +1312,9 @@ static int lua_entity_index(lua_State *L) {
 // Entity metatable __tostring
 static int lua_entity_tostring(lua_State *L) {
     EntityHandle *ud = (EntityHandle*)luaL_checkudata(L, 1, "BG3Entity");
-    lua_pushfstring(L, "Entity(0x%llx)", (unsigned long long)*ud);
+    char buf[64];
+    snprintf(buf, sizeof(buf), "Entity(0x%llx)", (unsigned long long)*ud);
+    lua_pushstring(L, buf);
     return 1;
 }
 
@@ -1437,6 +1448,35 @@ static int lua_entity_lookup_component(lua_State *L) {
     return 1;
 }
 
+// Ext.Entity.DumpStorage(entityHandle) - Test TryGet and dump storage data
+// Usage: local entity = Ext.Entity.Get(guid); Ext.Entity.DumpStorage(entity:GetHandle())
+static int lua_entity_dump_storage(lua_State *L) {
+    uint64_t handle = (uint64_t)luaL_checkinteger(L, 1);
+
+    if (!component_lookup_ready()) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Component lookup not initialized");
+        return 2;
+    }
+
+    log_entity("=== DumpStorage for handle 0x%llx ===", (unsigned long long)handle);
+
+    // Call TryGet to get EntityStorageData
+    void *storageData = component_lookup_get_storage_data(handle);
+    if (!storageData) {
+        lua_pushnil(L);
+        lua_pushstring(L, "TryGet returned NULL - entity not found in storage");
+        return 2;
+    }
+
+    // Dump storage data
+    component_lookup_dump_storage_data(storageData, handle);
+
+    lua_pushboolean(L, true);
+    lua_pushfstring(L, "StorageData at %p - see log for details", storageData);
+    return 2;
+}
+
 void entity_register_lua(lua_State *L) {
     // Create BG3Entity metatable
     luaL_newmetatable(L, "BG3Entity");
@@ -1477,6 +1517,9 @@ void entity_register_lua(lua_State *L) {
 
     lua_pushcfunction(L, lua_entity_dump_world);
     lua_setfield(L, -2, "DumpWorld");
+
+    lua_pushcfunction(L, lua_entity_dump_storage);
+    lua_setfield(L, -2, "DumpStorage");
 
     // Component Registry API
     lua_pushcfunction(L, lua_entity_dump_component_registry);

@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.10.2
+## Current Status: v0.10.3
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -18,6 +18,7 @@ This document tracks the development roadmap for achieving feature parity with W
 - Player GUID tracking from observed events
 - **Entity Component System** - EntityWorld capture, GUID lookup, component access
 - **Ext.Entity API** - Get(guid), IsReady(), entity.Transform, GetComponent()
+- **Data Structure Traversal** - TryGet + HashMap traversal for component access (macOS-specific)
 
 ---
 
@@ -79,25 +80,48 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access
-**Status:** ✅ Working (template-based approach)
+**Status:** 🔄 In Progress (data structure traversal implemented)
 
-**Key Discovery (Dec 2025):** macOS ARM64 has no `GetRawComponent` dispatcher. Components are accessed via template-inlined `GetComponent<T>` functions.
+**Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
+
+**Solution: Data Structure Traversal (v0.10.3)**
+
+Since template calls don't work on macOS, we traverse the ECS data structures manually:
+
+```
+GetComponent(EntityHandle, ComponentTypeIndex)
+    ↓
+EntityWorld->Storage (offset 0x2d0)
+    ↓
+EntityStorageContainer::TryGet(EntityHandle) → EntityStorageData*
+    ↓
+EntityStorageData->InstanceToPageMap (0x1c0) → EntityStorageIndex
+    ↓
+EntityStorageData->ComponentTypeToIndex (0x180) → uint8_t slot
+    ↓
+Components[PageIndex]->Components[slot].ComponentBuffer
+    ↓
+buffer + (componentSize * EntryIndex) → Component*
+```
 
 **Implementation:**
 - [x] GUID→EntityHandle lookup (byte order fix: hi/lo swapped)
-- [x] Template function table (`component_templates.h`)
-- [x] ARM64 calling convention wrapper (`call_get_component_template`)
-- [x] Lua API integration (`entity:GetComponent("ecl::Character")`)
+- [x] EntityStorageContainer::TryGet wrapper (`call_try_get` at 0x10636b27c)
+- [x] InstanceToPageMap HashMap traversal
+- [x] ComponentTypeToIndex HashMap traversal
+- [x] Component buffer access with page/entry indexing
+- [x] New module: `component_lookup.c/h` with traversal logic
+- [x] `Ext.Entity.DumpStorage(handle)` debug function
+- [ ] **Runtime discovery of component type indices** (currently all UNDEFINED)
 
-**Discovered GetComponent<T> addresses:**
-- `ecl::Item` - `0x100cb1644`
-- `ecl::Character` - `0x100cc20a8`
-- `eoc::combat::ParticipantComponent` - `0x100cc1d7c`
-- `ls::anubis::TreeComponent` - `0x100c8ec50`
+**Why Template Calls Failed:**
 
-**Remaining work:**
-- [ ] Runtime validation of template calls
-- [ ] Discover more component templates via Ghidra
+On Windows, `GetRawComponent` is a single dispatcher function. On macOS/ARM64, each `GetComponent<T>` template is **completely inlined** at call sites - there are no callable functions, just inlined code.
+
+**Next Steps:**
+- Discover component type indices at runtime (hook registration or memory scan)
+- Validate TryGet returns valid EntityStorageData
+- Test end-to-end GetComponent with discovered indices
 
 ---
 
@@ -298,7 +322,8 @@ Complete Lua type annotations for IDE support and runtime validation.
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.10.2 | 2025-12-01 | GUID byte order fix, template-based GetComponent, entity lookup working |
+| v0.10.3 | 2025-12-01 | Data structure traversal for GetComponent (TryGet + HashMap), template calls don't work on macOS |
+| v0.10.2 | 2025-12-01 | GUID byte order fix, template-based GetComponent attempt, entity lookup working |
 | v0.10.1 | 2025-11-29 | Function type detection - proper Query/Call/Event dispatch, 40+ pre-populated functions |
 | v0.10.0 | 2025-11-29 | Entity System complete - EntityWorld capture, GUID lookup, Ext.Entity API |
 | v0.9.9 | 2025-11-28 | Dynamic Osi.* metatable, lazy function lookup |

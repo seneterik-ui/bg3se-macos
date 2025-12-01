@@ -44,6 +44,7 @@ add_library(bg3se SHARED
     src/entity/guid_lookup.c
     src/entity/arm64_call.c
     src/entity/component_registry.c
+    src/entity/component_lookup.c
     lib/lz4/lz4.c
 )
 

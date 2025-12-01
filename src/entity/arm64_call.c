@@ -94,8 +94,12 @@ void* call_get_raw_component(void *fn, void *entityWorld, uint64_t entityHandle,
 
 void* call_get_component_template(void *fn_addr, void *entityWorld, uint64_t entityHandle) {
     if (!fn_addr || !entityWorld) {
+        log_arm64("call_get_component_template: NULL fn_addr=%p or entityWorld=%p", fn_addr, entityWorld);
         return NULL;
     }
+
+    log_arm64("call_get_component_template: fn=%p, world=%p, handle=0x%llx",
+              fn_addr, entityWorld, (unsigned long long)entityHandle);
 
     // GetComponent<T> signature: T* (EntityWorld* this, EntityHandle handle)
     // ARM64 calling convention:

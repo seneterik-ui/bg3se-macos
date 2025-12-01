@@ -25,7 +25,7 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 | Function Enumeration | 🔄 Testing | OsiFunctionMan offset-based lookup |
 | EntityWorld Capture | ✅ Complete | Direct memory read from `esv::EocServer::m_ptr` |
 | GUID → Entity Lookup | ✅ Complete | ARM64 ABI fix for TryGetSingleton (see below) |
-| Component Access | ✅ Complete | Index-based component registry (45+ pre-registered) |
+| Component Access | 🔄 In Progress | Data structure traversal implemented, needs type index discovery |
 
 ### Verified Working (Nov 29, 2025)
 
@@ -256,6 +256,7 @@ This was discovered through Ghidra analysis of `TryGetSingleton` which saves x8 
 | `entity:IsAlive()` | ✅ Working | Check if entity is valid |
 | `entity:GetHandle()` | ✅ Working | Get raw EntityHandle value |
 | `Ext.Entity.DumpComponentRegistry()` | ✅ Working | Dump all registered components |
+| `Ext.Entity.DumpStorage(handle)` | ✅ Working | Test TryGet and dump EntityStorageData |
 | `Ext.Entity.RegisterComponent(name, idx, size)` | ✅ Working | Register discovered component |
 | `Ext.Entity.LookupComponent(name)` | ✅ Working | Look up component info by name |
 | `Ext.Entity.SetGetRawComponentAddr(addr)` | ✅ Working | Set GetRawComponent address from Frida |
@@ -292,7 +293,9 @@ bg3se-macos/
 │   │   ├── entity_system.c/h   # Core ECS, EntityWorld capture, Lua bindings
 │   │   ├── guid_lookup.c/h     # GUID parsing, HashMap operations
 │   │   ├── arm64_call.c/h      # ARM64 ABI wrappers (x8 indirect return)
-│   │   └── component_registry.c/h  # Index-based component discovery & access
+│   │   ├── component_registry.c/h  # Index-based component discovery & access
+│   │   ├── component_lookup.c/h    # TryGet + HashMap traversal (macOS-specific)
+│   │   └── entity_storage.h    # ECS structure definitions and offsets
 │   ├── injector/               # Main injection logic
 │   ├── lua/                    # Lua API modules
 │   ├── mod/                    # Mod detection and loading
