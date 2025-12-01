@@ -2,10 +2,13 @@
  * BG3SE-macOS - Component Registry Implementation
  *
  * Runtime component discovery and index-based component access.
+ * On macOS, GetRawComponent is not available - we use direct template calls instead.
  */
 
 #include "component_registry.h"
+#include "component_templates.h"
 #include "arm64_call.h"
+#include "entity_system.h"
 #include "../core/logging.h"
 
 #include <stdio.h>
@@ -333,14 +336,43 @@ void *component_get_raw(void *entityWorld, uint64_t entityHandle,
 
 void *component_get_by_name(void *entityWorld, uint64_t entityHandle,
                             const char *componentName) {
-    const ComponentInfo *info = component_registry_lookup(componentName);
-    if (!info || !info->discovered) {
-        log_registry("Component not found or not discovered: %s", componentName);
+    if (!entityWorld || !componentName) {
         return NULL;
     }
 
-    return component_get_raw(entityWorld, entityHandle,
-                             info->index, info->size, info->is_proxy);
+    // Strategy 1: Try direct template call if we have a known address
+    uintptr_t ghidra_addr = component_template_lookup(componentName);
+    if (ghidra_addr != 0) {
+        void *binary_base = entity_get_binary_base();
+        if (binary_base) {
+            // Calculate runtime address: ghidra_addr - GHIDRA_BASE + actual_base
+            uintptr_t runtime_addr = ghidra_addr - GHIDRA_BASE_ADDRESS + (uintptr_t)binary_base;
+
+            log_registry("Calling GetComponent<%s> at %p (Ghidra: 0x%llx)",
+                         componentName, (void*)runtime_addr,
+                         (unsigned long long)ghidra_addr);
+
+            void *result = call_get_component_template((void*)runtime_addr,
+                                                        entityWorld, entityHandle);
+            if (result) {
+                log_registry("GetComponent<%s> returned: %p", componentName, result);
+            }
+            return result;
+        } else {
+            log_registry("Template address known but binary base not available");
+        }
+    }
+
+    // Strategy 2: Try registered component via GetRawComponent (if available)
+    const ComponentInfo *info = component_registry_lookup(componentName);
+    if (info && info->discovered) {
+        return component_get_raw(entityWorld, entityHandle,
+                                 info->index, info->size, info->is_proxy);
+    }
+
+    // Component not found via either method
+    log_registry("Component not accessible: %s (no template and not discovered)", componentName);
+    return NULL;
 }
 
 // ============================================================================

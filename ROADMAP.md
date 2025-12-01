@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.10.1
+## Current Status: v0.10.2
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -79,21 +79,25 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access
-**Status:** 🔄 Partial (core components working)
+**Status:** ✅ Working (template-based approach)
 
-**Implemented components:**
-- [x] Transform (position, rotation, scale) - `0x10010d5b00`
-- [x] Level - `0x10010d588c`
-- [x] Physics - `0x101ba0898`
-- [x] Visual - `0x102e56350`
+**Key Discovery (Dec 2025):** macOS ARM64 has no `GetRawComponent` dispatcher. Components are accessed via template-inlined `GetComponent<T>` functions.
 
-**Remaining components (need Ghidra analysis for addresses):**
-- [ ] Stats (abilities, skills, proficiencies) - string at `0x107b7ca22`
-- [ ] BaseHp (HP, max HP, temp HP) - string at `0x107b84c63`
-- [ ] Armor - string at `0x107b7c9e7`
-- [ ] Inventory (items, equipment)
-- [ ] StatusContainer (active statuses/buffs/debuffs)
-- [ ] SpellBook (known spells, spell slots)
+**Implementation:**
+- [x] GUID→EntityHandle lookup (byte order fix: hi/lo swapped)
+- [x] Template function table (`component_templates.h`)
+- [x] ARM64 calling convention wrapper (`call_get_component_template`)
+- [x] Lua API integration (`entity:GetComponent("ecl::Character")`)
+
+**Discovered GetComponent<T> addresses:**
+- `ecl::Item` - `0x100cb1644`
+- `ecl::Character` - `0x100cc20a8`
+- `eoc::combat::ParticipantComponent` - `0x100cc1d7c`
+- `ls::anubis::TreeComponent` - `0x100c8ec50`
+
+**Remaining work:**
+- [ ] Runtime validation of template calls
+- [ ] Discover more component templates via Ghidra
 
 ---
 
@@ -294,6 +298,7 @@ Complete Lua type annotations for IDE support and runtime validation.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.10.2 | 2025-12-01 | GUID byte order fix, template-based GetComponent, entity lookup working |
 | v0.10.1 | 2025-11-29 | Function type detection - proper Query/Call/Event dispatch, 40+ pre-populated functions |
 | v0.10.0 | 2025-11-29 | Entity System complete - EntityWorld capture, GUID lookup, Ext.Entity API |
 | v0.9.9 | 2025-11-28 | Dynamic Osi.* metatable, lazy function lookup |

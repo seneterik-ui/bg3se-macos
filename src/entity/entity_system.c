@@ -889,6 +889,10 @@ bool entity_system_ready(void) {
     return g_EntityWorld != NULL;
 }
 
+void* entity_get_binary_base(void) {
+    return g_MainBinaryBase;
+}
+
 // ============================================================================
 // Lua Bindings
 // ============================================================================
@@ -1159,23 +1163,21 @@ static int lua_entity_get_component(lua_State *L) {
     EntityHandle *ud = (EntityHandle*)luaL_checkudata(L, 1, "BG3Entity");
     const char *name = luaL_checkstring(L, 2);
 
-    // First try the new index-based component registry
-    // This supports full qualified names like "eoc::HealthComponent"
-    if (g_EntityWorld && component_registry_ready()) {
-        const ComponentInfo *info = component_registry_lookup(name);
-        if (info && info->discovered) {
-            void *component = component_get_by_name(g_EntityWorld, *ud, name);
-            if (component) {
-                // For Transform, use proper struct conversion
-                if (strstr(name, "TransformComponent") != NULL) {
-                    push_transform_component(L, component);
-                } else {
-                    // Return raw component pointer as light userdata
-                    // Mods can use this with Ext.Entity.DumpComponentRegistry() to understand the layout
-                    lua_pushlightuserdata(L, component);
-                }
-                return 1;
+    // First try component_get_by_name which handles:
+    // 1. Direct template calls for known components (ecl::Character, etc.)
+    // 2. Registry-based lookup for discovered components
+    if (g_EntityWorld) {
+        void *component = component_get_by_name(g_EntityWorld, *ud, name);
+        if (component) {
+            // For Transform, use proper struct conversion
+            if (strstr(name, "TransformComponent") != NULL) {
+                push_transform_component(L, component);
+            } else {
+                // Return raw component pointer as light userdata
+                // Mods can use this with Ext.Entity.DumpComponentRegistry() to understand the layout
+                lua_pushlightuserdata(L, component);
             }
+            return 1;
         }
     }
 

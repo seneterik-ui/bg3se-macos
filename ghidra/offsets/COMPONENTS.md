@@ -1,25 +1,66 @@
 # Component Discovery System
 
-## Status Summary
+## Status Summary (Dec 2025)
 
-**Current Approach:** Index-based component access matching Windows BG3SE architecture.
+**Current Approach:** Direct template function calls for known components.
 
-The original approach of using direct `GetComponent<T>` function addresses was abandoned because:
-1. Component strings are RTTI metadata with **NO XREFs** in static analysis
-2. BG3 uses runtime type indices (`uint16_t`) not direct function pointers
-3. The discovered addresses were malformed (11 hex digits instead of 10)
+### Key Insight: No GetRawComponent Dispatcher on macOS
+
+Unlike Windows BG3SE which uses a single `GetRawComponent` dispatcher, macOS ARM64 **template-inlines** all component access. Each `GetComponent<T>` is a separate function with hardcoded type indices.
+
+**Solution:** Call the template instantiations directly using discovered Ghidra addresses.
+
+### Implementation Files
+
+| File | Purpose |
+|------|---------|
+| `src/entity/component_templates.h` | Known template addresses table |
+| `src/entity/component_registry.c` | `component_get_by_name()` calls templates |
+| `src/entity/arm64_call.c` | `call_get_component_template()` ARM64 wrapper |
+
+## Known GetComponent<T> Template Addresses
+
+From `src/entity/component_templates.h`:
+
+| Component | Ghidra Address | Runtime Calculation |
+|-----------|----------------|---------------------|
+| `ecl::Item` | `0x100cb1644` | addr - 0x100000000 + binary_base |
+| `ecl::Character` | `0x100cc20a8` | addr - 0x100000000 + binary_base |
+| `eoc::combat::ParticipantComponent` | `0x100cc1d7c` | |
+| `ls::anubis::TreeComponent` | `0x100c8ec50` | |
+| `navcloud::PathRequestComponent` | `0x100da66c8` | |
+| `eoc::controller::LocomotionComponent` | `0x100e1c66c` | |
+
+### ARM64 Calling Convention for GetComponent<T>
+
+```c
+// x0 = EntityWorld*, x1 = EntityHandle, return in x0
+void* call_get_component_template(void *fn_addr, void *entityWorld, uint64_t entityHandle) {
+    void *result;
+    __asm__ volatile (
+        "mov x0, %[world]\n"
+        "mov x1, %[handle]\n"
+        "blr %[fn]\n"
+        "mov %[result], x0\n"
+        : [result] "=r"(result)
+        : [world] "r"(entityWorld), [handle] "r"(entityHandle), [fn] "r"(fn_addr)
+        : "x0", "x1", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "x30", "memory"
+    );
+    return result;
+}
+```
 
 ## Implementation Status
 
 | Feature | Status |
 |---------|--------|
+| GUID→EntityHandle lookup | ✅ Working (byte order fixed) |
+| Template-based GetComponent | ✅ Implemented |
 | Component Registry module | ✅ Implemented |
 | Pre-registered component names | ✅ 45+ common components |
-| Runtime index discovery | ⚠️ Requires Frida |
-| GetRawComponent wrapper | ✅ Implemented (ARM64 ABI) |
+| Lua API: entity:GetComponent(name) | ✅ Uses templates first |
 | Lua API: DumpComponentRegistry | ✅ Implemented |
-| Lua API: RegisterComponent | ✅ Implemented |
-| Lua API: SetGetRawComponentAddr | ✅ Implemented |
+| Runtime template validation | 🔄 In progress |
 
 ## New Lua API
 
@@ -155,6 +196,52 @@ The component registry pre-registers these common component names for discovery:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Frida Analysis Results (Dec 1, 2025)
+
+### Key Finding: No GetRawComponent Dispatcher on macOS
+
+Frida tracing of `EntityStorageContainer::TryGet` revealed that **there is no single `GetRawComponent` dispatcher function on macOS**. The Windows BG3SE uses a dispatcher pattern, but the macOS binary uses template-inlined component access.
+
+The call pattern observed:
+```
+Game Logic (CharacterManager, CombatSystem, etc.)
+    └─ ecs::WorldView<...> template instantiation
+        └─ EntityStorageContainer::TryGet
+```
+
+Each `ecs::WorldView` template specialization inlines the component access directly, rather than going through a dispatcher.
+
+### Discovered Core Functions
+
+| Function | Ghidra Address | Purpose |
+|----------|----------------|---------|
+| `EntityStorageContainer::TryGet` | `0x10636b27c` | Component lookup (non-const) |
+| `EntityStorageContainer::TryGet (const)` | `0x10636b310` | Component lookup (const) |
+| `EntityStoragePurgeAll` | `0x10636d368` | Storage cleanup |
+| `EntityStorageData::~EntityStorageData` | `0x10636c868` | Storage destructor |
+
+### TryGet Signature
+
+```c
+// TryGet returns EntityStorageData* for the given handle
+EntityStorageData* EntityStorageContainer::TryGet(EntityHandle handle);
+```
+
+ARM64 calling convention:
+- x0 = this (EntityStorageContainer*)
+- x1 = EntityHandle (64-bit packed)
+- Return: x0 = EntityStorageData* or null
+
+### Implementation Approach
+
+Since there's no GetRawComponent dispatcher, we implement our own:
+
+1. **Get EntityStorageContainer for component type** from EntityWorld
+2. **Call TryGet** with the EntityHandle to get EntityStorageData
+3. **Access component data** from EntityStorageData
+
+This matches how the templated WorldView code works, but done at runtime.
+
 ## Related Files
 
 | File | Purpose |
@@ -163,6 +250,7 @@ The component registry pre-registers these common component names for discovery:
 | `src/entity/component_registry.c` | Implementation, pre-registration |
 | `src/entity/arm64_call.c` | GetRawComponent ARM64 wrapper |
 | `tools/frida/discover_components.js` | Frida discovery script |
+| `tools/frida/trace_getrawcomponent.js` | TryGet caller tracer |
 | `tools/frida/README.md` | Frida usage guide |
 
 ## Technical Details
@@ -198,8 +286,53 @@ ARM64 calling convention:
 - w4 = isProxy (bool)
 - Return: x0 = component pointer
 
+## Ghidra Decompilation Analysis (Dec 2025)
+
+### EntityWorld Structure (Discovered via GetComponent<T> Decompilation)
+
+```c
+struct ecs::EntityWorld {
+    // ... other members ...
+    EntityStorageContainer* Storage;     // offset 0x2d0
+    // ... other members ...
+    ImmediateWorldCache* Cache;          // offset 0x3f0
+    // ...
+};
+```
+
+### GetComponent<T> Template Instantiations
+
+Found many template instantiations in the binary:
+
+| Function | Address | Size | Notes |
+|----------|---------|------|-------|
+| `GetComponent<ecl::Item>` | `0x100cb1644` | 468 bytes | |
+| `GetComponent<ecl::Character>` | `0x100cc20a8` | 468 bytes | |
+| `GetComponent<ls::anubis::TreeComponent>` | `0x100c8ec50` | 396 bytes | |
+| `GetComponent<eoc::combat::ParticipantComponent>` | `0x100cc1d7c` | 476 bytes | |
+| `GetComponent<navcloud::PathRequestComponent>` | `0x100da66c8` | 588 bytes | |
+| `GetComponent<eoc::controller::LocomotionComponent>` | `0x100e1c66c` | 588 bytes | |
+
+### TypeId<T>::m_TypeIndex Globals
+
+Component type indices are stored in global static variables with mangled names:
+
+| Component | Mangled Global | Notes |
+|-----------|----------------|-------|
+| `ecl::Item` | `__ZN2ls6TypeIdIN3ecl4ItemEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE` | @ `0x1083c6910` |
+| `ecl::Character` | `__ZN2ls6TypeIdIN3ecl9CharacterEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE` | @ `0x1083c7818` |
+
+These can be read at runtime to discover component type indices.
+
+### Next Implementation Steps
+
+1. **Read TypeId globals** - Scan the `__DATA` segment for `ls::TypeId<...>::m_TypeIndex` globals
+2. **Map names to indices** - Build runtime mapping of component names → indices
+3. **Implement GetRawComponent** - Use TryGet + EntityStorageData offset pattern
+
 ## References
 
 - bg3se EntitySystem.cpp: GetRawComponent implementation
 - bg3se EntitySystemHelpers.h: ComponentTypeIndex mapping
 - bg3se DataLibrariesBG3Game.cpp: Component registration patterns
+- `/Users/tomdimino/Desktop/Programming/bg3se/BG3Extender/GameDefinitions/EntitySystem.h` - Windows structure definitions

@@ -202,6 +202,13 @@ bool entity_system_ready(void);
  */
 bool entity_discover_world(void);
 
+/**
+ * Get the main binary base address.
+ * Needed for calculating runtime addresses from Ghidra offsets.
+ * Returns NULL if entity system not initialized.
+ */
+void* entity_get_binary_base(void);
+
 // ============================================================================
 // Lua Bindings
 // ============================================================================

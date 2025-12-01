@@ -77,4 +77,37 @@ bool arm64_call_available(void);
 void* call_get_raw_component(void *fn, void *entityWorld, uint64_t entityHandle,
                               uint16_t typeIndex, size_t componentSize, bool isProxy);
 
+// ============================================================================
+// GetComponent Template Call Wrapper
+// ============================================================================
+
+/**
+ * Call a GetComponent<T> template instantiation directly.
+ *
+ * GetComponent<T> signature:
+ *   T* EntityWorld::GetComponent<T>(EntityHandle handle)
+ *
+ * On macOS, there's no GetRawComponent dispatcher - each GetComponent<T>
+ * is template-inlined. This wrapper calls those instantiations directly.
+ *
+ * @param fn_addr GetComponent<T> function address (with ASLR slide applied)
+ * @param entityWorld Pointer to EntityWorld (this pointer)
+ * @param entityHandle Entity handle (64-bit packed value)
+ * @return Pointer to component data, or NULL
+ */
+void* call_get_component_template(void *fn_addr, void *entityWorld, uint64_t entityHandle);
+
+/**
+ * Call EntityStorageContainer::TryGet to get EntityStorageData.
+ *
+ * TryGet signature:
+ *   EntityStorageData* EntityStorageContainer::TryGet(EntityHandle handle)
+ *
+ * @param fn_addr TryGet function address (with ASLR slide applied)
+ * @param storageContainer EntityStorageContainer pointer (from EntityWorld + 0x2d0)
+ * @param entityHandle Entity handle (64-bit packed value)
+ * @return Pointer to EntityStorageData, or NULL
+ */
+void* call_try_get(void *fn_addr, void *storageContainer, uint64_t entityHandle);
+
 #endif // ARM64_CALL_H

@@ -92,6 +92,73 @@ void* call_get_raw_component(void *fn, void *entityWorld, uint64_t entityHandle,
     return result;
 }
 
+void* call_get_component_template(void *fn_addr, void *entityWorld, uint64_t entityHandle) {
+    if (!fn_addr || !entityWorld) {
+        return NULL;
+    }
+
+    // GetComponent<T> signature: T* (EntityWorld* this, EntityHandle handle)
+    // ARM64 calling convention:
+    // x0 = this (EntityWorld*)
+    // x1 = entityHandle (64-bit)
+    // Return: x0 = component pointer (or NULL)
+    //
+    // This is a standard call - no x8 indirect return needed since
+    // GetComponent returns a pointer (8 bytes)
+
+    void *result;
+    __asm__ volatile (
+        "mov x0, %[world]\n"
+        "mov x1, %[handle]\n"
+        "blr %[fn]\n"
+        "mov %[result], x0\n"
+        : [result] "=r"(result)
+        : [world] "r"(entityWorld),
+          [handle] "r"(entityHandle),
+          [fn] "r"(fn_addr)
+        : "x0", "x1", "x8", "x9", "x10", "x11", "x12", "x13",
+          "x14", "x15", "x16", "x17", "x30", "memory"
+    );
+
+    if (result) {
+        log_arm64("GetComponent<T> returned: %p", result);
+    }
+
+    return result;
+}
+
+void* call_try_get(void *fn_addr, void *storageContainer, uint64_t entityHandle) {
+    if (!fn_addr || !storageContainer) {
+        return NULL;
+    }
+
+    // TryGet signature: EntityStorageData* (EntityStorageContainer* this, EntityHandle handle)
+    // ARM64 calling convention:
+    // x0 = this (EntityStorageContainer*)
+    // x1 = entityHandle (64-bit)
+    // Return: x0 = EntityStorageData* (or NULL)
+
+    void *result;
+    __asm__ volatile (
+        "mov x0, %[storage]\n"
+        "mov x1, %[handle]\n"
+        "blr %[fn]\n"
+        "mov %[result], x0\n"
+        : [result] "=r"(result)
+        : [storage] "r"(storageContainer),
+          [handle] "r"(entityHandle),
+          [fn] "r"(fn_addr)
+        : "x0", "x1", "x8", "x9", "x10", "x11", "x12", "x13",
+          "x14", "x15", "x16", "x17", "x30", "memory"
+    );
+
+    if (result) {
+        log_arm64("TryGet returned: %p", result);
+    }
+
+    return result;
+}
+
 #else
 // x86_64 fallback - struct returns work differently
 
@@ -115,6 +182,22 @@ void* call_get_raw_component(void *fn, void *entityWorld, uint64_t entityHandle,
     (void)componentSize;
     (void)isProxy;
     log_arm64("call_get_raw_component not implemented for x86_64");
+    return NULL;
+}
+
+void* call_get_component_template(void *fn_addr, void *entityWorld, uint64_t entityHandle) {
+    (void)fn_addr;
+    (void)entityWorld;
+    (void)entityHandle;
+    log_arm64("call_get_component_template not implemented for x86_64");
+    return NULL;
+}
+
+void* call_try_get(void *fn_addr, void *storageContainer, uint64_t entityHandle) {
+    (void)fn_addr;
+    (void)storageContainer;
+    (void)entityHandle;
+    log_arm64("call_try_get not implemented for x86_64");
     return NULL;
 }
 
