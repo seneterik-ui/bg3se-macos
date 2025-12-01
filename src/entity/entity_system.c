@@ -469,6 +469,12 @@ bool entity_discover_world(void) {
             g_EntityWorld = entityworld;
             log_entity("SUCCESS: Discovered EoCServer=%p, EntityWorld=%p",
                        g_EoCServer, g_EntityWorld);
+
+            // Initialize component registry now that we have EntityWorld
+            if (component_registry_init(g_EntityWorld)) {
+                log_entity("Component registry initialized");
+            }
+
             return true;
         } else {
             log_entity("Found EoCServer but EntityWorld at +0x288 is NULL or invalid");
