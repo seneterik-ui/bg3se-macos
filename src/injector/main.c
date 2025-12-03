@@ -59,6 +59,10 @@ extern "C" {
 #include "lua_ext.h"
 #include "lua_json.h"
 #include "lua_osiris.h"
+#include "lua_stats.h"
+
+// Stats system
+#include "stats_manager.h"
 
 // Mod loader
 #include "mod_loader.h"
@@ -731,6 +735,9 @@ static void register_ext_api(lua_State *L) {
 
     // Ext.Events namespace (event system)
     register_ext_events(L, -1);
+
+    // Ext.Stats namespace (stats system)
+    lua_stats_register(L, -1);
 
     // Set Ext as global
     lua_setglobal(L, "Ext");
@@ -1765,6 +1772,9 @@ static int fake_Load(void *thisPtr, void *smartBuf) {
         // Retry TypeId discovery now that the game is fully loaded
         // TypeId globals may not have been initialized at injection time
         entity_on_session_loaded();
+
+        // Check stats system now that the game is loaded
+        stats_manager_on_session_loaded();
     }
 
     return result;
@@ -2421,6 +2431,14 @@ static void install_hooks(void) {
                     log_message("Entity system initialized (function pointers ready)");
                 } else {
                     log_message("WARNING: Entity system initialization failed: %d", result);
+                }
+
+                // Initialize stats manager
+                stats_manager_init(binary_base);
+                if (stats_manager_ready()) {
+                    log_message("Stats system initialized and ready");
+                } else {
+                    log_message("Stats system initialized (will be ready after game loads)");
                 }
                 found = true;
             }

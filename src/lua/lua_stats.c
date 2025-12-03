@@ -1,0 +1,432 @@
+/**
+ * lua_stats.c - Lua bindings for Ext.Stats API
+ *
+ * Implements the Lua interface for accessing and modifying game statistics.
+ */
+
+#include "lua_stats.h"
+#include "../stats/stats_manager.h"
+#include "logging.h"
+
+#include "../../lib/lua/src/lua.h"
+#include "../../lib/lua/src/lauxlib.h"
+#include "../../lib/lua/src/lualib.h"
+
+#include <string.h>
+#include <stdlib.h>
+#include <stdarg.h>
+
+// Forward declarations
+static int lua_stats_object_get_property(lua_State *L);
+static int lua_stats_object_set_property(lua_State *L);
+static int lua_stats_object_dump(lua_State *L);
+
+// ============================================================================
+// Logging
+// ============================================================================
+
+static void log_lua_stats(const char *fmt, ...) __attribute__((format(printf, 1, 2)));
+static void log_lua_stats(const char *fmt, ...) {
+    char buf[1024];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    log_message("[Lua.Stats] %s", buf);
+}
+
+// ============================================================================
+// StatsObject Userdata
+// ============================================================================
+
+#define STATS_OBJECT_METATABLE "bg3se.StatsObject"
+
+typedef struct {
+    StatsObjectPtr obj;  // Opaque handle from stats_manager
+} LuaStatsObject;
+
+// Push a StatsObject userdata onto the stack
+static void push_stats_object(lua_State *L, StatsObjectPtr obj) {
+    if (!obj) {
+        lua_pushnil(L);
+        return;
+    }
+
+    LuaStatsObject *ud = (LuaStatsObject*)lua_newuserdata(L, sizeof(LuaStatsObject));
+    ud->obj = obj;
+
+    luaL_getmetatable(L, STATS_OBJECT_METATABLE);
+    lua_setmetatable(L, -2);
+}
+
+// Get StatsObject from userdata at stack index
+static LuaStatsObject* check_stats_object(lua_State *L, int idx) {
+    return (LuaStatsObject*)luaL_checkudata(L, idx, STATS_OBJECT_METATABLE);
+}
+
+// ============================================================================
+// StatsObject Metatable Methods
+// ============================================================================
+
+// StatsObject.__index - Property access
+static int lua_stats_object_index(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    const char *key = luaL_checkstring(L, 2);
+
+    if (!ud->obj) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Built-in properties
+    if (strcmp(key, "Name") == 0) {
+        const char *name = stats_get_name(ud->obj);
+        if (name) {
+            lua_pushstring(L, name);
+        } else {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    if (strcmp(key, "Type") == 0) {
+        const char *type = stats_get_type(ud->obj);
+        if (type) {
+            lua_pushstring(L, type);
+        } else {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    if (strcmp(key, "Level") == 0) {
+        int level = stats_get_level(ud->obj);
+        lua_pushinteger(L, level);
+        return 1;
+    }
+
+    if (strcmp(key, "Using") == 0) {
+        const char *using_stat = stats_get_using(ud->obj);
+        if (using_stat) {
+            lua_pushstring(L, using_stat);
+        } else {
+            lua_pushnil(L);
+        }
+        return 1;
+    }
+
+    // Methods
+    if (strcmp(key, "GetProperty") == 0) {
+        // Push method closure (handled below)
+        lua_pushcfunction(L, lua_stats_object_get_property);
+        return 1;
+    }
+
+    if (strcmp(key, "SetProperty") == 0) {
+        lua_pushcfunction(L, lua_stats_object_set_property);
+        return 1;
+    }
+
+    if (strcmp(key, "Dump") == 0) {
+        lua_pushcfunction(L, lua_stats_object_dump);
+        return 1;
+    }
+
+    // Try to get as a stat property
+    const char *str_val = stats_get_string(ud->obj, key);
+    if (str_val) {
+        lua_pushstring(L, str_val);
+        return 1;
+    }
+
+    // Property not found
+    lua_pushnil(L);
+    return 1;
+}
+
+// StatsObject.__newindex - Property modification
+static int lua_stats_object_newindex(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    const char *key = luaL_checkstring(L, 2);
+
+    if (!ud->obj) {
+        return luaL_error(L, "Invalid StatsObject");
+    }
+
+    // Built-in properties are read-only
+    if (strcmp(key, "Name") == 0 || strcmp(key, "Type") == 0 ||
+        strcmp(key, "Level") == 0 || strcmp(key, "Using") == 0) {
+        return luaL_error(L, "Property '%s' is read-only", key);
+    }
+
+    // Try to set as a stat property
+    int value_type = lua_type(L, 3);
+
+    if (value_type == LUA_TSTRING) {
+        const char *value = lua_tostring(L, 3);
+        bool success = stats_set_string(ud->obj, key, value);
+        if (!success) {
+            log_lua_stats("Failed to set string property '%s'", key);
+        }
+    } else if (value_type == LUA_TNUMBER) {
+        if (lua_isinteger(L, 3)) {
+            int64_t value = lua_tointeger(L, 3);
+            bool success = stats_set_int(ud->obj, key, value);
+            if (!success) {
+                log_lua_stats("Failed to set integer property '%s'", key);
+            }
+        } else {
+            float value = (float)lua_tonumber(L, 3);
+            bool success = stats_set_float(ud->obj, key, value);
+            if (!success) {
+                log_lua_stats("Failed to set float property '%s'", key);
+            }
+        }
+    } else {
+        return luaL_error(L, "Unsupported value type for property '%s'", key);
+    }
+
+    return 0;
+}
+
+// StatsObject.__tostring
+static int lua_stats_object_tostring(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+
+    if (!ud->obj) {
+        lua_pushstring(L, "StatsObject(nil)");
+        return 1;
+    }
+
+    const char *name = stats_get_name(ud->obj);
+    const char *type = stats_get_type(ud->obj);
+
+    if (name && type) {
+        lua_pushfstring(L, "StatsObject(%s [%s])", name, type);
+    } else if (name) {
+        lua_pushfstring(L, "StatsObject(%s)", name);
+    } else {
+        lua_pushfstring(L, "StatsObject(%p)", ud->obj);
+    }
+
+    return 1;
+}
+
+// StatsObject:GetProperty(name) -> value
+static int lua_stats_object_get_property(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    const char *prop = luaL_checkstring(L, 2);
+
+    if (!ud->obj) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Try string first
+    const char *str_val = stats_get_string(ud->obj, prop);
+    if (str_val) {
+        lua_pushstring(L, str_val);
+        return 1;
+    }
+
+    // Try integer
+    int64_t int_val;
+    if (stats_get_int(ud->obj, prop, &int_val)) {
+        lua_pushinteger(L, int_val);
+        return 1;
+    }
+
+    // Try float
+    float float_val;
+    if (stats_get_float(ud->obj, prop, &float_val)) {
+        lua_pushnumber(L, float_val);
+        return 1;
+    }
+
+    lua_pushnil(L);
+    return 1;
+}
+
+// StatsObject:SetProperty(name, value) -> bool
+static int lua_stats_object_set_property(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    const char *prop = luaL_checkstring(L, 2);
+
+    if (!ud->obj) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    int value_type = lua_type(L, 3);
+    bool success = false;
+
+    if (value_type == LUA_TSTRING) {
+        const char *value = lua_tostring(L, 3);
+        success = stats_set_string(ud->obj, prop, value);
+    } else if (value_type == LUA_TNUMBER) {
+        if (lua_isinteger(L, 3)) {
+            int64_t value = lua_tointeger(L, 3);
+            success = stats_set_int(ud->obj, prop, value);
+        } else {
+            float value = (float)lua_tonumber(L, 3);
+            success = stats_set_float(ud->obj, prop, value);
+        }
+    }
+
+    lua_pushboolean(L, success);
+    return 1;
+}
+
+// StatsObject:Dump()
+static int lua_stats_object_dump(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    if (ud->obj) {
+        stats_dump(ud->obj);
+    }
+    return 0;
+}
+
+// ============================================================================
+// Ext.Stats Functions
+// ============================================================================
+
+// Ext.Stats.Get(name) -> StatsObject or nil
+static int lua_stats_get(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+
+    if (!stats_manager_ready()) {
+        log_lua_stats("Stats system not ready");
+        lua_pushnil(L);
+        return 1;
+    }
+
+    StatsObjectPtr obj = stats_get(name);
+    push_stats_object(L, obj);
+    return 1;
+}
+
+// Ext.Stats.GetAll(type?) -> array of names
+static int lua_stats_getall(lua_State *L) {
+    const char *type = NULL;
+    if (lua_gettop(L) >= 1 && !lua_isnil(L, 1)) {
+        type = luaL_checkstring(L, 1);
+    }
+
+    if (!stats_manager_ready()) {
+        log_lua_stats("Stats system not ready");
+        lua_newtable(L);  // Return empty array
+        return 1;
+    }
+
+    int count = stats_get_count(type);
+    if (count < 0) {
+        lua_newtable(L);
+        return 1;
+    }
+
+    lua_createtable(L, count, 0);
+
+    for (int i = 0; i < count; i++) {
+        const char *name = stats_get_name_at(type, i);
+        if (name) {
+            lua_pushstring(L, name);
+            lua_rawseti(L, -2, i + 1);  // Lua arrays are 1-indexed
+        }
+    }
+
+    return 1;
+}
+
+// Ext.Stats.Sync(name) -> bool
+static int lua_stats_sync(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+
+    bool success = stats_sync(name);
+    lua_pushboolean(L, success);
+    return 1;
+}
+
+// Ext.Stats.Create(name, type, template?) -> StatsObject or nil
+static int lua_stats_create(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+    const char *type = luaL_checkstring(L, 2);
+    const char *template_name = NULL;
+
+    if (lua_gettop(L) >= 3 && !lua_isnil(L, 3)) {
+        template_name = luaL_checkstring(L, 3);
+    }
+
+    if (!stats_manager_ready()) {
+        log_lua_stats("Stats system not ready");
+        lua_pushnil(L);
+        return 1;
+    }
+
+    StatsObjectPtr obj = stats_create(name, type, template_name);
+    push_stats_object(L, obj);
+    return 1;
+}
+
+// Ext.Stats.IsReady() -> bool
+static int lua_stats_isready(lua_State *L) {
+    lua_pushboolean(L, stats_manager_ready());
+    return 1;
+}
+
+// Ext.Stats.DumpTypes()
+static int lua_stats_dumptypes(lua_State *L) {
+    (void)L;
+    stats_dump_types();
+    return 0;
+}
+
+// Ext.Stats.GetRaw() -> pointer (for debugging)
+static int lua_stats_getraw(lua_State *L) {
+    void *raw = stats_manager_get_raw();
+    if (raw) {
+        lua_pushfstring(L, "%p", raw);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+// ============================================================================
+// Registration
+// ============================================================================
+
+static const luaL_Reg stats_object_methods[] = {
+    {"__index", lua_stats_object_index},
+    {"__newindex", lua_stats_object_newindex},
+    {"__tostring", lua_stats_object_tostring},
+    {NULL, NULL}
+};
+
+static const luaL_Reg stats_functions[] = {
+    {"Get", lua_stats_get},
+    {"GetAll", lua_stats_getall},
+    {"Sync", lua_stats_sync},
+    {"Create", lua_stats_create},
+    {"IsReady", lua_stats_isready},
+    {"DumpTypes", lua_stats_dumptypes},
+    {"GetRaw", lua_stats_getraw},
+    {NULL, NULL}
+};
+
+void lua_stats_register(lua_State *L, int ext_table_index) {
+    log_lua_stats("Registering Ext.Stats API");
+
+    // Create StatsObject metatable
+    luaL_newmetatable(L, STATS_OBJECT_METATABLE);
+    luaL_setfuncs(L, stats_object_methods, 0);
+    lua_pop(L, 1);
+
+    // Create Ext.Stats table
+    lua_newtable(L);
+    luaL_setfuncs(L, stats_functions, 0);
+
+    // Set as Ext.Stats
+    lua_setfield(L, ext_table_index, "Stats");
+
+    log_lua_stats("Ext.Stats API registered");
+}

@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.10.6
+## Current Status: v0.11.0
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -22,6 +22,7 @@ This document tracks the development roadmap for achieving feature parity with W
 - **TypeId Discovery** - 11 component TypeIds discovered at SessionLoaded with deferred retry
 - **Safe Memory APIs** - Crash-safe memory reading via mach_vm_read
 - **Function Name Caching** - OsiFunctionDef->Signature->Name two-level indirection (v0.10.6)
+- **Ext.Stats API** - RPGStats::m_ptr discovery, stats_manager module, Lua bindings (v0.11.0)
 
 ---
 
@@ -197,29 +198,53 @@ Ext.Timer.Cancel(timerId)
 ## Phase 3: Stats System
 
 ### 3.1 Ext.Stats API
-**Status:** Not Started
+**Status:** 🔄 In Progress (v0.11.0) - Read-only API implemented
 
 Access and modify game statistics, character builds, and item properties.
 
-**Target API:**
+**Implemented API (v0.11.0):**
 ```lua
--- Get stat object
-local stat = Ext.Stats.Get("Weapon_Longsword")
+-- Check if stats system is ready
+if Ext.Stats.IsReady() then
+    -- Get stat object by name
+    local stat = Ext.Stats.Get("Weapon_Longsword")
 
--- Modify stats
-stat.Damage = "1d10"
-stat.DamageType = "Slashing"
+    if stat then
+        -- Read built-in properties
+        local name = stat.Name        -- "Weapon_Longsword"
+        local type = stat.Type        -- "Weapon"
+        local level = stat.Level      -- Level value
+        local using = stat.Using      -- Parent stat name or nil
 
--- Create new stat
-local newStat = Ext.Stats.Create("MyCustomWeapon", "Weapon")
-newStat.Damage = "2d6"
+        -- Dump stat info to log
+        stat:Dump()
+    end
+
+    -- Get all stats of a type
+    local weapons = Ext.Stats.GetAll("Weapon")
+    for i, name in ipairs(weapons) do
+        Ext.Print("Weapon: " .. name)
+    end
+
+    -- Dump available stat types
+    Ext.Stats.DumpTypes()
+end
 ```
 
-**Implementation approach:**
-- Locate stat manager in game memory via pattern scanning
-- Parse stat file formats (.lsx, .lsf)
-- Create modification layer that intercepts stat lookups
-- Support runtime stat modification
+**Implementation details:**
+- [x] Discovered `RPGStats::m_ptr` global at `0x1089c5730` via symbol analysis
+- [x] Documented offsets in `ghidra/offsets/STATS.md`
+- [x] Created `stats_manager.c/h` module for C-level access
+- [x] Created `lua_stats.c/h` for Lua bindings
+- [x] StatsObject userdata with `__index`, `__newindex`, `__tostring`
+- [ ] Property read access (IndexedProperties + pools) - needs pool offsets
+- [ ] Property write access and Sync
+- [ ] Stat creation
+
+**Pending (Phase 4-5):**
+- Property modification (`stat.Damage = "2d6"`)
+- `Ext.Stats.Sync(name)` to propagate changes
+- `Ext.Stats.Create(name, type, template)` for new stats
 
 ### 3.2 Character Stats
 **Status:** Not Started
@@ -391,6 +416,7 @@ Complete Lua type annotations for IDE support and runtime validation.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.11.0 | 2025-12-03 | Ext.Stats API - RPGStats::m_ptr discovery, stats_manager module, Lua bindings (read-only) |
 | v0.10.6 | 2025-12-03 | Fixed Osiris function name caching - OsiFunctionDef->Signature->Name two-level indirection |
 | v0.10.4 | 2025-12-02 | TypeId<T>::m_TypeIndex discovery, ComponentTypeToIndex enumeration, Lua bindings for runtime discovery |
 | v0.10.3 | 2025-12-01 | Data structure traversal for GetComponent (TryGet + HashMap), template calls don't work on macOS |

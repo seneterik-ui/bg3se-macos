@@ -28,6 +28,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/mod
     ${CMAKE_SOURCE_DIR}/src/osiris
     ${CMAKE_SOURCE_DIR}/src/pak
+    ${CMAKE_SOURCE_DIR}/src/stats
 )
 
 add_library(bg3se SHARED
@@ -37,6 +38,7 @@ add_library(bg3se SHARED
     src/lua/lua_ext.c
     src/lua/lua_json.c
     src/lua/lua_osiris.c
+    src/lua/lua_stats.c
     src/mod/mod_loader.c
     src/osiris/pattern_scan.c
     src/osiris/osiris_functions.c
@@ -47,6 +49,7 @@ add_library(bg3se SHARED
     src/entity/component_registry.c
     src/entity/component_lookup.c
     src/entity/component_typeid.c
+    src/stats/stats_manager.c
     lib/lz4/lz4.c
 )
 
