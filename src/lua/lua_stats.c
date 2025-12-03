@@ -6,6 +6,7 @@
 
 #include "lua_stats.h"
 #include "../stats/stats_manager.h"
+#include "../strings/fixed_string.h"
 #include "logging.h"
 
 #include "../../lib/lua/src/lua.h"
@@ -391,6 +392,31 @@ static int lua_stats_getraw(lua_State *L) {
     return 1;
 }
 
+// Ext.Stats.GetAllStats(type?) -> array of names
+// Alias for GetAll, matches Windows BG3SE API naming
+static int lua_stats_getallstats(lua_State *L) {
+    return lua_stats_getall(L);
+}
+
+// Ext.Stats.GetFixedStringStatus() -> table with status info
+static int lua_stats_get_fixedstring_status(lua_State *L) {
+    lua_newtable(L);
+
+    lua_pushboolean(L, fixed_string_is_ready());
+    lua_setfield(L, -2, "ready");
+
+    uint32_t resolved = 0, failed = 0;
+    fixed_string_get_stats(&resolved, &failed);
+
+    lua_pushinteger(L, resolved);
+    lua_setfield(L, -2, "resolved");
+
+    lua_pushinteger(L, failed);
+    lua_setfield(L, -2, "failed");
+
+    return 1;
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -405,11 +431,13 @@ static const luaL_Reg stats_object_methods[] = {
 static const luaL_Reg stats_functions[] = {
     {"Get", lua_stats_get},
     {"GetAll", lua_stats_getall},
+    {"GetAllStats", lua_stats_getallstats},  // Alias for compatibility
     {"Sync", lua_stats_sync},
     {"Create", lua_stats_create},
     {"IsReady", lua_stats_isready},
     {"DumpTypes", lua_stats_dumptypes},
     {"GetRaw", lua_stats_getraw},
+    {"GetFixedStringStatus", lua_stats_get_fixedstring_status},
     {NULL, NULL}
 };
 

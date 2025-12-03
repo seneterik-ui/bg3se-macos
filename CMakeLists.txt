@@ -29,6 +29,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/osiris
     ${CMAKE_SOURCE_DIR}/src/pak
     ${CMAKE_SOURCE_DIR}/src/stats
+    ${CMAKE_SOURCE_DIR}/src/strings
 )
 
 add_library(bg3se SHARED
@@ -50,6 +51,7 @@ add_library(bg3se SHARED
     src/entity/component_lookup.c
     src/entity/component_typeid.c
     src/stats/stats_manager.c
+    src/strings/fixed_string.c
     lib/lz4/lz4.c
 )
 

@@ -4,10 +4,12 @@ This document tracks the development roadmap for achieving feature parity with W
 
 ## Current Status: v0.11.0
 
+**Overall Feature Parity: ~30%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
+
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
 - Osiris event observation (2000+ events captured per session)
-- Lua runtime with mod loading (BootstrapServer.lua, BootstrapClient.lua)
+- Lua runtime with mod loading (BootstrapServer.lua)
 - Basic Ext.* API (Print, Require, RegisterListener, Json, IO)
 - Osiris listener callbacks (before/after event dispatch)
 - Dynamic Osi.* metatable with lazy function lookup
@@ -23,6 +25,30 @@ This document tracks the development roadmap for achieving feature parity with W
 - **Safe Memory APIs** - Crash-safe memory reading via mach_vm_read
 - **Function Name Caching** - OsiFunctionDef->Signature->Name two-level indirection (v0.10.6)
 - **Ext.Stats API** - RPGStats::m_ptr discovery, stats_manager module, Lua bindings (v0.11.0)
+
+---
+
+## Feature Parity Matrix
+
+| Namespace | Windows BG3SE | bg3se-macos | Parity | Phase |
+|-----------|---------------|-------------|--------|-------|
+| `Osi.*` | ✅ Full | ✅ Dynamic metatable | **95%** | 1 |
+| `Ext.Osiris` | ✅ Full | ✅ RegisterListener | **90%** | 1 |
+| `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
+| `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
+| `Ext.Entity` | ✅ Full | ⚠️ Basic access | **40%** | 2 |
+| `Ext.Stats` | ✅ Full | ⚠️ Read + partial write | **60%** | 3 |
+| `Ext.Events` | ✅ Full | ⚠️ 3 events only | **10%** | 2.5 |
+| `Ext.Timer` | ✅ Full | ❌ Not impl | **0%** | 2.3 |
+| `Ext.Vars` | ✅ Full | ❌ Not impl | **0%** | 2.6 |
+| `Ext.Net` | ✅ Full | ❌ Not impl | **0%** | 6 |
+| `Ext.UI` | ✅ Full | ❌ Not impl | **0%** | 8 |
+| `Ext.Math` | ✅ Full | ❌ Not impl | **0%** | 7.5 |
+| `Ext.Input` | ✅ Full | ❌ Not impl | **0%** | 9 |
+| `Ext.Level` | ✅ Full | ❌ Not impl | **0%** | 9 |
+| Console/REPL | ✅ Full | ❌ Not impl | **0%** | 5 |
+| PersistentVars | ✅ Full | ❌ Not impl | **0%** | 2.4 |
+| Client Lua State | ✅ Full | ❌ Not impl | **0%** | 2.7 |
 
 ---
 
@@ -49,6 +75,14 @@ Lazy function lookup matching Windows BG3SE's OsirisBinding pattern:
 - [x] **Pre-populated common functions** - 40+ common functions (queries, calls, events, databases) seeded at startup
 - [x] **Type string helper** - `osi_func_type_str()` for debug logging
 - [x] **Function name caching via Signature indirection** - Fixed OsiFunctionDef structure (offset +0x08 is Line, not Name) (v0.10.6)
+
+### 1.3 Database Operations
+**Status:** ⚠️ Partial
+
+- [x] `Osi.DB_*:Get(nil)` - Fetch all rows (verified working)
+- [x] `Osi.DB_*(values...)` - Insert rows
+- [ ] `Osi.DB_*:Get(filter, nil, nil)` - Filtered queries (needs verification)
+- [ ] `Osi.DB_*:Delete(...)` - Row deletion (needs verification)
 
 ---
 
@@ -83,8 +117,8 @@ end
 - [x] Lua userdata proxies for entities with `__index` metamethod
 - [x] Component accessors via GetComponent template addresses
 
-### 2.2 Component Access
-**Status:** 🔄 In Progress (TypeId discovery complete, testing component access)
+### 2.2 Component Access & Property System
+**Status:** 🔄 In Progress (TypeId discovery complete, property access needed)
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -108,7 +142,7 @@ Components[PageIndex]->Components[slot].ComponentBuffer
 buffer + (componentSize * EntryIndex) → Component*
 ```
 
-**Implementation:**
+**Completed:**
 - [x] GUID→EntityHandle lookup (byte order fix: hi/lo swapped)
 - [x] EntityStorageContainer::TryGet wrapper (`call_try_get` at 0x10636b27c)
 - [x] InstanceToPageMap HashMap traversal
@@ -120,18 +154,20 @@ buffer + (componentSize * EntryIndex) → Component*
 - [x] **Deferred TypeId retry** - Retry at SessionLoaded when globals are initialized (v0.10.5)
 - [x] **Safe memory APIs** - mach_vm_read for crash-safe memory access (v0.10.5)
 
-**Why Template Calls Failed:**
+**Pending (from API.md):**
+- [ ] `entity:GetAllComponents()` - Return all attached components
+- [ ] `entity:GetAllComponentNames()` - List all component type names
+- [ ] `entity:CreateComponent(name)` - Attach new component
+- [ ] `entity:RemoveComponent(name)` - Detach component (v22+)
+- [ ] `entity:GetEntityType()` - Numeric type ID
+- [ ] `entity:GetSalt()`, `entity:GetIndex()` - Handle parts
+- [ ] `entity:GetNetId()` - Network ID (v23+)
+- [ ] `entity:Replicate(component)` - Network replication
+- [ ] `entity:SetReplicationFlags()`, `entity:GetReplicationFlags()` - Replication control
+- [ ] **Component property read** via `__index` (IndexedProperties + pools)
+- [ ] **Component property write** via `__newindex`
 
-On Windows, `GetRawComponent` is a single dispatcher function. On macOS/ARM64, each `GetComponent<T>` template is **completely inlined** at call sites - there are no callable functions, just inlined code.
-
-**TypeId Discovery (v0.10.5):** ✅ Complete
-
-Component type indices are stored in global variables with mangled names like:
-```
-__ZN2ls6TypeIdIN3ecl9CharacterEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE
-```
-
-**Discovered indices (at SessionLoaded):**
+**Discovered TypeIds (at SessionLoaded):**
 | Component | Index |
 |-----------|-------|
 | ecl::Character | 13 |
@@ -146,28 +182,12 @@ __ZN2ls6TypeIdIN3ecl9CharacterEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE
 | ls::VisualComponent | 1999 |
 | ls::PhysicsComponent | 1947 |
 
-**Key insight:** TypeId globals are `0` at injection time (before game initializes them). The fix was to retry discovery at `SessionLoaded` event when globals are populated.
-
-New Lua API:
-```lua
--- Discover indices from TypeId globals (with status)
-local result = Ext.Entity.DiscoverTypeIds()
--- Returns: { success = bool, count = int, complete = bool, message = string }
-
--- Dump all known TypeId addresses
-Ext.Entity.DumpTypeIds()
-```
-
-**Next Steps:**
-- Test end-to-end GetComponent with discovered indices
-- Verify component data reading works with known indices
-
 ### 2.3 Timer API
-**Status:** Not Started
+**Status:** ❌ Not Started
 
 Scheduling API for delayed and periodic callbacks. Essential for mods that need timed actions.
 
-**Target API:**
+**Target API (from Windows BG3SE):**
 ```lua
 -- One-shot timer (delay in milliseconds)
 Ext.Timer.WaitFor(1000, function()
@@ -192,6 +212,147 @@ Ext.Timer.Cancel(timerId)
 **Windows BG3SE reference:**
 - `BG3Extender/Lua/Libs/Timer.inl` - Timer registration and dispatch
 - Uses game's internal timing rather than system timers
+
+### 2.4 PersistentVars (Savegame Persistence)
+**Status:** ❌ Not Started - **CRITICAL**
+
+From API.md: "For keeping data through multiple play sessions it is possible to store them in the savegame by storing them in `Mods[ModTable].PersistentVars`."
+
+**Target API:**
+```lua
+-- Initialize per-mod
+PersistentVars = {}
+
+-- Store data during gameplay
+function doStuff()
+    PersistentVars['QuestProgress'] = 5
+end
+
+-- Restored before SessionLoaded event
+function OnSessionLoaded()
+    _P(PersistentVars['QuestProgress'])  -- Prints 5
+end
+```
+
+**Implementation needed:**
+- Hook savegame serialization/deserialization
+- JSON encode/decode PersistentVars table per mod
+- Trigger restoration before `SessionLoaded` event
+- Requires ModTable configuration in Config.json
+
+**Impact:** Without this, ALL mod state is lost on reload. Critical for any mod tracking progress.
+
+### 2.5 Ext.Events API (Engine Events)
+**Status:** ⚠️ Partial (3 events) - **CRITICAL for expansion**
+
+From API.md: "Subscribing to engine events can be done through the `Ext.Events` table."
+
+**Target API:**
+```lua
+-- Subscribe with options
+local handlerId = Ext.Events.GameStateChanged:Subscribe(function(e)
+    _P("State change from " .. e.FromState .. " to " .. e.ToState)
+end, {
+    Priority = 50,   -- Lower = called first (default: 100)
+    Once = true      -- Auto-unsubscribe after first call
+})
+
+-- Unsubscribe
+Ext.Events.GameStateChanged:Unsubscribe(handlerId)
+
+-- Helper for next tick
+Ext.OnNextTick(function()
+    -- Runs next frame
+end)
+```
+
+**Available Events (from API.md):**
+| Event | When | Notes |
+|-------|------|-------|
+| `ModuleLoadStarted` | Before mod data loads | Use for `AddPathOverride` |
+| `StatsLoaded` | After stats entries loaded | Apply stat modifications |
+| `SessionLoading` | Session setup started | Early initialization |
+| `SessionLoaded` | Session ready | PersistentVars available |
+| `ResetCompleted` | After `reset` command | Lua state reloaded |
+| `GameStateChanged` | Pause, unpause, etc. | State transitions |
+| `Tick` | Every game loop (~30hz) | High-frequency updates |
+
+**Implemented Events (v0.11.0):**
+- ✅ `Ext.Events.SessionLoading:Subscribe(callback)` - Before save loads
+- ✅ `Ext.Events.SessionLoaded:Subscribe(callback)` - After save loads
+- ✅ `Ext.Events.ResetCompleted:Subscribe(callback)` - After reset command
+
+**Impact:** Without remaining events, mods cannot react to all engine lifecycle states.
+
+### 2.6 User & Mod Variables
+**Status:** ❌ Not Started - **CRITICAL**
+
+From API.md: "v10 adds support for attaching custom properties to entities."
+
+**Target API:**
+```lua
+-- Registration (in BootstrapServer/Client.lua)
+Ext.Vars.RegisterUserVariable("NRD_MyVar", {
+    Server = true,
+    Client = true,
+    SyncToClient = true,
+    Persistent = true,       -- Save to savegame
+    SyncOnTick = true        -- Batch sync (default)
+})
+
+-- Usage
+entity.Vars.NRD_MyVar = { health = 100, mana = 50 }
+local data = entity.Vars.NRD_MyVar
+
+-- Manual sync
+Ext.Vars.SyncUserVariables()
+
+-- Mod-level variables
+Ext.Vars.RegisterModVariable(ModuleUUID, "GlobalState", { ... })
+local vars = Ext.Vars.GetModVariables(ModuleUUID)
+```
+
+**Impact:** Without this, mods cannot attach custom data to entities with automatic sync/persistence.
+
+### 2.7 Client Lua State
+**Status:** ❌ Not Started - **HIGH**
+
+From API.md: "The game is split into client and server components... the extender keeps multiple Lua states."
+
+**Current State:** bg3se-macos only runs server-side Lua (BootstrapServer.lua)
+
+**Missing:**
+- BootstrapClient.lua loading
+- Separate client Lua state
+- Client-only APIs (UI, rendering, level scaling)
+- Context annotations (C = Client, S = Server, R = Restricted)
+
+**Impact:** Client-side mods (UI modification, visual effects) completely broken.
+
+### 2.8 Object Scopes/Lifetimes
+**Status:** ❌ Not Started - **HIGH**
+
+From API.md: "Most `userdata` types are now bound to their enclosing *extender scope*."
+
+**Current State:** Objects live forever (memory leak risk)
+
+**Target Behavior:**
+```lua
+-- BAD: Smuggling objects outside scope
+local spellbook = Ext.Entity.Get(...).SpellBook
+Ext.OnNextTick(function()
+    -- Should THROW: "lifetime has expired"
+    local uuid = spellbook.Spells[2].SpellUUID
+end)
+
+-- GOOD: Fetch fresh reference in each scope
+Ext.OnNextTick(function()
+    local spellbook = Ext.Entity.Get(...).SpellBook
+    local uuid = spellbook.Spells[2].SpellUUID
+end)
+```
+
+**Impact:** Memory leaks, potential crashes from accessing deleted entities.
 
 ---
 
@@ -237,17 +398,35 @@ end
 - [x] Created `stats_manager.c/h` module for C-level access
 - [x] Created `lua_stats.c/h` for Lua bindings
 - [x] StatsObject userdata with `__index`, `__newindex`, `__tostring`
-- [ ] Property read access (IndexedProperties + pools) - needs pool offsets
-- [ ] Property write access and Sync
-- [ ] Stat creation
 
-**Pending (Phase 4-5):**
-- Property modification (`stat.Damage = "2d6"`)
-- `Ext.Stats.Sync(name)` to propagate changes
-- `Ext.Stats.Create(name, type, template)` for new stats
+**Pending (from API.md):**
+- [ ] **Property read access** via `__index` (Damage, DamageType, SpellFlags, Requirements, etc.)
+- [ ] **Property write access** via `__newindex` (`stat.Damage = "2d6"`)
+- [ ] **Table property handling** - Must reassign after modification
+- [ ] `stat:Sync()` - Propagate changes to clients
+- [ ] `Ext.Stats.Create(name, type, template)` - Create new stats
+- [ ] `Ext.Stats.GetStatsLoadedBefore(modGuid, type)` - Mod ordering
+- [ ] **Level scaling** - `Ext.Stats.Get(name, level)` parameter
+- [ ] `Ext.Stats.ExtraData` - Access Data.txt entries
 
-### 3.2 Character Stats
-**Status:** Not Started
+**Supported Stat Types (from API.md):**
+- `StatusData`, `SpellData`, `PassiveData`, `Armor`, `Weapon`, `Character`, `Object`
+- `SpellSet`, `EquipmentSet`, `TreasureTable`, `TreasureCategory`, `ItemGroup`, `NameGroup`
+
+### 3.2 Stats Functors (v22+)
+**Status:** ❌ Not Started
+
+```lua
+Ext.Stats.ExecuteFunctors(type, ...)
+Ext.Stats.ExecuteFunctor(functor, ...)
+Ext.Stats.PrepareFunctorParams(...)
+
+-- Event
+Ext.Events.ExecuteFunctor:Subscribe(function(e) ... end)
+```
+
+### 3.3 Character Stats
+**Status:** ❌ Not Started
 
 - Ability scores (STR, DEX, CON, INT, WIS, CHA)
 - Skills and proficiencies
@@ -259,7 +438,7 @@ end
 ## Phase 4: Custom Osiris Functions
 
 ### 4.1 Function Registration
-**Status:** Not Started
+**Status:** ❌ Not Started
 
 Allow mods to register custom Osiris functions callable from story scripts.
 
@@ -284,7 +463,7 @@ end)
 - Support IN/OUT parameter semantics
 
 ### 4.2 Story Script Integration
-**Status:** Not Started
+**Status:** ❌ Not Started
 
 - Custom events triggerable from Lua
 - Database manipulation (insert/delete/query)
@@ -295,26 +474,40 @@ end)
 ## Phase 5: In-Game Console
 
 ### 5.1 Debug Console
-**Status:** Not Started
+**Status:** ❌ Not Started
 
 Real-time Lua REPL accessible during gameplay.
 
-**Features:**
+**Features (from API.md):**
 - Toggle with hotkey (e.g., ~)
 - Command history
-- Autocomplete for Ext.* APIs
+- `client` / `server` context switching
+- `reset` command to reload Lua VM
+- Multiline mode (`--[[ ... ]]--`)
+- Direct Lua execution
 - Output scrollback
 - Variable inspection
 
 **Implementation approach:**
-- Hook keyboard input
-- Overlay rendering (or redirect to external terminal)
+- Terminal-based console (macOS doesn't have overlay)
+- Or redirect to external terminal via socket
 - Sandboxed Lua environment
 - Pretty-printing for tables/entities
 
-### 5.2 Debug Tools
-**Status:** Not Started
+### 5.2 Custom Console Commands
+**Status:** ❌ Not Started
 
+```lua
+Ext.RegisterConsoleCommand("test", function(cmd, a1, a2, ...)
+    _P("Command: " .. cmd .. ", args: ", a1, ", ", a2)
+end)
+-- Usage: !test arg1 arg2
+```
+
+### 5.3 Debug Tools
+**Status:** ❌ Not Started
+
+- `Ext.DumpExport(object)` - Serialize to string
 - Entity inspector (click to examine)
 - Position display
 - Event logger toggle
@@ -324,31 +517,61 @@ Real-time Lua REPL accessible during gameplay.
 
 ## Phase 6: Networking & Co-op Sync
 
-### 6.1 Ext.Net API
-**Status:** Not Started
+### 6.1 NetChannel API (New - v22+)
+**Status:** ❌ Not Started - **CRITICAL for multiplayer**
 
-Synchronize mod state between host and clients in multiplayer.
+From API.md: "NetChannel API provides a structured abstraction for request/response and message broadcasting."
 
 **Target API:**
 ```lua
--- Host broadcasts to all clients
-Ext.Net.BroadcastMessage("MyMod_StateUpdate", Ext.Json.Stringify(state))
+-- Create channel
+local channel = Net.CreateChannel(ModuleUUID, "MyChannel")
 
--- Register message handler
-Ext.Net.RegisterListener("MyMod_StateUpdate", function(channel, payload, userId)
-    local state = Ext.Json.Parse(payload)
-    -- Apply state
+-- Fire-and-forget handler
+channel:SetHandler(function(data, user)
+    Osi.TemplateAddTo(data.Template, data.Target, data.Amount)
 end)
+
+-- Request/reply handler
+channel:SetRequestHandler(function(data, user)
+    return { Result = CheckSomething(data) }
+end)
+
+-- Client → Server
+channel:SendToServer(data)
+channel:RequestToServer(data, function(response) ... end)
+
+-- Server → Client(s)
+channel:SendToClient(data, userOrGuid)
+channel:Broadcast(data)
+channel:RequestToClient(data, user, function(response) ... end)
+
+-- Utility
+Ext.Net.IsHost()
 ```
 
-**Implementation approach:**
-- Hook game's network layer
-- Piggyback on existing sync mechanisms
-- Message queue with reliable delivery
-- User ID tracking for sender identification
+**Benefits over legacy NetMessage:**
+- Structured request/reply semantics
+- Per-channel handler attachment
+- Faster local client requests (no 1-frame delay)
 
-### 6.2 State Synchronization
-**Status:** Not Started
+### 6.2 Legacy NetMessage API (Deprecated)
+**Status:** ❌ Not Started
+
+```lua
+-- Server → Client
+Ext.ServerNet.BroadcastMessage(channel, payload)
+Ext.ServerNet.PostMessageToUser(peerId, channel, payload)
+
+-- Client → Server
+Ext.ClientNet.PostMessageToServer(channel, payload)
+
+-- Listening
+Ext.RegisterNetListener(channel, function(channel, payload, userID) ... end)
+```
+
+### 6.3 State Synchronization
+**Status:** ❌ Not Started
 
 - Automatic entity state sync
 - Conflict resolution
@@ -357,10 +580,52 @@ end)
 
 ---
 
-## Phase 7: Type System
+## Phase 7: Type System & Enumerations
 
-### 7.1 Full Type Definitions
-**Status:** Not Started
+### 7.1 Enum Objects
+**Status:** ❌ Not Started
+
+From API.md: "Enum values returned from functions are `userdata` values instead of `string`."
+
+**Target API:**
+```lua
+local bt = entity.CurrentTemplate.BloodSurfaceType
+bt.Label      -- "Blood"
+bt.Value      -- 16
+bt.EnumName   -- "SurfaceType"
+
+-- Comparison
+bt == "Blood"  -- true (label)
+bt == 16       -- true (value)
+bt == Ext.Enums.SurfaceType.Blood  -- true
+
+-- JSON serialization
+Ext.Json.Stringify(bt)  -- "Blood"
+```
+
+### 7.2 Bitfield Objects
+**Status:** ❌ Not Started
+
+```lua
+local af = entity.Stats.AttributeFlags
+af.__Labels    -- {"SuffocatingImmunity", "BleedingImmunity", ...}
+af.__Value     -- 137440004096
+af.__EnumName  -- "StatAttributeFlags"
+
+-- Query flags
+af.DrunkImmunity  -- true/false
+
+-- Bitwise operators
+~af                    -- Negate
+af | "FreezeImmunity"  -- OR
+af & {"DrunkImmunity"} -- AND
+
+-- Assignment
+entity.Stats.AttributeFlags = af | "WebImmunity"
+```
+
+### 7.3 Full Type Definitions
+**Status:** ❌ Not Started
 
 Complete Lua type annotations for IDE support and runtime validation.
 
@@ -375,13 +640,168 @@ Complete Lua type annotations for IDE support and runtime validation.
 - Integration with VS Code Lua extension
 - Runtime type checking (optional)
 
-### 7.2 IDE Integration
-**Status:** Not Started
+### 7.4 IDE Integration
+**Status:** ❌ Not Started
 
 - Autocomplete for all APIs
 - Inline documentation
 - Error detection
 - Go-to-definition support
+
+### 7.5 Ext.Math Library
+**Status:** ❌ Not Started
+
+From API.md (complete API surface):
+
+```lua
+-- Vector operations
+Ext.Math.Add(a, b)           -- vec3, vec4, mat
+Ext.Math.Sub(a, b)
+Ext.Math.Mul(a, b)
+Ext.Math.Div(a, b)
+Ext.Math.Normalize(x)
+Ext.Math.Cross(x, y)         -- vec3
+Ext.Math.Dot(x, y)
+Ext.Math.Distance(p0, p1)
+Ext.Math.Length(x)
+Ext.Math.Angle(a, b)
+Ext.Math.Reflect(I, N)
+Ext.Math.Project(x, normal)
+Ext.Math.Perpendicular(x, normal)
+
+-- Matrix operations
+Ext.Math.Inverse(x)
+Ext.Math.Transpose(x)
+Ext.Math.Determinant(x)
+Ext.Math.OuterProduct(c, r)
+Ext.Math.Rotate(m, angle, axis)
+Ext.Math.Translate(m, translation)
+Ext.Math.Scale(m, scale)
+
+-- Matrix construction
+Ext.Math.BuildRotation3(v, angle)
+Ext.Math.BuildRotation4(v, angle)
+Ext.Math.BuildTranslation(v)
+Ext.Math.BuildScale(v)
+Ext.Math.BuildFromEulerAngles3(angles)
+Ext.Math.BuildFromEulerAngles4(angles)
+Ext.Math.BuildFromAxisAngle3(axis, angle)
+Ext.Math.BuildFromAxisAngle4(axis, angle)
+
+-- Decomposition
+Ext.Math.ExtractEulerAngles(m)
+Ext.Math.ExtractAxisAngle(m, axis)
+Ext.Math.Decompose(m, scale, yawPitchRoll, translation)
+
+-- Scalar functions
+Ext.Math.Clamp(val, min, max)
+Ext.Math.Lerp(x, y, a)
+Ext.Math.Fract(x)
+Ext.Math.Trunc(x)
+Ext.Math.Sign(x)
+Ext.Math.Acos(x), Asin(x), Atan(x), Atan2(x, y)
+```
+
+---
+
+## Phase 8: UI Systems
+
+### 8.1 Noesis UI (Custom ViewModels)
+**Status:** ❌ Not Started
+
+From API.md: "SE supports the creation and modification of Noesis viewmodels."
+
+**Target API:**
+```lua
+-- Register ViewModel type
+Ext.UI.RegisterType("PREFIX_MyType", {
+    MyString = {Type = "String", WriteCallback = func, Notify = true},
+    MyCommand = {Type = "Command"},
+    MyCollection = {Type = "Collection"}
+}, wrappedTypeName)
+
+-- Instantiate
+local vm = Ext.UI.Instantiate("PREFIX_MyType")
+vm.MyString = "value"
+vm.MyCommand:SetHandler(function() ... end)
+
+-- UI access
+Ext.UI.GetRoot()
+Ext.UI.GetCursorControl()  -- v22+
+Ext.UI.GetDragDrop()       -- v22+
+```
+
+**Supported Property Types:**
+- `Bool`, `Int8`-`Int64`, `UInt8`-`UInt64`
+- `Single`, `Double`, `String`
+- `Collection`, `Command`, `Object`
+- `Color`, `Vector2`, `Vector3`, `Point`, `Rect`
+
+### 8.2 IMGUI Debug Overlay
+**Status:** ❌ Not Started
+
+From ReleaseNotes.md v23-27:
+- Window management (SetPos, SetSize, SetCollapsed, etc.)
+- Table rendering with sorting, freeze rows/cols
+- Font loading and scaling
+- OnClick/OnRightClick events
+- Texture binding
+
+---
+
+## Phase 9: Advanced Features
+
+### 9.1 Input Injection (Ext.Input)
+**Status:** ❌ Not Started
+
+```lua
+Ext.Input.InjectKeyPress(key)
+Ext.Input.InjectKeyDown(key)
+Ext.Input.InjectKeyUp(key)
+Ext.Input.GetInputManager()  -- v23+
+```
+
+### 9.2 Physics Queries (Ext.Level)
+**Status:** ❌ Not Started
+
+```lua
+-- Raycast
+Ext.Level.RaycastClosest(origin, target, [flags])
+Ext.Level.RaycastAny(origin, target, [flags])
+Ext.Level.RaycastAll(origin, target, [flags])
+
+-- Sweep
+Ext.Level.SweepSphereClosest(origin, target, radius, [flags])
+Ext.Level.SweepCapsuleClosest(...)
+Ext.Level.SweepBoxClosest(...)
+Ext.Level.SweepCylinderClosest(...)
+
+-- Overlap tests
+Ext.Level.TestBox(pos, halfExtents, rotation, [flags])
+Ext.Level.TestSphere(pos, radius, [flags])
+
+-- Pathfinding
+Ext.Level.GetActivePathfindingRequests()
+```
+
+### 9.3 Virtual Textures
+**Status:** ❌ Not Started
+
+Configuration: `Mods/<ModName>/ScriptExtender/VirtualTextures.json`
+
+### 9.4 Debugger Support
+**Status:** ❌ Not Started
+
+VS Code integration with breakpoints, stepping, watches.
+
+### 9.5 Mod Info API
+**Status:** ⚠️ Partial
+
+```lua
+Ext.Mod.IsModLoaded(guid)
+Ext.Mod.GetLoadOrder()
+Ext.Mod.GetModInfo(guid)
+```
 
 ---
 
@@ -397,6 +817,7 @@ Complete Lua type annotations for IDE support and runtime validation.
 - [ ] Memory leak detection
 - [ ] Thread safety audit
 - [ ] Extensive error handling
+- [ ] Userdata lifetime scoping
 
 ### Testing
 - [ ] Unit tests for Lua bindings
@@ -409,6 +830,53 @@ Complete Lua type annotations for IDE support and runtime validation.
 - [ ] Migration guide from Windows BG3SE
 - [ ] Mod developer tutorials
 - [ ] Architecture documentation
+
+---
+
+## Implementation Priority
+
+### Priority A: Critical Blockers (Breaks Most Mods)
+
+| ID | Feature | Effort | Status |
+|----|---------|--------|--------|
+| A1 | Ext.Events API | Medium | ⚠️ Partial (3/10+ events) |
+| A2 | PersistentVars | Medium | ❌ Not Started |
+| A3 | Stats Property Read/Write | High | 🔄 In Progress |
+| A4 | Component Property Access | High | 🔄 In Progress |
+| A5 | NetChannel API | High | ❌ Not Started |
+| A6 | User Variables | High | ❌ Not Started |
+
+### Priority B: High Impact (Breaks Many Mods)
+
+| ID | Feature | Effort | Status |
+|----|---------|--------|--------|
+| B1 | Client Lua State | High | ❌ Not Started |
+| B2 | Timer API | Low | ❌ Not Started |
+| B3 | Console/REPL | Medium | ❌ Not Started |
+| B4 | GetAllComponents | Low | ❌ Not Started |
+| B5 | Stats Create/Sync | Medium | ❌ Not Started |
+| B6 | Userdata Lifetime Scoping | Medium | ❌ Not Started |
+
+### Priority C: Medium Impact (Developer Experience)
+
+| ID | Feature | Effort | Status |
+|----|---------|--------|--------|
+| C1 | Ext.Math Library | Medium | ❌ Not Started |
+| C2 | Enum/Bitfield Objects | Medium | ❌ Not Started |
+| C3 | Console Commands | Low | ❌ Not Started |
+| C4 | Mod Variables | Medium | ❌ Not Started |
+| C5 | More Component Types | High | 🔄 Ongoing |
+
+### Priority D: Nice-to-Have
+
+| ID | Feature | Effort | Status |
+|----|---------|--------|--------|
+| D1 | Noesis UI | High | ❌ Not Started |
+| D2 | IMGUI | High | ❌ Not Started |
+| D3 | Input Injection | Medium | ❌ Not Started |
+| D4 | Physics Queries | Medium | ❌ Not Started |
+| D5 | Virtual Textures | Medium | ❌ Not Started |
+| D6 | Debugger Support | High | ❌ Not Started |
 
 ---
 
@@ -435,9 +903,11 @@ See [README.md](README.md) for build instructions. Key files:
 - `src/injector/main.c` - Core injection and hooking logic
 - `ghidra/OFFSETS.md` - Reverse-engineered memory offsets
 - `ghidra/*.py` - Ghidra analysis scripts
+- `plans/bg3se-docs-gap-analysis.md` - Comprehensive gap analysis
 
 ## References
 
 - [Windows BG3SE](https://github.com/Norbyte/bg3se) - Reference implementation
+- [BG3SE Docs](https://github.com/Norbyte/bg3se/tree/main/Docs) - Official API documentation
 - [BG3 Modding Wiki](https://bg3.wiki/wiki/Modding) - Game mechanics documentation
 - [Lua 5.4 Reference](https://www.lua.org/manual/5.4/) - Lua language reference

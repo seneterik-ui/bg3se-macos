@@ -14,6 +14,7 @@
 
 #include "stats_manager.h"
 #include "logging.h"
+#include "../strings/fixed_string.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -129,9 +130,9 @@ static bool safe_read_i32(void *addr, int32_t *out_value) {
 // NextHandle offset varies, determined at runtime
 
 // RPGStats offsets - empirically determined from runtime probing
-// The runtime probing found valid stat data at offset 0x88
-#define RPGSTATS_OFFSET_OBJECTS             0x88   // CNamedElementManager<Object> Objects
-#define RPGSTATS_OFFSET_MODIFIER_LISTS      0x58   // CNamedElementManager<ModifierList> ModifierLists
+// Log analysis shows valid Objects manager at 0xC0 with 15,774 entries
+#define RPGSTATS_OFFSET_OBJECTS             0xC0   // CNamedElementManager<Object> Objects
+#define RPGSTATS_OFFSET_MODIFIER_LISTS      0x90   // CNamedElementManager<ModifierList> ModifierLists (estimated)
 
 // Array<T*> offsets within CNamedElementManager
 #define ARRAY_OFFSET_BUFFER       0x00
@@ -197,6 +198,9 @@ void stats_manager_init(void *main_binary_base) {
     log_stats("=== Stats Manager Initialization ===");
     log_stats("Main binary base: %p", main_binary_base);
 
+    // Initialize FixedString resolution system
+    fixed_string_init(main_binary_base);
+
     // Try to resolve RPGStats::m_ptr via dlsym
     // The symbol is exported in the main binary's symbol table
     void *handle = dlopen(NULL, RTLD_NOW);  // Get handle to main executable
@@ -234,6 +238,16 @@ void stats_manager_init(void *main_binary_base) {
 void stats_manager_on_session_loaded(void) {
     log_stats("=== SessionLoaded: Checking Stats System ===");
 
+    // Report FixedString system status
+    if (fixed_string_is_ready()) {
+        log_stats("FixedString system: READY");
+        // Dump info about first SubTable for debugging
+        fixed_string_dump_subtable_info(0);
+        fixed_string_dump_subtable_info(1);  // SubTable 1 used by 0x20200011
+    } else {
+        log_stats("FixedString system: NOT READY (GlobalStringTable not found)");
+    }
+
     if (!g_Initialized) {
         log_stats("ERROR: Stats manager not initialized");
         return;
@@ -256,15 +270,110 @@ void stats_manager_on_session_loaded(void) {
         return;
     }
 
-    log_stats("Stats system pointer: %p", stats_ptr);
+    log_stats("Stats system pointer (from m_ptr): %p", stats_ptr);
 
-    // Get the Objects manager
-    void *objects_mgr = get_objects_manager();
-    if (!objects_mgr) {
-        log_stats("ERROR: Failed to get Objects manager");
-        return;
+    // Check if we need another level of indirection
+    void *first_qword = NULL;
+    if (safe_read_ptr(stats_ptr, &first_qword)) {
+        log_stats("  First qword at stats_ptr: %p", first_qword);
+        // If it looks like a heap pointer (not VMT), we might need to dereference again
+        if (first_qword && (uintptr_t)first_qword > 0x100000000ULL &&
+            ((uintptr_t)first_qword >> 32) != 0x1) {  // Not a code pointer
+            log_stats("  First qword looks like heap ptr, using as actual RPGStats");
+            stats_ptr = first_qword;
+        }
     }
-    log_stats("Objects manager at: %p (RPGStats+0x%02x)", objects_mgr, RPGSTATS_OFFSET_OBJECTS);
+
+    // Probe for CNamedElementManager-like structures at various offsets
+    log_stats("Probing for Objects manager at various offsets:");
+    for (int off = 0x00; off <= 0x180; off += 0x08) {
+        void *mgr = (char*)stats_ptr + off;
+        void *buf = NULL;
+        if (!safe_read_ptr((char*)mgr + 0x08, &buf)) continue;
+
+        // Check if buf looks like a valid heap pointer
+        if (!buf || (uintptr_t)buf < 0x100000000ULL) continue;
+        if (((uintptr_t)buf >> 32) == 0x9) continue;  // Skip garbage like 0x9XXXXXXXX
+
+        uint32_t cap = 0, sz = 0;
+        safe_read_u32((char*)mgr + 0x10, &cap);
+        safe_read_u32((char*)mgr + 0x14, &sz);
+
+        // Look for reasonable array sizes (100-50000)
+        if (sz >= 100 && sz <= 50000 && cap >= sz) {
+            log_stats("  +0x%03x: buf=%p, cap=%u, size=%u", off, buf, cap, sz);
+
+            // Try to read first element and its name (safely)
+            void *elem = NULL;
+            if (safe_read_ptr(buf, &elem) && elem) {
+                log_stats("    elem[0]=%p", elem);
+
+                // Only do detailed dump for the 15774-size manager (likely Objects)
+                if (sz == 15774 && off == 0xC0) {
+                    // Dump first 64 bytes of element as hex
+                    log_stats("    Dumping elem[0] structure:");
+                    for (int dump_off = 0; dump_off < 64; dump_off += 8) {
+                        void *val = NULL;
+                        if (safe_read_ptr((char*)elem + dump_off, &val)) {
+                            log_stats("      +0x%02x: %p", dump_off, val);
+
+                            // Try to read content from heap pointers
+                            if (val && (uintptr_t)val > 0x100000000ULL &&
+                                ((uintptr_t)val >> 40) != 0x1) {  // Skip code pointers
+                                uint8_t raw_buf[24] = {0};
+                                vm_size_t raw_sz = 24;
+                                vm_offset_t raw_data;
+                                if (vm_read(mach_task_self(), (vm_address_t)val, raw_sz,
+                                            &raw_data, (mach_msg_type_number_t*)&raw_sz) == KERN_SUCCESS) {
+                                    memcpy(raw_buf, (void*)raw_data, 24);
+                                    vm_deallocate(mach_task_self(), raw_data, raw_sz);
+                                    // Print first 16 bytes as hex
+                                    log_stats("        -> %02x %02x %02x %02x %02x %02x %02x %02x | %02x %02x %02x %02x %02x %02x %02x %02x",
+                                        raw_buf[0], raw_buf[1], raw_buf[2], raw_buf[3],
+                                        raw_buf[4], raw_buf[5], raw_buf[6], raw_buf[7],
+                                        raw_buf[8], raw_buf[9], raw_buf[10], raw_buf[11],
+                                        raw_buf[12], raw_buf[13], raw_buf[14], raw_buf[15]);
+                                    // Also try as string if printable
+                                    if (raw_buf[0] >= 0x20 && raw_buf[0] < 0x7F) {
+                                        raw_buf[23] = 0;
+                                        log_stats("        -> str: \"%s\"", (char*)raw_buf);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Try name at multiple offsets (0x08, 0x10, 0x18, 0x20, 0x28, 0x30)
+                for (int name_off = 0x08; name_off <= 0x30; name_off += 0x08) {
+                    void *name_ptr = NULL;
+                    if (safe_read_ptr((char*)elem + name_off, &name_ptr) && name_ptr &&
+                        (uintptr_t)name_ptr > 0x100000000ULL) {
+                        // Safely read string content
+                        char name_buf[64] = {0};
+                        vm_size_t name_sz = 48;
+                        vm_offset_t name_data;
+                        if (vm_read(mach_task_self(), (vm_address_t)name_ptr, name_sz,
+                                    &name_data, (mach_msg_type_number_t*)&name_sz) == KERN_SUCCESS) {
+                            memcpy(name_buf, (void*)name_data, name_sz < 63 ? name_sz : 63);
+                            vm_deallocate(mach_task_self(), name_data, name_sz);
+                            // Check if it looks like a stat name (alphanumeric start)
+                            if ((name_buf[0] >= 'A' && name_buf[0] <= 'Z') ||
+                                (name_buf[0] >= 'a' && name_buf[0] <= 'z')) {
+                                log_stats("    elem+0x%02x -> \"%s\"", name_off, name_buf);
+                            }
+                        }
+                    }
+                }
+            } else {
+                log_stats("    elem[0]=NULL or unreadable");
+            }
+        }
+    }
+
+    // Get the Objects manager using current offset
+    void *objects_mgr = (char*)stats_ptr + RPGSTATS_OFFSET_OBJECTS;
+    log_stats("Using Objects manager at: %p (RPGStats+0x%02x)", objects_mgr, RPGSTATS_OFFSET_OBJECTS);
 
     // Read raw buffer pointer and count
     void *buf_ptr = NULL;
@@ -353,16 +462,31 @@ static void* get_modifier_lists_manager(void) {
     return (char*)rpgstats + RPGSTATS_OFFSET_MODIFIER_LISTS;
 }
 
-// Read FixedString (just a const char* in Larian's engine)
+// Read FixedString - on macOS this is a 32-bit index into GlobalStringTable
 static const char* read_fixed_string(void *addr) {
     if (!addr) return NULL;
 
-    void *str_ptr = NULL;
-    if (!safe_read_ptr(addr, &str_ptr)) {
+    // On macOS ARM64, FixedString is a 32-bit index, not a pointer
+    // Read the index value
+    uint32_t fs_index = 0;
+    if (!safe_read_u32(addr, &fs_index)) {
         return NULL;
     }
 
-    return (const char*)str_ptr;
+    // Check for null index
+    if (fs_index == FS_NULL_INDEX) {
+        return NULL;
+    }
+
+    // Use the fixed_string module to resolve the index to a string
+    if (fixed_string_is_ready()) {
+        return fixed_string_resolve(fs_index);
+    }
+
+    // Fallback: If FixedString system not ready, log the index for debugging
+    static char debug_buf[32];
+    snprintf(debug_buf, sizeof(debug_buf), "<FSIdx:0x%08X>", fs_index);
+    return debug_buf;
 }
 
 // Get count of elements in a CNamedElementManager

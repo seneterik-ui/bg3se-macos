@@ -4,7 +4,7 @@
 
 BG3SE-macOS is a macOS port of Norbyte's Script Extender for Baldur's Gate 3. The goal is feature parity with the Windows BG3SE, enabling Lua mods to run on macOS.
 
-**Current Version:** v0.10.1
+**Current Version:** v0.11.0
 **Target:** Full compatibility with Windows BG3SE mods
 
 ## Architecture
@@ -24,10 +24,11 @@ src/
 │   └── arm64_call.c/h     # ARM64 ABI wrappers (x8 indirect return)
 ├── hooks/          # Legacy hook stubs (actual hooks in main.c)
 ├── injector/       # Main injection logic (main.c)
-├── lua/            # Lua API modules (lua_ext, lua_json, lua_osiris)
+├── lua/            # Lua API modules (lua_ext, lua_json, lua_osiris, lua_stats)
 ├── mod/            # Mod detection and loading
 ├── osiris/         # Osiris types, functions, pattern scanning
-└── pak/            # LSPK v18 PAK file reading
+├── pak/            # LSPK v18 PAK file reading
+└── stats/          # RPGStats system access (stats_manager)
 ```
 
 ### Key Files
@@ -38,7 +39,8 @@ src/
 - `src/entity/entity_system.c` - Core ECS, EntityWorld capture, Lua bindings
 - `src/entity/guid_lookup.c` - GUID→EntityHandle lookup, HashMap implementation
 - `src/entity/arm64_call.c` - ARM64 calling conventions for large struct returns
-- `ghidra/offsets/` - Modular offset documentation (Osiris, Entity, Components, Structures)
+- `src/stats/stats_manager.c` - RPGStats global access, CNamedElementManager traversal
+- `ghidra/offsets/` - Modular offset documentation (Osiris, Entity, Components, Stats)
 
 ## Modular Architecture
 
@@ -91,6 +93,7 @@ void module_init(void) { ... }
 | `guid_lookup` | GUID parsing, HashMap ops | Pure data operations, no global state |
 | `arm64_call` | ARM64 ABI wrappers | Platform-specific calling conventions |
 | `lua_ext` | Ext.* API registration | Registration functions per API group |
+| `stats_manager` | RPGStats system access | Global pointer via dlsym, CNamedElementManager traversal |
 
 ### When to Extract Code from main.c
 

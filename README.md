@@ -131,8 +131,8 @@ BG3SE-macOS reads scripts directly from PAK files - no extraction needed!
 
 Check `/tmp/bg3se_macos.log` for injection and mod loading logs:
 ```
-=== BG3SE-macOS v0.10.6 ===
-[timestamp] === BG3SE-macOS v0.10.5 initialized ===
+=== BG3SE-macOS v0.11.0 ===
+[timestamp] === BG3SE-macOS v0.11.0 initialized ===
 [timestamp] Running in process: Baldur's Gate 3 (PID: XXXXX)
 [timestamp] Architecture: ARM64 (Apple Silicon)
 [timestamp] Dobby inline hooking: enabled
@@ -274,6 +274,35 @@ This was discovered through Ghidra analysis of `TryGetSingleton` which saves x8 
 | `Ext.Entity.RegisterComponent(name, idx, size)` | ✅ Working | Register discovered component |
 | `Ext.Entity.LookupComponent(name)` | ✅ Working | Look up component info by name |
 | `Ext.Entity.SetGetRawComponentAddr(addr)` | ✅ Working | Set GetRawComponent address from Frida |
+
+### Ext.Stats Namespace (v0.11.0)
+
+| API | Status | Description |
+|-----|--------|-------------|
+| `Ext.Stats.Get(name)` | ✅ Working | Get StatsObject by name |
+| `Ext.Stats.GetAll(type?)` | ✅ Working | Get all stat names, optionally by type |
+| `Ext.Stats.Create(name, type, template?)` | ✅ Working | Create new stat object |
+| `Ext.Stats.Sync(name)` | ⚠️ Framework | Sync stat changes (framework exists) |
+| `Ext.Stats.IsReady()` | ✅ Working | Check if stats system ready |
+| `Ext.Stats.DumpTypes()` | ✅ Working | Print all stat types to log |
+| `stat.Name` | ✅ Working | Read-only stat name |
+| `stat.Type` | ✅ Working | Read-only stat type |
+| `stat.Level` | ✅ Working | Read-only stat level |
+| `stat.Using` | ✅ Working | Read-only parent stat |
+| `stat:GetProperty(name)` | ✅ Working | Get property value |
+| `stat:SetProperty(name, value)` | ✅ Working | Set property value |
+| `stat:Dump()` | ✅ Working | Print stat contents to log |
+
+### Ext.Events Namespace (v0.11.0)
+
+| API | Status | Description |
+|-----|--------|-------------|
+| `Ext.Events.SessionLoading:Subscribe(cb)` | ✅ Working | Before save loads |
+| `Ext.Events.SessionLoaded:Subscribe(cb)` | ✅ Working | After save loads |
+| `Ext.Events.ResetCompleted:Subscribe(cb)` | ✅ Working | After reset command |
+| `Ext.Events.GameStateChanged` | ❌ Not impl | Game state transitions |
+| `Ext.Events.StatsLoaded` | ❌ Not impl | After stats loaded |
+| `Ext.Events.Tick` | ❌ Not impl | Every game loop |
 
 ### Global Functions
 
@@ -434,15 +463,24 @@ This is useful for examining mod structure and Lua scripts. Note: BG3SE-macOS no
 
 See [GitHub Issues](https://github.com/tdimino/bg3se-macos/issues) for detailed task tracking.
 
-### Next Steps
+### Critical Priority (Most Mods Need These)
 
-1. **[#3 - Stats System](https://github.com/tdimino/bg3se-macos/issues/3)** - Read/write game stats via `Ext.Stats`
-2. **[#5 - Debug Console](https://github.com/tdimino/bg3se-macos/issues/5)** - In-game Lua REPL
+1. **[#11 - Ext.Events API](https://github.com/tdimino/bg3se-macos/issues/11)** - Engine lifecycle events (⚠️ 3/10+ events implemented)
+2. **[#12 - PersistentVars](https://github.com/tdimino/bg3se-macos/issues/12)** - Savegame data persistence
+3. **[#13 - Ext.Vars](https://github.com/tdimino/bg3se-macos/issues/13)** - Entity-attached custom data with sync
+4. **[#3 - Stats System](https://github.com/tdimino/bg3se-macos/issues/3)** - Full property read/write (⚠️ 60% complete)
+
+### High Priority
+
+- **[#14 - Timer API](https://github.com/tdimino/bg3se-macos/issues/14)** - Delayed/repeating callbacks
+- **[#15 - Client Lua State](https://github.com/tdimino/bg3se-macos/issues/15)** - Dual client/server Lua states
+- **[#5 - Debug Console](https://github.com/tdimino/bg3se-macos/issues/5)** - In-game Lua REPL
 
 ### Future Phases
 
 - **[#4 - Custom Osiris Functions](https://github.com/tdimino/bg3se-macos/issues/4)** - Register functions callable from story scripts
-- **[#6 - Networking API](https://github.com/tdimino/bg3se-macos/issues/6)** - Multiplayer mod state sync
+- **[#6 - Networking API](https://github.com/tdimino/bg3se-macos/issues/6)** - Multiplayer mod state sync (NetChannel)
+- **[#16 - Ext.Math Library](https://github.com/tdimino/bg3se-macos/issues/16)** - Vector/matrix operations
 - **[#7 - Type System](https://github.com/tdimino/bg3se-macos/issues/7)** - IDE integration and autocomplete
 - **[#8 - Technical Debt](https://github.com/tdimino/bg3se-macos/issues/8)** - Stability, testing, documentation
 
@@ -572,6 +610,14 @@ This project would not be possible without **[Norbyte](https://github.com/Norbyt
 - [fishhook](https://github.com/facebook/fishhook) - Symbol rebinding library
 - [LZ4](https://github.com/lz4/lz4) - Fast compression for PAK file reading
 - Test mod: [More Reactive Companions](https://www.nexusmods.com/baldursgate3/mods/5447) by LightningLarryL
+
+## Support This Project
+
+If BG3SE-macOS has helped you enjoy mods on your Mac, consider buying me a matcha:
+
+[![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://www.paypal.com/donate?business=contact@tomdimino.com&currency_code=USD)
+
+Donations help fund continued development, testing across game updates, and expanding mod compatibility. Every contribution is appreciated!
 
 ### P.S.
 
