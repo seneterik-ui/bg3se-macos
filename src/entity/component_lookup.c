@@ -340,6 +340,32 @@ void component_lookup_dump_storage_data(void *storageData, uint64_t entityHandle
     log_lookup("Address: %p", storageData);
     log_lookup("For EntityHandle: 0x%llx", (unsigned long long)entityHandle);
 
+    // Hexdump first 512 bytes of storageData to understand layout
+    log_lookup("=== StorageData Hexdump (first 512 bytes) ===");
+    unsigned char *bytes = (unsigned char *)storageData;
+    for (int row = 0; row < 32; row++) {
+        int offset = row * 16;
+        log_lookup("  +0x%03x: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x",
+                   offset,
+                   bytes[offset+0], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                   bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+                   bytes[offset+8], bytes[offset+9], bytes[offset+10], bytes[offset+11],
+                   bytes[offset+12], bytes[offset+13], bytes[offset+14], bytes[offset+15]);
+    }
+
+    // Also dump the area around ComponentTypeToIndex (0x180)
+    log_lookup("=== ComponentTypeToIndex area (+0x180, 128 bytes) ===");
+    bytes = (unsigned char *)storageData + 0x180;
+    for (int row = 0; row < 8; row++) {
+        int offset = row * 16;
+        log_lookup("  +0x%03x: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x",
+                   0x180 + offset,
+                   bytes[offset+0], bytes[offset+1], bytes[offset+2], bytes[offset+3],
+                   bytes[offset+4], bytes[offset+5], bytes[offset+6], bytes[offset+7],
+                   bytes[offset+8], bytes[offset+9], bytes[offset+10], bytes[offset+11],
+                   bytes[offset+12], bytes[offset+13], bytes[offset+14], bytes[offset+15]);
+    }
+
     // Dump Components array info
     ArrayHeader *components = GET_ARRAY_HEADER(storageData, STORAGE_DATA_COMPONENTS_OFFSET);
     log_lookup("Components (offset 0x%x):", STORAGE_DATA_COMPONENTS_OFFSET);

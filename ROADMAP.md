@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.10.4
+## Current Status: v0.10.5
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -19,7 +19,8 @@ This document tracks the development roadmap for achieving feature parity with W
 - **Entity Component System** - EntityWorld capture, GUID lookup, component access
 - **Ext.Entity API** - Get(guid), IsReady(), entity.Transform, GetComponent()
 - **Data Structure Traversal** - TryGet + HashMap traversal for component access (macOS-specific)
-- **TypeId Discovery** - Reading TypeId<T>::m_TypeIndex globals for component index discovery
+- **TypeId Discovery** - 11 component TypeIds discovered at SessionLoaded with deferred retry
+- **Safe Memory APIs** - Crash-safe memory reading via mach_vm_read
 
 ---
 
@@ -81,7 +82,7 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access
-**Status:** 🔄 In Progress (data structure traversal implemented)
+**Status:** 🔄 In Progress (TypeId discovery complete, testing component access)
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -114,36 +115,81 @@ buffer + (componentSize * EntryIndex) → Component*
 - [x] New module: `component_lookup.c/h` with traversal logic
 - [x] `Ext.Entity.DumpStorage(handle)` debug function
 - [x] **TypeId global discovery** - Read `TypeId<T>::m_TypeIndex` globals from binary
-- [ ] **More TypeId addresses** - Need to find more component TypeId addresses via Ghidra
+- [x] **Deferred TypeId retry** - Retry at SessionLoaded when globals are initialized (v0.10.5)
+- [x] **Safe memory APIs** - mach_vm_read for crash-safe memory access (v0.10.5)
 
 **Why Template Calls Failed:**
 
 On Windows, `GetRawComponent` is a single dispatcher function. On macOS/ARM64, each `GetComponent<T>` template is **completely inlined** at call sites - there are no callable functions, just inlined code.
 
-**TypeId Discovery (v0.10.4):**
+**TypeId Discovery (v0.10.5):** ✅ Complete
 
 Component type indices are stored in global variables with mangled names like:
 ```
 __ZN2ls6TypeIdIN3ecl9CharacterEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE
 ```
 
-These globals are at known addresses that can be read at runtime:
-- `ecl::Character` @ `0x1083c7818`
-- `ecl::Item` @ `0x1083c6910`
+**Discovered indices (at SessionLoaded):**
+| Component | Index |
+|-----------|-------|
+| ecl::Character | 13 |
+| ecl::Item | 67 |
+| eoc::HealthComponent | 575 |
+| eoc::StatsComponent | 650 |
+| eoc::ArmorComponent | 484 |
+| eoc::BaseHpComponent | 491 |
+| eoc::DataComponent | 542 |
+| ls::TransformComponent | 1998 |
+| ls::LevelComponent | 1923 |
+| ls::VisualComponent | 1999 |
+| ls::PhysicsComponent | 1947 |
+
+**Key insight:** TypeId globals are `0` at injection time (before game initializes them). The fix was to retry discovery at `SessionLoaded` event when globals are populated.
 
 New Lua API:
 ```lua
--- Discover indices from TypeId globals
-Ext.Entity.DiscoverTypeIds()
+-- Discover indices from TypeId globals (with status)
+local result = Ext.Entity.DiscoverTypeIds()
+-- Returns: { success = bool, count = int, complete = bool, message = string }
 
 -- Dump all known TypeId addresses
 Ext.Entity.DumpTypeIds()
 ```
 
 **Next Steps:**
-- Find more TypeId addresses via Ghidra for ls::, eoc:: components
-- Validate TryGet returns valid EntityStorageData
 - Test end-to-end GetComponent with discovered indices
+- Verify component data reading works with known indices
+
+### 2.3 Timer API
+**Status:** Not Started
+
+Scheduling API for delayed and periodic callbacks. Essential for mods that need timed actions.
+
+**Target API:**
+```lua
+-- One-shot timer (delay in milliseconds)
+Ext.Timer.WaitFor(1000, function()
+    Ext.Print("1 second later!")
+end)
+
+-- Repeating timer
+local timerId = Ext.Timer.RegisterTimer(500, function()
+    Ext.Print("Every 500ms")
+end)
+
+-- Cancel a timer
+Ext.Timer.Cancel(timerId)
+```
+
+**Implementation approach:**
+- Hook game's main loop or frame callback
+- Maintain timer queue with callbacks and deadlines
+- Check elapsed time each frame, dispatch ready callbacks
+- Handle timer cancellation and cleanup
+
+**Windows BG3SE reference:**
+- `BG3Extender/Lua/Libs/Timer.inl` - Timer registration and dispatch
+- Uses game's internal timing rather than system timers
 
 ---
 

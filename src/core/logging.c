@@ -11,10 +11,13 @@
 #include <syslog.h>
 
 void log_init(void) {
-    FILE *f = fopen(BG3SE_LOG_FILE, "w");
+    // Use append mode to preserve logs from crashed sessions
+    FILE *f = fopen(BG3SE_LOG_FILE, "a");
     if (f) {
+        fprintf(f, "\n\n========================================\n");
         fprintf(f, "=== %s v%s ===\n", BG3SE_NAME, BG3SE_VERSION);
         fprintf(f, "Injection timestamp: %ld\n", (long)time(NULL));
+        fprintf(f, "========================================\n");
         fclose(f);
     }
 }
