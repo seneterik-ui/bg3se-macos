@@ -652,4 +652,4 @@ Donations help fund continued development, testing across game updates, and expa
 
 ### P.S.
 
-I also want to extend my thanks to the OP and commenters of this BG3SE issue: **["[Feature Bounty - $350] MacOS Supported Version of BG3 SE"](https://github.com/Norbyte/bg3se/issues/162)**. You kicked off the quest :)
+I'd also like to extend my thanks to the OP and commentators of this BG3SE issue: **["[Feature Bounty - $350] MacOS Supported Version of BG3 SE"](https://github.com/Norbyte/bg3se/issues/162)**. You kicked off this quest :)
