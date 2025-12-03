@@ -644,7 +644,7 @@ This project would not be possible without **[Norbyte](https://github.com/Norbyt
 
 ## Support This Project
 
-If BG3SE-macOS has helped you enjoy mods on your Mac, consider buying me a matcha:
+If you love exceptionally well-crafted RPGs like Baldur's Gate 3, and the ability to extend its gameplay through mods and scripting, you're more than welcome to toss me some coin.
 
 [![PayPal](https://img.shields.io/badge/PayPal-Donate-blue?logo=paypal)](https://www.paypal.com/donate?business=contact@tomdimino.com&currency_code=USD)
 
