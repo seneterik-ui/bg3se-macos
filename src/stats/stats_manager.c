@@ -238,16 +238,6 @@ void stats_manager_init(void *main_binary_base) {
 void stats_manager_on_session_loaded(void) {
     log_stats("=== SessionLoaded: Checking Stats System ===");
 
-    // Report FixedString system status
-    if (fixed_string_is_ready()) {
-        log_stats("FixedString system: READY");
-        // Dump info about first SubTable for debugging
-        fixed_string_dump_subtable_info(0);
-        fixed_string_dump_subtable_info(1);  // SubTable 1 used by 0x20200011
-    } else {
-        log_stats("FixedString system: NOT READY (GlobalStringTable not found)");
-    }
-
     if (!g_Initialized) {
         log_stats("ERROR: Stats manager not initialized");
         return;
@@ -271,6 +261,14 @@ void stats_manager_on_session_loaded(void) {
     }
 
     log_stats("Stats system pointer (from m_ptr): %p", stats_ptr);
+
+    // FixedString will be discovered lazily on first resolution attempt
+    // This avoids slow startup - discovery uses reference-based search for speed
+    if (fixed_string_is_ready()) {
+        log_stats("FixedString system: READY");
+    } else {
+        log_stats("FixedString system: Will initialize on first use (lazy discovery)");
+    }
 
     // Check if we need another level of indirection
     void *first_qword = NULL;
@@ -479,14 +477,8 @@ static const char* read_fixed_string(void *addr) {
     }
 
     // Use the fixed_string module to resolve the index to a string
-    if (fixed_string_is_ready()) {
-        return fixed_string_resolve(fs_index);
-    }
-
-    // Fallback: If FixedString system not ready, log the index for debugging
-    static char debug_buf[32];
-    snprintf(debug_buf, sizeof(debug_buf), "<FSIdx:0x%08X>", fs_index);
-    return debug_buf;
+    // This will trigger lazy discovery if GlobalStringTable hasn't been found yet
+    return fixed_string_resolve(fs_index);
 }
 
 // Get count of elements in a CNamedElementManager

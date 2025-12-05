@@ -116,4 +116,13 @@ bool fixed_string_probe_offsets(void);
  */
 void fixed_string_get_stats(uint32_t *out_resolved, uint32_t *out_failed);
 
+/**
+ * Probe for GlobalStringTable near a known pointer (like RPGStats).
+ * Call this after SessionLoaded when stats_ptr is valid.
+ *
+ * @param stats_ptr  The actual runtime RPGStats pointer
+ * @return true if GlobalStringTable was found
+ */
+bool fixed_string_probe_near_ptr(void *stats_ptr);
+
 #endif /* FIXED_STRING_H */

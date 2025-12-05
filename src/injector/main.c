@@ -1766,8 +1766,8 @@ static int fake_Load(void *thisPtr, void *smartBuf) {
             load_mod_scripts(L);
         }
 
-        // Fire SessionLoaded event after mod scripts are loaded
-        fire_event(L, EVENT_SESSION_LOADED);
+        // Initialize subsystems BEFORE firing Lua events
+        // (so Lua handlers can use Stats, Entity APIs)
 
         // Retry TypeId discovery now that the game is fully loaded
         // TypeId globals may not have been initialized at injection time
@@ -1775,6 +1775,9 @@ static int fake_Load(void *thisPtr, void *smartBuf) {
 
         // Check stats system now that the game is loaded
         stats_manager_on_session_loaded();
+
+        // Fire SessionLoaded event after subsystems are ready
+        fire_event(L, EVENT_SESSION_LOADED);
     }
 
     return result;

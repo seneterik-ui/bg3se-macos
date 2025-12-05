@@ -110,6 +110,28 @@ local function testHashMapEntities()
     end
 end
 
+-- Test Stats API (triggers FixedString lazy discovery)
+local function testStatsAPI()
+    Ext.Print("[EntityTest] === Stats API Test (triggers FixedString discovery) ===")
+
+    local success, result = pcall(function()
+        local stats = Ext.Stats.GetAll("Character")
+        if stats then
+            Ext.Print("[EntityTest] Ext.Stats.GetAll('Character') returned " .. #stats .. " entries")
+            -- Print first 5 stat names
+            for i = 1, math.min(5, #stats) do
+                Ext.Print("[EntityTest]   [" .. i .. "] " .. tostring(stats[i]))
+            end
+        else
+            Ext.Print("[EntityTest] Ext.Stats.GetAll returned nil")
+        end
+    end)
+
+    if not success then
+        Ext.Print("[EntityTest] Stats API error: " .. tostring(result))
+    end
+end
+
 -- Run test on SessionLoaded (server should be initialized)
 Ext.Events.SessionLoaded:Subscribe(function()
     Ext.Print("[EntityTest] SessionLoaded - discovering EntityWorld...")
@@ -123,6 +145,9 @@ Ext.Events.SessionLoaded:Subscribe(function()
 
         -- Test HashMap entities immediately (they exist now)
         testHashMapEntities()
+
+        -- Test Stats API (triggers FixedString lazy discovery)
+        testStatsAPI()
     else
         Ext.Print("[EntityTest] EntityWorld not found - cannot test")
     end

@@ -444,6 +444,11 @@ static const luaL_Reg stats_functions[] = {
 void lua_stats_register(lua_State *L, int ext_table_index) {
     log_lua_stats("Registering Ext.Stats API");
 
+    // Convert negative index to absolute since we'll be pushing onto stack
+    if (ext_table_index < 0) {
+        ext_table_index = lua_gettop(L) + ext_table_index + 1;
+    }
+
     // Create StatsObject metatable
     luaL_newmetatable(L, STATS_OBJECT_METATABLE);
     luaL_setfuncs(L, stats_object_methods, 0);
