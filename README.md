@@ -29,7 +29,7 @@ Script Extender mods now load and execute on macOS with real game data. Lua scri
 | GUID → Entity Lookup | ✅ Complete | ARM64 ABI fix for TryGetSingleton (see below) |
 | TypeId Discovery | ✅ Complete | 11 component indices discovered at SessionLoaded |
 | Component Access | 🔄 In Progress | Data structure traversal implemented, testing with discovered indices |
-| Stats API | ✅ Complete | 15,774 stats accessible, FixedString resolution working |
+| Stats API | ✅ Complete | 15,774 stats accessible, property read working (`stat.Damage` → "1d8") |
 
 ### Verified Working (Dec 5, 2025)
 
@@ -67,6 +67,7 @@ Script Extender mods now load and execute on macOS with real game data. Lua scri
 - ✅ **FixedString resolution working** - 47,326+ strings resolved successfully
 - ✅ **Ext.Stats.GetAll() returns 15,774 stat names** - Full string names, not indices
 - ✅ **Ext.Stats.Get(name) retrieves stats by name** - Property access via `__index`
+- ✅ **Stats property read working** - `stat.Damage` returns "1d8" for WPN_Longsword
 
 ## Compatibility
 
@@ -561,13 +562,12 @@ See [GitHub Issues](https://github.com/tdimino/bg3se-macos/issues) for detailed 
 1. **[#11 - Ext.Events API](https://github.com/tdimino/bg3se-macos/issues/11)** - Engine lifecycle events (⚠️ 3/10+ events implemented)
 2. **[#12 - PersistentVars](https://github.com/tdimino/bg3se-macos/issues/12)** - Savegame data persistence
 3. **[#13 - Ext.Vars](https://github.com/tdimino/bg3se-macos/issues/13)** - Entity-attached custom data with sync
-4. **[#3 - Stats System](https://github.com/tdimino/bg3se-macos/issues/3)** - Full property read/write (✅ 85% - read complete, type filtering working)
 
 ### High Priority
 
 - **[#14 - Timer API](https://github.com/tdimino/bg3se-macos/issues/14)** - Delayed/repeating callbacks
 - **[#15 - Client Lua State](https://github.com/tdimino/bg3se-macos/issues/15)** - Dual client/server Lua states
-- **[#5 - Debug Console](https://github.com/tdimino/bg3se-macos/issues/5)** - In-game Lua REPL
+- **[#18 - Enhanced Debug Console](https://github.com/tdimino/bg3se-macos/issues/18)** - Multi-line support, memory introspection APIs
 
 ### Future Phases
 
@@ -579,6 +579,7 @@ See [GitHub Issues](https://github.com/tdimino/bg3se-macos/issues) for detailed 
 
 ### Completed
 
+- ✅ **[#3 - Ext.Stats API](https://github.com/tdimino/bg3se-macos/issues/3)** - Property read complete, `stat.Damage` returns "1d8" (v0.11.0)
 - ✅ **[#10 - Osiris Function Name Caching](https://github.com/tdimino/bg3se-macos/issues/10)** - Fixed funcDef->Signature->Name indirection (v0.10.6)
 - ✅ **[#2 - Component Discovery](https://github.com/tdimino/bg3se-macos/issues/2)** - TypeId discovery with deferred retry (v0.10.5)
 - ✅ **[#1 - TryGetSingleton ARM64 ABI fix](https://github.com/tdimino/bg3se-macos/issues/1)** - GUID → EntityHandle lookup working (v0.10.3)

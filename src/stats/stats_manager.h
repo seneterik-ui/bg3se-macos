@@ -101,6 +101,28 @@ int stats_get_level(StatsObjectPtr obj);
 const char* stats_get_using(StatsObjectPtr obj);
 
 // ============================================================================
+// IndexedProperties Access (Low-Level)
+// ============================================================================
+
+/**
+ * Get the number of indexed properties for a stat object.
+ *
+ * @param obj Stat object pointer from stats_get()
+ * @return Number of properties, or -1 on error
+ */
+int stats_get_property_count(StatsObjectPtr obj);
+
+/**
+ * Get a raw property index value at the given position.
+ * The returned value is an index into a global pool (strings, enums, etc.)
+ *
+ * @param obj Stat object pointer from stats_get()
+ * @param property_index Index into the IndexedProperties array
+ * @return The int32_t value at that index, or -1 on error
+ */
+int32_t stats_get_property_raw(StatsObjectPtr obj, int property_index);
+
+// ============================================================================
 // Property Access (Read)
 // ============================================================================
 
@@ -230,5 +252,19 @@ void stats_dump(StatsObjectPtr obj);
  * Dump all available stat types to log.
  */
 void stats_dump_types(void);
+
+/**
+ * Dump attributes for a specific ModifierList to log.
+ * This enumerates all property names for a stat type (e.g., Weapon attributes).
+ *
+ * @param ml_index ModifierList index (0-8, use stats_dump_types to see available types)
+ */
+void stats_dump_modifierlist_attributes(int ml_index);
+
+/**
+ * Debug: Probe RPGStats.FixedStrings at various offsets to find correct offset.
+ * Logs results showing which offset has a valid array with element[2303] = "1d8".
+ */
+void stats_probe_fixedstrings_offset(void);
 
 #endif // STATS_MANAGER_H

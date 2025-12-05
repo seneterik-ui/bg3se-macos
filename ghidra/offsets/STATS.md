@@ -140,22 +140,39 @@ struct Object {
 
 ### Runtime-Verified Object Offsets (Dec 5, 2025)
 
-Discovered via memory probing of WPN_Longsword at `0x600051fe00f0`:
+**BREAKTHROUGH:** C-level memory dump of WPN_Longsword at `0x60004f97def0`:
 
-| Field | Offset | Verified Value | Notes |
-|-------|--------|----------------|-------|
-| VMT | +0x00 | - | Virtual method table |
-| IndexedProperties | +0x08 | - | Array of property indices |
-| Name | +0x20 | "WPN_Longsword" | FixedString (32-bit index) |
-| Using | +0xa8 | 0xFFFFFFFF (-1) | No parent stat |
-| ModifierListIndex | +0xac | 0x00000000 | **UNRELIABLE** - see note below |
-| Level | +0xb0 | 0x00000000 | Level = 0 |
+| Field | Offset | Size | Verified Value | Notes |
+|-------|--------|------|----------------|-------|
+| VMT | +0x00 | 8 | 0x010cf54608 | Virtual method table |
+| IndexedProperties.begin_ | +0x08 | 8 | 0x60001fb4ad00 | Pointer to int32_t array |
+| IndexedProperties.end_ | +0x10 | 8 | 0x60001fb4adf4 | End pointer |
+| IndexedProperties.capacity_ | +0x18 | 8 | 0x60001fb4adf4 | Capacity end (same as end) |
+| Name | +0x20 | 8 | 0x35a00060 | FixedString index |
+| Functors | +0x28 | 8 | 0x600010c961c0 | HashMap pointer |
+| (count/field) | +0x30 | 8 | 5 | Some count field |
 
-**Memory dump excerpt:**
+**Memory dump:**
 ```
-+0xa8: FF FF FF FF 00 00 00 00  // Using=-1, ModifierListIndex=0
-+0xb0: 00 00 00 00 ...          // Level=0
++00: 08 46 f5 0c 01 00 00 00  00 ad b4 1f 00 60 00 00  // VMT + begin_
++10: f4 ad b4 1f 00 60 00 00  f4 ad b4 1f 00 60 00 00  // end_ + capacity_
++20: 60 00 a0 35 00 00 00 00  c0 61 c9 10 00 60 00 00  // Name + Functors
++30: 05 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  // count + padding
 ```
+
+**IndexedProperties Vector (std::vector layout on ARM64):**
+- Uses 3 pointers: begin_, end_, capacity_end_ (24 bytes total)
+- Size calculation: (end_ - begin_) / sizeof(int32_t)
+- WPN_Longsword has **61 properties** (0xF4 / 4 = 61)
+
+**Sample property indices from WPN_Longsword:**
+```
+[ 0] = 0       [ 1] = 4251    [ 2] = 0       [ 3] = 0
+[ 6] = 2303    [ 8] = 1       [18] = 1       [19] = 3316
+```
+These are indices into global pools (FixedStrings, enums, etc.)
+
+**Old offset notes (may be incorrect):**
 
 ### ModifierListIndex Offset Issue (Dec 5, 2025)
 
@@ -293,6 +310,133 @@ Functions that use RPGStats typically take it as a reference parameter:
 Unlike the Entity system where we had to capture pointers via hooks, `RPGStats::m_ptr` is a static member that can be resolved directly via dlsym once the game loads. However, it will be NULL/0 until the stats system initializes.
 
 **Timing:** The stats system typically initializes early in game startup, before SessionLoaded. Safe to access after main menu appears.
+
+## Modifier Attribute Discovery (Dec 5, 2025)
+
+Results from `find_modifier_attributes.py` Ghidra script:
+
+### Key Finding: Attribute Names NOT in Binary
+
+**Critical discovery:** Property attribute names like "Damage", "DamageType", "WeaponRange" are **NOT compiled into the binary**. They are loaded at runtime from game data files (`Stats/*.txt`). This is why:
+- Ghidra string search found 0 matches for these strings
+- The Modifier.Name field must resolve through FixedString at runtime
+- Property names exist only in data files, not code
+
+### Symbols Found
+
+| Category | Count | Notable Examples |
+|----------|-------|------------------|
+| Modifier-related symbols | 2,827 | Mostly Noesis UI framework (`NoesisApp::KeyTrigger::GetModifiers`) |
+| GetAttribute* functions | 170 | Various error APIs and meta functions |
+| RPGStats symbols | 419 | Component registrations, stat accessors |
+
+### Key RPGStats Functions
+
+| Function | Address | Signature |
+|----------|---------|-----------|
+| `eoc::active_roll::ComputeFinalModifiers` | `0x101149030` | Takes `Modifier[]` and `RPGStats*` |
+| `eoc::active_roll::ComputeFinalModifiers` (overload) | `0x1011492dc` | Second overload |
+| `CItemCombinationManager::LoadText` | `0x1011bc0cc` | Takes `RPGStats&` parameter |
+| `eoc::IsSatisfyItemUseConditions` | `0x1012d49ac` | Uses RPGStats for condition checking |
+| `eoc::RPGStatsComponent` type registration | `0x10194da60` | ECS component registration |
+
+### GetAttribute Function Offset Patterns
+
+Common offsets used in GetAttribute* functions (may indicate struct field access):
+
+| Offset | Occurrences | Likely Purpose |
+|--------|-------------|----------------|
+| `0x08` | Very common | First field after VMT |
+| `0x30, 0x38` | Common | HashMap/Array access |
+| `0x88` | Multiple | Mid-struct field |
+| `0x108, 0x110, 0x118` | Multiple | Larger struct access |
+
+### Modifier Structure Analysis
+
+The `eoc::active_roll::ComputeFinalModifiers` function at `0x101149030` processes `Modifier` arrays. Analyzing this function could reveal:
+- Modifier struct layout on ARM64
+- How EnumerationIndex is accessed
+- How Name (FixedString) is resolved
+
+**Windows BG3SE Modifier struct for reference:**
+```c
+struct Modifier {
+    int32_t EnumerationIndex;  // +0x00: Index into ModifierValueLists
+    int32_t LevelMapIndex;     // +0x04: For level scaling
+    int32_t UnknownZero;       // +0x08: Always 0
+    FixedString Name;          // +0x0C (x86) or +0x10 (ARM64 aligned)
+};
+```
+
+### Implications for Property Access
+
+Since attribute names are NOT in the binary:
+1. The Modifier.Name field contains a FixedString index
+2. FixedString must be resolved via GlobalStringTable at runtime
+3. Property lookup requires: Name string → FixedString hash → Modifier index → IndexedProperties[index]
+4. Cannot use static analysis to find attribute offsets; must probe at runtime
+
+## FixedStrings Pool (CRITICAL - Dec 5, 2025)
+
+**BREAKTHROUGH:** Discovered the correct offset for `RPGStats.FixedStrings` via Ghidra decompilation.
+
+### Discovery Method
+
+Decompiled `StatsObject::GetFixedStringValue` at `0x102006b48`:
+
+```c
+/* StatsObject::GetFixedStringValue(ls::FixedString const&) const */
+undefined4 * StatsObject::GetFixedStringValue(FixedString *param_1)
+{
+    // ... validation code ...
+    uVar1 = *(uint *)(*(long *)(param_1 + 8) + (long)(int)uVar3 * 4);
+    if (-1 < (int)uVar1) {
+        return (undefined4 *)(*(long *)(lVar2 + 0x348) + (ulong)uVar1 * 4);
+        //                                    ^^^^^ THIS IS THE KEY OFFSET
+    }
+    return &ls::FixedString::Empty;
+}
+```
+
+### Key Offset
+
+| Field | Offset | Notes |
+|-------|--------|-------|
+| `RPGStats.FixedStrings.buf_` | **0x348** | Pointer to FixedString index array |
+
+### Assembly Evidence
+
+```asm
+ldr [u'x9', u'[x22, #0x348]']    // x9 = RPGStats + 0x348 (FixedStrings.buf_)
+add [u'x0', u'x9', u'x8, LSL #0x2']  // x0 = buf_ + (index * 4)
+```
+
+### Property Resolution Flow
+
+```
+stat.PropertyName
+    ↓ __index metamethod
+stats_get_string(obj, "PropertyName")
+    ↓ find_property_index_by_name() → attr_index
+IndexedProperties[attr_index]
+    ↓ pool_index (e.g., 2303 for Damage)
+RPGStats.FixedStrings[pool_index]
+    ↓ FixedString index → GlobalStringTable
+"1d8"
+```
+
+### Verified Working
+
+```lua
+local stat = Ext.Stats.Get("WPN_Longsword")
+Ext.Print(stat.Damage)  -- Output: "1d8"
+```
+
+### Next Steps
+
+1. ~~**Runtime probe:** Use `Ext.Stats.DumpAttributes(8)` with debug code to inspect actual Modifier memory~~ ✅ COMPLETE
+2. ~~**Analyze ComputeFinalModifiers:** Decompile `0x101149030` to understand ARM64 Modifier layout~~ Used GetFixedStringValue instead
+3. ~~**Test multiple offsets:** Try Name at +0x0C, +0x10, +0x18, +0x20 until valid strings appear~~ ✅ COMPLETE - 0x0C is correct
 
 ## Related Files in Windows BG3SE
 

@@ -37,7 +37,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
 | `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
 | `Ext.Entity` | ✅ Full | ⚠️ Basic access | **40%** | 2 |
-| `Ext.Stats` | ✅ Full | ✅ Read complete, type filtering working | **85%** | 3 |
+| `Ext.Stats` | ✅ Full | ✅ Read complete (`stat.Damage` → "1d8") | **90%** | 3 |
 | `Ext.Events` | ✅ Full | ⚠️ 3 events only | **10%** | 2.5 |
 | `Ext.Timer` | ✅ Full | ❌ Not impl | **0%** | 2.3 |
 | `Ext.Vars` | ✅ Full | ❌ Not impl | **0%** | 2.6 |
@@ -359,7 +359,7 @@ end)
 ## Phase 3: Stats System
 
 ### 3.1 Ext.Stats API
-**Status:** ✅ Core Complete (v0.11.0) - FixedString resolution working, 15,774 stats accessible
+**Status:** ✅ Complete (v0.11.0) - Property read working (`stat.Damage` → "1d8"), 15,774 stats accessible
 
 Access and modify game statistics, character builds, and item properties.
 
@@ -414,9 +414,13 @@ end
 - [x] **Ext.Stats.Get(name)** - retrieves stats by name with property access
 - [x] **stat.Name** - returns resolved string name
 
-**Pending:**
+**Completed (v0.11.0):**
 - [x] **Type filtering** - `Ext.Stats.GetAll("Weapon")` ✅ Working (uses stats_get_type)
 - [x] **stat.Type** - ✅ Working via name-based detection (WPN_→Weapon, ARM_→Armor, etc.)
+- [x] **Property read** - `stat.Damage` → "1d8" via IndexedProperties + FixedStrings
+- [x] **RPGSTATS_OFFSET_FIXEDSTRINGS = 0x348** - Discovered via Ghidra decompilation
+
+**Pending:**
 - [ ] **Property write access** via `__newindex` (`stat.Damage = "2d6"`)
 - [ ] `stat:Sync()` - Propagate changes to clients
 - [ ] `Ext.Stats.Create(name, type, template)` - Create new stats
@@ -854,7 +858,7 @@ Ext.Mod.GetModInfo(guid)
 |----|---------|--------|--------|
 | A1 | Ext.Events API | Medium | ⚠️ Partial (3/10+ events) |
 | A2 | PersistentVars | Medium | ❌ Not Started |
-| A3 | Stats Property Read/Write | High | 🔄 In Progress |
+| A3 | Stats Property Read/Write | High | ✅ Read Complete |
 | A4 | Component Property Access | High | 🔄 In Progress |
 | A5 | NetChannel API | High | ❌ Not Started |
 | A6 | User Variables | High | ❌ Not Started |
@@ -897,7 +901,7 @@ Ext.Mod.GetModInfo(guid)
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.11.0 | 2025-12-03 | Ext.Stats API - RPGStats::m_ptr discovery, stats_manager module, Lua bindings (read-only) |
+| v0.11.0 | 2025-12-05 | Ext.Stats API complete - Property read working (`stat.Damage` → "1d8"), RPGSTATS_OFFSET_FIXEDSTRINGS=0x348 |
 | v0.10.6 | 2025-12-03 | Fixed Osiris function name caching - OsiFunctionDef->Signature->Name two-level indirection |
 | v0.10.4 | 2025-12-02 | TypeId<T>::m_TypeIndex discovery, ComponentTypeToIndex enumeration, Lua bindings for runtime discovery |
 | v0.10.3 | 2025-12-01 | Data structure traversal for GetComponent (TryGet + HashMap), template calls don't work on macOS |

@@ -21,6 +21,7 @@
 static int lua_stats_object_get_property(lua_State *L);
 static int lua_stats_object_set_property(lua_State *L);
 static int lua_stats_object_dump(lua_State *L);
+static int lua_stats_object_get_raw_property(lua_State *L);
 
 // ============================================================================
 // Logging
@@ -116,7 +117,19 @@ static int lua_stats_object_index(lua_State *L) {
         return 1;
     }
 
+    if (strcmp(key, "PropertyCount") == 0) {
+        int count = stats_get_property_count(ud->obj);
+        lua_pushinteger(L, count);
+        return 1;
+    }
+
     // Methods
+    if (strcmp(key, "GetRawProperty") == 0) {
+        // Method: stat:GetRawProperty(index) -> int32
+        lua_pushcfunction(L, lua_stats_object_get_raw_property);
+        return 1;
+    }
+
     if (strcmp(key, "GetProperty") == 0) {
         // Push method closure (handled below)
         lua_pushcfunction(L, lua_stats_object_get_property);
@@ -210,6 +223,22 @@ static int lua_stats_object_tostring(lua_State *L) {
         lua_pushfstring(L, "StatsObject(%p)", ud->obj);
     }
 
+    return 1;
+}
+
+// StatsObject:GetRawProperty(index) -> int32
+// Returns the raw property index value at the given position
+static int lua_stats_object_get_raw_property(lua_State *L) {
+    LuaStatsObject *ud = check_stats_object(L, 1);
+    int index = (int)luaL_checkinteger(L, 2);
+
+    if (!ud->obj) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    int32_t value = stats_get_property_raw(ud->obj, index);
+    lua_pushinteger(L, value);
     return 1;
 }
 
@@ -417,6 +446,20 @@ static int lua_stats_get_fixedstring_status(lua_State *L) {
     return 1;
 }
 
+// Ext.Stats.DumpAttributes(ml_index) - Debug: dump ModifierList attributes
+static int lua_stats_dumpattributes(lua_State *L) {
+    int ml_index = (int)luaL_checkinteger(L, 1);
+    stats_dump_modifierlist_attributes(ml_index);
+    return 0;
+}
+
+// Ext.Stats.ProbeFixedStrings() - Debug: probe for FixedStrings array offset
+static int lua_stats_probe_fixedstrings(lua_State *L) {
+    (void)L;
+    stats_probe_fixedstrings_offset();
+    return 0;
+}
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -436,8 +479,10 @@ static const luaL_Reg stats_functions[] = {
     {"Create", lua_stats_create},
     {"IsReady", lua_stats_isready},
     {"DumpTypes", lua_stats_dumptypes},
+    {"DumpAttributes", lua_stats_dumpattributes},  // Debug: dump ModifierList attributes
     {"GetRaw", lua_stats_getraw},
     {"GetFixedStringStatus", lua_stats_get_fixedstring_status},
+    {"ProbeFixedStrings", lua_stats_probe_fixedstrings},  // Debug: probe for FixedStrings offset
     {NULL, NULL}
 };
 

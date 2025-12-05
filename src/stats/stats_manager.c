@@ -57,6 +57,20 @@ static bool safe_read_ptr(void *addr, void **out_value) {
     return true;
 }
 
+static bool safe_read_u8(void *addr, uint8_t *out_value) {
+    if (!addr || !out_value) return false;
+
+    vm_size_t size = sizeof(uint8_t);
+    vm_offset_t data;
+    kern_return_t kr = vm_read(mach_task_self(), (vm_address_t)addr,
+                               size, &data, (mach_msg_type_number_t*)&size);
+    if (kr != KERN_SUCCESS) return false;
+
+    *out_value = *(uint8_t*)data;
+    vm_deallocate(mach_task_self(), data, size);
+    return true;
+}
+
 static bool safe_read_u32(void *addr, uint32_t *out_value) {
     if (!addr || !out_value) return false;
 
@@ -133,43 +147,59 @@ static bool safe_read_i32(void *addr, int32_t *out_value) {
 // Verified via console: ModifierLists has 9 entries, Objects has 15,774 entries
 #define RPGSTATS_OFFSET_OBJECTS             0xC0   // CNamedElementManager<Object> Objects (verified)
 #define RPGSTATS_OFFSET_MODIFIER_LISTS      0x60   // CNamedElementManager<ModifierList> ModifierLists (verified)
+#define RPGSTATS_OFFSET_FIXEDSTRINGS        0x348  // TrackedCompactSet<FixedString> FixedStrings (Ghidra: StatsObject::GetFixedStringValue)
 
 // Array<T*> offsets within CNamedElementManager
 #define ARRAY_OFFSET_BUFFER       0x00
 #define ARRAY_OFFSET_CAPACITY     0x08
 #define ARRAY_OFFSET_SIZE         0x0C
 
-// stats::Object offsets (from BG3SE Common.h lines 190-211)
+// stats::Object offsets (VERIFIED Dec 5, 2025 via C-level memory dump)
 // struct Object {
-//   void* VMT;                    // +0x00
-//   Vector<int32_t> IndexedProperties;  // +0x08 (24 bytes: buf[8]+cap[4]+size[4]+pad[8]?)
-//   FixedString Name;             // +0x20
-//   HashMap Functors;             // +0x28
-//   HashMap RollConditions;       // +??
-//   FixedString AIFlags;          // +??
-//   Array Requirements;           // +??
+//   void* VMT;                           // +0x00 (8 bytes)
+//   Vector<int32_t> IndexedProperties;   // +0x08 (24 bytes: begin_[8]+end_[8]+cap_[8])
+//   FixedString Name;                    // +0x20 (8 bytes)
+//   HashMap Functors;                    // +0x28 (pointer)
 //   ... more fields ...
-//   int32_t Using;                // near end
-//   uint32_t ModifierListIndex;
-//   uint32_t Level;
+//   int32_t Using;                       // near end (offset TBD)
+//   uint32_t ModifierListIndex;          // offset TBD
+//   uint32_t Level;                      // offset TBD
 // }
 #define OBJECT_OFFSET_VMT              0x00
-#define OBJECT_OFFSET_INDEXED_PROPS    0x08
+#define OBJECT_OFFSET_INDEXED_PROPS    0x08   // Vector<int32_t> IndexedProperties
 #define OBJECT_OFFSET_NAME             0x20   // FixedString Name
 
-// Runtime-verified offsets (Dec 5, 2025 via memory probing)
-// Probed WPN_Longsword at 0x600051fe00f0:
-//   +0xa8: FF FF FF FF = Using = -1 (no parent)
-//   +0xac: 00 00 00 00 = ModifierListIndex = 0
-//   +0xb0: 00 00 00 00 = Level = 0
+// Vector<int32_t> layout on ARM64 (std::vector uses 3 pointers):
+// - begin_: pointer to first element
+// - end_: pointer past last element
+// - capacity_: pointer to end of allocated space
+// Size = (end_ - begin_) / sizeof(int32_t)
+#define VECTOR_OFFSET_BEGIN     0x00   // Pointer to first element
+#define VECTOR_OFFSET_END       0x08   // Pointer past last element
+#define VECTOR_OFFSET_CAPACITY  0x10   // Pointer to end of allocation
+
+// Old offset notes (may be incorrect for ARM64):
 #define OBJECT_OFFSET_USING            0xa8   // int32_t Using (parent stat index, -1 if none)
-#define OBJECT_OFFSET_MODIFIERLIST_IDX 0xac   // uint32_t ModifierListIndex (stat type)
+#define OBJECT_OFFSET_MODIFIERLIST_IDX 0x00   // uint8_t ModifierListIndex (stat type) - verified via memory dump
 #define OBJECT_OFFSET_LEVEL            0xb0   // uint32_t Level
 
 // FixedString structure
 // FixedString is typically just a const char* pointer in Larian's engine
 // On ARM64 it's 8 bytes
 #define FIXEDSTRING_SIZE 8
+
+// Modifier structure offsets (VERIFIED Dec 5, 2025 via runtime probing):
+// struct Modifier {
+//     int32_t EnumerationIndex;   // +0x00: Type ID of this attribute (e.g., 53, 54, 15)
+//     int32_t LevelMapIndex;      // +0x04: Always -1 in observed data
+//     int32_t UnknownZero;        // +0x08: Always 0 in observed data
+//     FixedString Name;           // +0x0C: Attribute name ("Damage", "Damage Type", etc.)
+// };
+// Note: ARM64 FixedString is NOT 8-byte aligned here - it's at 0x0C (packed)
+#define MODIFIER_OFFSET_ENUM_INDEX    0x00
+#define MODIFIER_OFFSET_LEVEL_MAP     0x04
+#define MODIFIER_OFFSET_UNKNOWN       0x08
+#define MODIFIER_OFFSET_NAME          0x0C   // FixedString (verified via runtime dump)
 
 // ============================================================================
 // Global State
@@ -462,6 +492,44 @@ static void* get_modifier_lists_manager(void) {
     return (char*)rpgstats + RPGSTATS_OFFSET_MODIFIER_LISTS;
 }
 
+// Get string from RPGStats.FixedStrings array by index
+// RPGStats.FixedStrings is TrackedCompactSet<FixedString>, which is like an array
+static const char* get_rpgstats_fixedstring(int32_t index) {
+    if (index <= 0) return NULL;  // Index 0 or negative means no value
+
+    void *rpgstats = stats_manager_get_raw();
+    if (!rpgstats) return NULL;
+
+    // FixedStrings array is at offset RPGSTATS_OFFSET_FIXEDSTRINGS
+    // TrackedCompactSet<T> has: buf_ (ptr), capacity_, size_
+    void *fs_array = (char*)rpgstats + RPGSTATS_OFFSET_FIXEDSTRINGS;
+
+    // Read buffer pointer (offset 0x00)
+    void *buf = NULL;
+    if (!safe_read_ptr(fs_array, &buf) || !buf) {
+        log_stats("get_rpgstats_fixedstring: failed to read buf at offset 0x%x", RPGSTATS_OFFSET_FIXEDSTRINGS);
+        return NULL;
+    }
+
+    // Read size (offset 0x0C for TrackedCompactSet)
+    uint32_t size = 0;
+    if (!safe_read_u32((char*)fs_array + 0x0C, &size)) {
+        log_stats("get_rpgstats_fixedstring: failed to read size");
+        return NULL;
+    }
+
+    // Bounds check
+    if ((uint32_t)index >= size) {
+        log_stats("get_rpgstats_fixedstring: index %d out of bounds (size=%u)", index, size);
+        return NULL;
+    }
+
+    // Each element is a FixedString (4 bytes on macOS)
+    // Read the FixedString at buf[index]
+    void *fs_addr = (char*)buf + index * sizeof(uint32_t);
+    return read_fixed_string(fs_addr);
+}
+
 // Read FixedString - on macOS this is a 32-bit index into GlobalStringTable
 static const char* read_fixed_string(void *addr) {
     if (!addr) return NULL;
@@ -552,50 +620,6 @@ StatsObjectPtr stats_get(const char *name) {
         // Read object name (FixedString at offset)
         const char *obj_name = read_fixed_string((char*)obj + OBJECT_OFFSET_NAME);
         if (obj_name && strcmp(obj_name, name) == 0) {
-            // Debug: dump first 128 bytes of WPN_Longsword for IndexedProperties analysis
-            if (strcmp(name, "WPN_Longsword") == 0) {
-                static bool dumped = false;
-                if (!dumped) {
-                    dumped = true;
-                    log_stats("=== WPN_Longsword Object Memory Dump ===");
-                    log_stats("Object addr: %p", obj);
-
-                    // Dump raw bytes
-                    uint8_t buf[128];
-                    vm_size_t size = sizeof(buf);
-                    vm_offset_t data;
-                    if (vm_read(mach_task_self(), (vm_address_t)obj, size, &data, (mach_msg_type_number_t*)&size) == KERN_SUCCESS) {
-                        memcpy(buf, (void*)data, sizeof(buf));
-                        vm_deallocate(mach_task_self(), data, size);
-
-                        for (int off = 0; off < 128; off += 16) {
-                            log_stats("+%02x: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x",
-                                off,
-                                buf[off+0], buf[off+1], buf[off+2], buf[off+3],
-                                buf[off+4], buf[off+5], buf[off+6], buf[off+7],
-                                buf[off+8], buf[off+9], buf[off+10], buf[off+11],
-                                buf[off+12], buf[off+13], buf[off+14], buf[off+15]);
-                        }
-
-                        // Try to interpret IndexedProperties at +0x08
-                        void *idx_buf = NULL;
-                        uint32_t idx_size = 0;
-                        if (safe_read_ptr((char*)obj + 0x08, &idx_buf)) {
-                            log_stats("IndexedProperties.buf (raw read): %p", idx_buf);
-                        }
-                        if (safe_read_u32((char*)obj + 0x0C, &idx_size)) {
-                            log_stats("IndexedProperties +0x0C (u32): %u", idx_size);
-                        }
-                        if (safe_read_u32((char*)obj + 0x10, &idx_size)) {
-                            log_stats("IndexedProperties +0x10 (u32): %u", idx_size);
-                        }
-                        if (safe_read_u32((char*)obj + 0x14, &idx_size)) {
-                            log_stats("IndexedProperties +0x14 (u32): %u", idx_size);
-                        }
-                    }
-                    log_stats("=== End Dump ===");
-                }
-            }
             return obj;
         }
     }
@@ -604,7 +628,6 @@ StatsObjectPtr stats_get(const char *name) {
 }
 
 const char* stats_get_type(StatsObjectPtr obj) {
-    static bool debug_done = false;
     if (!obj) return NULL;
 
     // WORKAROUND: Use name-based type detection
@@ -631,11 +654,11 @@ const char* stats_get_type(StatsObjectPtr obj) {
         if (strstr(obj_name, "_STATUS") || strstr(obj_name, "Status_")) return "StatusData";
 
         // Try ModifierListIndex lookup as fallback
-        uint32_t modifier_list_idx = 0;
-        if (safe_read_u32((char*)obj + OBJECT_OFFSET_MODIFIERLIST_IDX, &modifier_list_idx)) {
+        uint8_t modifier_list_idx = 0;
+        if (safe_read_u8((char*)obj + OBJECT_OFFSET_MODIFIERLIST_IDX, &modifier_list_idx)) {
             void *modifier_lists = get_modifier_lists_manager();
             if (modifier_lists) {
-                void *modifier_list = get_manager_element(modifier_lists, modifier_list_idx);
+                void *modifier_list = get_manager_element(modifier_lists, (uint32_t)modifier_list_idx);
                 if (modifier_list) {
                     #define MODIFIERLIST_OFFSET_NAME 0x5c
                     const char *type_name = read_fixed_string((char*)modifier_list + MODIFIERLIST_OFFSET_NAME);
@@ -664,6 +687,58 @@ int stats_get_level(StatsObjectPtr obj) {
     return (int)level;
 }
 
+// ============================================================================
+// IndexedProperties Access (VERIFIED Dec 5, 2025)
+// ============================================================================
+
+// Get the number of indexed properties for a stat object
+int stats_get_property_count(StatsObjectPtr obj) {
+    if (!obj) return -1;
+
+    // Read begin_ and end_ pointers from the Vector
+    void *idx_props = (char*)obj + OBJECT_OFFSET_INDEXED_PROPS;
+
+    void *begin_ptr = NULL;
+    void *end_ptr = NULL;
+
+    if (!safe_read_ptr((char*)idx_props + VECTOR_OFFSET_BEGIN, &begin_ptr)) {
+        return -1;
+    }
+    if (!safe_read_ptr((char*)idx_props + VECTOR_OFFSET_END, &end_ptr)) {
+        return -1;
+    }
+
+    if (!begin_ptr || !end_ptr) return 0;
+
+    // Size = (end - begin) / sizeof(int32_t)
+    size_t byte_size = (size_t)end_ptr - (size_t)begin_ptr;
+    return (int)(byte_size / sizeof(int32_t));
+}
+
+// Get a raw property index value at the given position
+// Returns -1 on error, otherwise the int32_t value at that index
+int32_t stats_get_property_raw(StatsObjectPtr obj, int property_index) {
+    if (!obj || property_index < 0) return -1;
+
+    // Read begin_ pointer
+    void *idx_props = (char*)obj + OBJECT_OFFSET_INDEXED_PROPS;
+    void *begin_ptr = NULL;
+
+    if (!safe_read_ptr((char*)idx_props + VECTOR_OFFSET_BEGIN, &begin_ptr)) {
+        return -1;
+    }
+
+    if (!begin_ptr) return -1;
+
+    // Read the int32_t value at the specified index
+    int32_t value = 0;
+    if (!safe_read_i32((char*)begin_ptr + property_index * sizeof(int32_t), &value)) {
+        return -1;
+    }
+
+    return value;
+}
+
 const char* stats_get_using(StatsObjectPtr obj) {
     if (!obj) return NULL;
 
@@ -685,29 +760,136 @@ const char* stats_get_using(StatsObjectPtr obj) {
 }
 
 // ============================================================================
-// Property Access (Read) - Stub implementations
-// TODO: Implement actual property lookup via IndexedProperties
+// Property Index Lookup (finds property index by name in ModifierList)
+// ============================================================================
+
+// Get ModifierList for an object (by its ModifierListIndex)
+static void* get_object_modifier_list(StatsObjectPtr obj) {
+    if (!obj) return NULL;
+
+    // ModifierListIndex is a uint8_t at offset 0x00
+    uint8_t modifier_list_idx = 0;
+    if (!safe_read_u8((char*)obj + OBJECT_OFFSET_MODIFIERLIST_IDX, &modifier_list_idx)) {
+        log_stats("get_object_modifier_list: failed to read ModifierListIndex at +0x%x", OBJECT_OFFSET_MODIFIERLIST_IDX);
+        return NULL;
+    }
+    log_stats("get_object_modifier_list: ModifierListIndex = %u", (uint32_t)modifier_list_idx);
+
+    void *modifier_lists = get_modifier_lists_manager();
+    if (!modifier_lists) return NULL;
+
+    return get_manager_element(modifier_lists, (uint32_t)modifier_list_idx);
+}
+
+// Find property index by name in a ModifierList's Attributes
+// Returns -1 if not found
+static int find_property_index_by_name(void *modifier_list, const char *prop_name) {
+    if (!modifier_list || !prop_name) return -1;
+
+    // ModifierList starts with CNamedElementManager<Modifier> Attributes
+    void *attrs_mgr = modifier_list;  // Attributes is at offset 0
+
+    // Read attributes count
+    uint32_t attr_count = 0;
+    if (!safe_read_u32((char*)attrs_mgr + CNEM_OFFSET_VALUES_SIZE, &attr_count)) {
+        log_stats("find_property_index_by_name: failed to read attr_count");
+        return -1;
+    }
+    log_stats("find_property_index_by_name: attr_count = %u", attr_count);
+
+    // Read attributes buffer
+    void *attrs_buf = NULL;
+    if (!safe_read_ptr((char*)attrs_mgr + CNEM_OFFSET_VALUES_BUF, &attrs_buf) || !attrs_buf) {
+        log_stats("find_property_index_by_name: failed to read attrs_buf");
+        return -1;
+    }
+    log_stats("find_property_index_by_name: attrs_buf = %p", attrs_buf);
+
+    // Linear search through Modifiers to find by name
+    for (uint32_t i = 0; i < attr_count && i < 5; i++) {  // Log first 5 for debug
+        void *modifier_ptr = NULL;
+        if (!safe_read_ptr((char*)attrs_buf + i * sizeof(void*), &modifier_ptr) || !modifier_ptr) {
+            continue;
+        }
+
+        // Read the Modifier's name at offset 0x0C
+        const char *mod_name = read_fixed_string((char*)modifier_ptr + MODIFIER_OFFSET_NAME);
+        log_stats("  attr[%u] = '%s'", i, mod_name ? mod_name : "(null)");
+        if (mod_name && strcmp(mod_name, prop_name) == 0) {
+            return (int)i;  // Found! Return the index
+        }
+    }
+
+    // Continue searching without logging
+    for (uint32_t i = 5; i < attr_count; i++) {
+        void *modifier_ptr = NULL;
+        if (!safe_read_ptr((char*)attrs_buf + i * sizeof(void*), &modifier_ptr) || !modifier_ptr) {
+            continue;
+        }
+        const char *mod_name = read_fixed_string((char*)modifier_ptr + MODIFIER_OFFSET_NAME);
+        if (mod_name && strcmp(mod_name, prop_name) == 0) {
+            return (int)i;
+        }
+    }
+
+    return -1;  // Not found
+}
+
+// ============================================================================
+// Property Access (Read) - Implemented via IndexedProperties
 // ============================================================================
 
 const char* stats_get_string(StatsObjectPtr obj, const char *prop) {
     if (!obj || !prop) return NULL;
 
-    // TODO: Implement property lookup
-    // 1. Get ModifierList for this object's type
-    // 2. Look up property info (index, type) from ModifierList
-    // 3. Read IndexedProperties[index]
-    // 4. Dereference from appropriate pool (FixedStrings, etc.)
+    // Step 1: Get ModifierList for this object's type
+    void *modifier_list = get_object_modifier_list(obj);
+    if (!modifier_list) {
+        return NULL;
+    }
 
-    log_stats("stats_get_string not yet implemented");
-    return NULL;
+    // Step 2: Find the property index by name
+    int prop_index = find_property_index_by_name(modifier_list, prop);
+    if (prop_index < 0) {
+        return NULL;
+    }
+
+    // Step 3: Read IndexedProperties[prop_index]
+    int32_t pool_index = stats_get_property_raw(obj, prop_index);
+    if (pool_index < 0) {
+        return NULL;  // Invalid or unset
+    }
+
+    // Step 4: Dereference from RPGStats.FixedStrings array
+    // The pool_index is an index into RPGStats.FixedStrings[], NOT GlobalStringTable
+    return get_rpgstats_fixedstring(pool_index);
 }
 
 bool stats_get_int(StatsObjectPtr obj, const char *prop, int64_t *out_value) {
     if (!obj || !prop || !out_value) return false;
 
-    // TODO: Implement property lookup
-    log_stats("stats_get_int not yet implemented");
-    return false;
+    // Step 1: Get ModifierList for this object's type
+    void *modifier_list = get_object_modifier_list(obj);
+    if (!modifier_list) {
+        return false;
+    }
+
+    // Step 2: Find the property index by name
+    int prop_index = find_property_index_by_name(modifier_list, prop);
+    if (prop_index < 0) {
+        return false;
+    }
+
+    // Step 3: Read IndexedProperties[prop_index]
+    // For integer properties, the value is stored directly (not as pool index)
+    int32_t value = stats_get_property_raw(obj, prop_index);
+    if (value == -1) {
+        // Check if this is a valid -1 or an error
+        // We can't distinguish, so assume valid for now
+    }
+
+    *out_value = (int64_t)value;
+    return true;
 }
 
 bool stats_get_float(StatsObjectPtr obj, const char *prop, float *out_value) {
@@ -879,4 +1061,143 @@ void stats_dump_types(void) {
         const char *name = read_fixed_string((char*)ml + MODIFIERLIST_OFFSET_NAME);
         log_stats("  [%d] %s", i, name ? name : "(unnamed)");
     }
+}
+
+// ============================================================================
+// Modifier Attribute Enumeration (for property name mapping)
+// ============================================================================
+
+void stats_dump_modifierlist_attributes(int ml_index) {
+    void *modifier_lists = get_modifier_lists_manager();
+    if (!modifier_lists) {
+        log_stats("ModifierLists not available");
+        return;
+    }
+
+    int ml_count = get_manager_count(modifier_lists);
+    if (ml_index < 0 || ml_index >= ml_count) {
+        log_stats("Invalid ModifierList index: %d (max: %d)", ml_index, ml_count - 1);
+        return;
+    }
+
+    void *ml = get_manager_element(modifier_lists, ml_index);
+    if (!ml) {
+        log_stats("Failed to get ModifierList[%d]", ml_index);
+        return;
+    }
+
+    const char *ml_name = read_fixed_string((char*)ml + MODIFIERLIST_OFFSET_NAME);
+    log_stats("=== ModifierList[%d] '%s' Attributes ===", ml_index, ml_name ? ml_name : "(unknown)");
+    log_stats("ModifierList ptr: %p", ml);
+
+    // ModifierList starts with CNamedElementManager<Modifier> Attributes
+    void *attrs_mgr = ml;  // Attributes is at offset 0
+
+    // Read attributes count from different potential offsets to diagnose
+    uint32_t attr_count = 0;
+    if (!safe_read_u32((char*)attrs_mgr + CNEM_OFFSET_VALUES_SIZE, &attr_count)) {
+        log_stats("Failed to read attributes count at +0x%x", CNEM_OFFSET_VALUES_SIZE);
+        return;
+    }
+
+    void *attrs_buf = NULL;
+    if (!safe_read_ptr((char*)attrs_mgr + CNEM_OFFSET_VALUES_BUF, &attrs_buf) || !attrs_buf) {
+        log_stats("Failed to read attributes buffer at +0x%x", CNEM_OFFSET_VALUES_BUF);
+        return;
+    }
+
+    log_stats("Attributes count: %u, buf: %p (read from +0x%x, +0x%x)",
+              attr_count, attrs_buf, CNEM_OFFSET_VALUES_SIZE, CNEM_OFFSET_VALUES_BUF);
+
+    // Dump first few pointers to understand structure
+    log_stats("First 5 pointer values in attrs_buf:");
+    for (int i = 0; i < 5 && (uint32_t)i < attr_count; i++) {
+        void *ptr = NULL;
+        safe_read_ptr((char*)attrs_buf + i * sizeof(void*), &ptr);
+        log_stats("  buf[%d] = %p", i, ptr);
+    }
+
+    // Try to enumerate first few modifiers with extra debug info
+    log_stats("Enumerating first 10 Modifier entries:");
+    for (uint32_t i = 0; i < attr_count && i < 10; i++) {
+        void *modifier_ptr = NULL;
+        if (!safe_read_ptr((char*)attrs_buf + i * sizeof(void*), &modifier_ptr) || !modifier_ptr) {
+            log_stats("  [%u] ptr=NULL", i);
+            continue;
+        }
+
+        // Read raw bytes at modifier to understand layout
+        int32_t field0 = 0, field1 = 0, field2 = 0;
+        void *field3 = NULL;  // potential FixedString at +0x0C
+        void *field4 = NULL;  // potential FixedString at +0x10
+
+        safe_read_i32((char*)modifier_ptr + 0x00, &field0);
+        safe_read_i32((char*)modifier_ptr + 0x04, &field1);
+        safe_read_i32((char*)modifier_ptr + 0x08, &field2);
+        safe_read_ptr((char*)modifier_ptr + 0x0C, &field3);
+        safe_read_ptr((char*)modifier_ptr + 0x10, &field4);
+
+        const char *name_0c = read_fixed_string((char*)modifier_ptr + 0x0C);
+        const char *name_10 = read_fixed_string((char*)modifier_ptr + 0x10);
+        const char *name_18 = read_fixed_string((char*)modifier_ptr + 0x18);
+
+        log_stats("  [%u] ptr=%p: f0=%d f1=%d f2=%d | name@0C='%s' name@10='%s' name@18='%s'",
+                  i, modifier_ptr, field0, field1, field2,
+                  name_0c ? name_0c : "(null)",
+                  name_10 ? name_10 : "(null)",
+                  name_18 ? name_18 : "(null)");
+    }
+}
+
+// Debug: Probe RPGStats.FixedStrings at various offsets to find the correct one
+void stats_probe_fixedstrings_offset(void) {
+    void *rpgstats = stats_manager_get_raw();
+    if (!rpgstats) {
+        log_stats("Cannot probe: RPGStats not ready");
+        return;
+    }
+
+    log_stats("=== Probing RPGStats.FixedStrings offset ===");
+    log_stats("RPGStats base: %p", rpgstats);
+    log_stats("Expected Windows offset: 0x324 (based on field_2F0 + LegacyRefMap + TreasureRarities[7])");
+
+    // Focus on area around expected offset 0x300-0x380
+    // Show ALL data at these offsets for diagnosis
+    for (uint32_t offset = 0x300; offset <= 0x380; offset += 0x10) {
+        void *candidate = (char*)rpgstats + offset;
+
+        // Read potential CompactSet fields
+        void *buf = NULL;
+        uint32_t cap = 0, size = 0;
+
+        safe_read_ptr(candidate, &buf);
+        safe_read_u32((char*)candidate + 0x08, &cap);
+        safe_read_u32((char*)candidate + 0x0C, &size);
+
+        log_stats("  +0x%03x: buf=%p cap=%u size=%u", offset, buf, cap, size);
+
+        // If buf looks like a valid pointer and size is reasonable, probe elements
+        uintptr_t buf_addr = (uintptr_t)buf;
+        if (buf && buf_addr > 0x100000000 && buf_addr < 0x800000000000 && size > 100 && size < 100000) {
+            // Try reading a few elements as FixedStrings
+            log_stats("    Probing elements (assuming FixedString array):");
+            for (int idx = 0; idx < 5; idx++) {
+                void *e = (char*)buf + idx * sizeof(uint32_t);
+                uint32_t raw = 0;
+                safe_read_u32(e, &raw);
+                const char *s = read_fixed_string(e);
+                log_stats("      [%d] raw=0x%08x str='%s'", idx, raw, s ? s : "(null)");
+            }
+            // Also check index 2303 (our known Damage value index)
+            if (size > 2303) {
+                void *e = (char*)buf + 2303 * sizeof(uint32_t);
+                uint32_t raw = 0;
+                safe_read_u32(e, &raw);
+                const char *s = read_fixed_string(e);
+                log_stats("      [2303] raw=0x%08x str='%s' <-- Damage value", raw, s ? s : "(null)");
+            }
+        }
+    }
+
+    log_stats("=== End FixedStrings probe ===");
 }
