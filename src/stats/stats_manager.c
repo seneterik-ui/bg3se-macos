@@ -552,6 +552,50 @@ StatsObjectPtr stats_get(const char *name) {
         // Read object name (FixedString at offset)
         const char *obj_name = read_fixed_string((char*)obj + OBJECT_OFFSET_NAME);
         if (obj_name && strcmp(obj_name, name) == 0) {
+            // Debug: dump first 128 bytes of WPN_Longsword for IndexedProperties analysis
+            if (strcmp(name, "WPN_Longsword") == 0) {
+                static bool dumped = false;
+                if (!dumped) {
+                    dumped = true;
+                    log_stats("=== WPN_Longsword Object Memory Dump ===");
+                    log_stats("Object addr: %p", obj);
+
+                    // Dump raw bytes
+                    uint8_t buf[128];
+                    vm_size_t size = sizeof(buf);
+                    vm_offset_t data;
+                    if (vm_read(mach_task_self(), (vm_address_t)obj, size, &data, (mach_msg_type_number_t*)&size) == KERN_SUCCESS) {
+                        memcpy(buf, (void*)data, sizeof(buf));
+                        vm_deallocate(mach_task_self(), data, size);
+
+                        for (int off = 0; off < 128; off += 16) {
+                            log_stats("+%02x: %02x %02x %02x %02x %02x %02x %02x %02x  %02x %02x %02x %02x %02x %02x %02x %02x",
+                                off,
+                                buf[off+0], buf[off+1], buf[off+2], buf[off+3],
+                                buf[off+4], buf[off+5], buf[off+6], buf[off+7],
+                                buf[off+8], buf[off+9], buf[off+10], buf[off+11],
+                                buf[off+12], buf[off+13], buf[off+14], buf[off+15]);
+                        }
+
+                        // Try to interpret IndexedProperties at +0x08
+                        void *idx_buf = NULL;
+                        uint32_t idx_size = 0;
+                        if (safe_read_ptr((char*)obj + 0x08, &idx_buf)) {
+                            log_stats("IndexedProperties.buf (raw read): %p", idx_buf);
+                        }
+                        if (safe_read_u32((char*)obj + 0x0C, &idx_size)) {
+                            log_stats("IndexedProperties +0x0C (u32): %u", idx_size);
+                        }
+                        if (safe_read_u32((char*)obj + 0x10, &idx_size)) {
+                            log_stats("IndexedProperties +0x10 (u32): %u", idx_size);
+                        }
+                        if (safe_read_u32((char*)obj + 0x14, &idx_size)) {
+                            log_stats("IndexedProperties +0x14 (u32): %u", idx_size);
+                        }
+                    }
+                    log_stats("=== End Dump ===");
+                }
+            }
             return obj;
         }
     }

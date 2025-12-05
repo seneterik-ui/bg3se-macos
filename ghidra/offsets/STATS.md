@@ -54,8 +54,18 @@ struct RPGStats {
 
 | Member | Offset | Verified Values |
 |--------|--------|-----------------|
+| `ModifierValueLists` | `+0x00` | size=112 (112 RPGEnumeration types - enums, ConstantInt, etc.) |
 | `ModifierLists` | `+0x60` | size=9 (9 stat types: Weapon, Armor, Character, etc.) |
 | `Objects` | `+0xC0` | size=15,774 (all stat entries in the game) |
+
+**ModifierValueLists (Dec 5, 2025):**
+```
+RPGStats+0x00: ModifierValueLists (CNamedElementManager<RPGEnumeration>)
+  buf  = 0x1231b4e00
+  cap  = 128
+  size = 112  (112 enum types for property type definitions)
+```
+These enumerations define property types like ConstantInt, ConstantFloat, FixedString, etc.
 
 **Sample Runtime Values:**
 ```
