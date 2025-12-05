@@ -5,10 +5,34 @@
 # Full analysis of BG3 (1GB+) can take hours; this reduces it to minutes.
 
 from ghidra.app.script import GhidraScript
+import time
 
-print("=" * 60)
-print("Optimizing Ghidra Analysis Settings")
-print("=" * 60)
+# Progress tracking - initialize log file
+PROGRESS_FILE = "/tmp/ghidra_progress.log"
+
+def progress(msg, pct=None):
+    """Log progress to file and console."""
+    line = "[%s] %s" % (time.strftime("%H:%M:%S"), msg)
+    if pct is not None:
+        line += " (%d%%)" % pct
+        try:
+            monitor.setMaximum(100)
+            monitor.setProgress(int(pct))
+        except:
+            pass
+    try:
+        monitor.setMessage(str(msg))
+    except:
+        pass
+    print(line)
+    with open(PROGRESS_FILE, "a") as f:
+        f.write(line + "\n")
+
+# Clear progress log at start (prescript runs first)
+with open(PROGRESS_FILE, "w") as f:
+    f.write("[%s] === Ghidra Analysis Started ===\n" % time.strftime("%H:%M:%S"))
+
+progress("Optimizing Ghidra Analysis Settings", 0)
 
 # Disable slow analyzers that we don't need
 slow_analyzers = [
@@ -33,23 +57,27 @@ needed_analyzers = [
     "Entry Point",                      # Basic entry analysis
 ]
 
-print("\nDisabling slow analyzers:")
+progress("Disabling slow analyzers", 25)
+disabled_count = 0
 for analyzer in slow_analyzers:
     try:
         setAnalysisOption(currentProgram, analyzer, "false")
         print("  - Disabled: {}".format(analyzer))
+        disabled_count += 1
     except:
         pass  # Analyzer might not exist
 
-print("\nEnsuring needed analyzers are enabled:")
+progress("Disabled %d slow analyzers" % disabled_count, 50)
+
+progress("Enabling needed analyzers", 60)
+enabled_count = 0
 for analyzer in needed_analyzers:
     try:
         setAnalysisOption(currentProgram, analyzer, "true")
         print("  + Enabled: {}".format(analyzer))
+        enabled_count += 1
     except:
         pass  # Analyzer might not exist
 
-print("\n" + "=" * 60)
-print("Analysis optimization complete")
-print("Run main script with -postScript to use these settings")
-print("=" * 60)
+progress("Enabled %d needed analyzers" % enabled_count, 75)
+progress("Optimization complete, starting analysis...", 80)

@@ -1,6 +1,10 @@
 # Quick search for functions near component string addresses
 # No analysis required - just memory pattern search
 
+from progress_utils import init_progress, progress, finish_progress
+
+init_progress("quick_component_search.py")
+
 fm = currentProgram.getFunctionManager()
 memory = currentProgram.getMemory()
 refManager = currentProgram.getReferenceManager()
@@ -21,9 +25,14 @@ component_strings = {
     "ALL_COMPONENTS_META": 0x107ba7dd3,
 }
 
+progress("Searching for component string references", 10)
 print("\nSearching for references to component strings...")
 
-for name, addr_val in component_strings.items():
+total = len(component_strings)
+for idx, (name, addr_val) in enumerate(component_strings.items()):
+    pct = 10 + (idx * 60 // total)
+    progress("Searching %s" % name, pct)
+
     addr = currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(addr_val)
     print("\n=== {} @ 0x{:x} ===".format(name, addr_val))
 
@@ -59,6 +68,7 @@ for name, addr_val in component_strings.items():
 
 # Collect functions that reference component strings
 # These are likely GetComponent implementations or registration sites
+progress("Finding functions with multiple component refs", 75)
 print("\n=== Functions Referencing Multiple Component Strings ===")
 
 func_component_refs = {}  # func_addr -> list of component names
@@ -81,6 +91,7 @@ for name, addr_val in component_strings.items():
 multi_ref_funcs = [(addr, comps) for addr, comps in func_component_refs.items() if len(comps) >= 2]
 multi_ref_funcs.sort(key=lambda x: -len(x[1]))  # Sort by most references first
 
+progress("Generating report", 90)
 print("Found {} functions referencing 2+ component strings:".format(len(multi_ref_funcs)))
 for func_addr, comps in multi_ref_funcs[:20]:  # Limit to top 20
     func = fm.getFunctionAt(currentProgram.getAddressFactory().getDefaultAddressSpace().getAddress(func_addr))
@@ -91,3 +102,5 @@ for func_addr, comps in multi_ref_funcs[:20]:  # Limit to top 20
 print("\n" + "=" * 60)
 print("Search complete")
 print("=" * 60)
+
+finish_progress()

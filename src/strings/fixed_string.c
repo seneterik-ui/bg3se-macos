@@ -237,7 +237,11 @@ static bool discover_arm64_offsets(void *gst);
 
 // Ghidra analysis shows gGlobalStringTable is typically a static pointer
 #define GHIDRA_BASE_ADDRESS           0x100000000ULL
-#define OFFSET_GLOBAL_STRING_TABLE    0x0ULL  // Set to 0 = not yet discovered
+
+// GlobalStringTable pointer discovered via Ghidra analysis of ls::gst::Get()
+// Ghidra address 0x108aeccd8 → offset 0x8aeccd8 from module base
+// See ghidra/offsets/GLOBALSTRINGTABLE.md for details
+#define OFFSET_GLOBAL_STRING_TABLE    0x108aeccd8ULL
 
 // Known RPGStats offset (verified working) - GlobalStringTable is likely nearby
 // This is the full Ghidra address (0x1089c5730), not just the offset

@@ -2,11 +2,11 @@
 
 **Baldur's Gate 3 Script Extender for macOS**
 
-A native macOS implementation of the BG3 Script Extender, enabling mods that require scripting capabilities (like "More Reactive Companions") to work on Mac.
+A native macOS implementation of the BG3 Script Extender, working toward full feature parity with Norbyte's Windows BG3SE. Enables mods that require scripting capabilities to work on Mac—including companion mods, gameplay tweaks, UI enhancements, and more. Development is powered by headless Ghidra analysis, a live Lua console, and comprehensive offset documentation.
 
 ## Status
 
-🎉 **MRC Mod Integration Working!** - SE mods load, execute, and receive real game data on macOS!
+Script Extender mods now load and execute on macOS with real game data. Lua scripts, Osiris event listeners, entity queries, and stat lookups are functional—enabling most mods that don't rely on Windows-specific APIs.
 
 | Phase | Status | Notes |
 |-------|--------|-------|
@@ -27,8 +27,9 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 | GUID → Entity Lookup | ✅ Complete | ARM64 ABI fix for TryGetSingleton (see below) |
 | TypeId Discovery | ✅ Complete | 11 component indices discovered at SessionLoaded |
 | Component Access | 🔄 In Progress | Data structure traversal implemented, testing with discovered indices |
+| Stats API | ✅ Complete | 15,774 stats accessible, FixedString resolution working |
 
-### Verified Working (Dec 3, 2025)
+### Verified Working (Dec 5, 2025)
 
 - ✅ Steam launch with injection via wrapper script
 - ✅ Universal binary (ARM64 native + x86_64 Rosetta)
@@ -60,6 +61,10 @@ A native macOS implementation of the BG3 Script Extender, enabling mods that req
 - ✅ **TypeId discovery with deferred retry** - 11 component indices discovered at SessionLoaded
 - ✅ **Safe memory APIs** - Crash-safe memory reading via mach_vm_read
 - ✅ **Function name caching** - Osiris function names extracted via Signature->Name indirection
+- ✅ **GlobalStringTable discovered (Dec 5, 2025)** - GST pointer at offset `0x8aeccd8`
+- ✅ **FixedString resolution working** - 47,326+ strings resolved successfully
+- ✅ **Ext.Stats.GetAll() returns 15,774 stat names** - Full string names, not indices
+- ✅ **Ext.Stats.Get(name) retrieves stats by name** - Property access via `__index`
 
 ## Compatibility
 

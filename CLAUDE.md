@@ -116,8 +116,10 @@ cd build && cmake .. && cmake --build .
 ### Testing
 ```bash
 ./scripts/launch_bg3.sh  # Launches BG3 with dylib injected
-tail -f ~/Library/Application\ Support/BG3SE/bg3se.log  # Watch logs in real-time
+tail -f /Users/tomdimino/Library/Application\ Support/BG3SE/bg3se.log  # Watch logs in real-time
 ```
+
+**Important:** Use full path `/Users/tomdimino/Library/Application Support/BG3SE/` for log and command files. The `~` shortcut doesn't always expand correctly in shell pipelines.
 
 ### Live Console (Rapid Iteration)
 
@@ -125,17 +127,19 @@ Send Lua commands to the running game without restart:
 
 ```bash
 # Terminal 1: Watch output
-tail -f ~/Library/Application\ Support/BG3SE/bg3se.log
+tail -f /Users/tomdimino/Library/Application\ Support/BG3SE/bg3se.log
 
 # Terminal 2: Send commands
-echo 'Ext.Print("test")' >> ~/Library/Application\ Support/BG3SE/commands.txt
+echo 'Ext.Print("test")' > /Users/tomdimino/Library/Application\ Support/BG3SE/commands.txt
 
 # Memory inspection
-echo 'Ext.Print(Ext.Memory.Read(Ext.Memory.GetModuleBase("Baldur"), 16))' >> ~/Library/Application\ Support/BG3SE/commands.txt
+echo 'Ext.Print(Ext.Memory.Read(Ext.Memory.GetModuleBase("Baldur"), 16))' > /Users/tomdimino/Library/Application\ Support/BG3SE/commands.txt
 
 # Search for byte patterns
-echo 'local r = Ext.Memory.Search("50 72 6F 66", 0x100000000, 0x100000000); Ext.Print("Found: " .. #r)' >> ~/Library/Application\ Support/BG3SE/commands.txt
+echo 'local r = Ext.Memory.Search("50 72 6F 66", 0x100000000, 0x100000000); Ext.Print("Found: " .. #r)' > /Users/tomdimino/Library/Application\ Support/BG3SE/commands.txt
 ```
+
+**Note:** Use `>` (overwrite) instead of `>>` (append) to avoid multi-line parsing issues.
 
 **Console Constraints:**
 - Each line is a separate `luaL_dostring()` call - no multi-line constructs
@@ -144,8 +148,8 @@ echo 'local r = Ext.Memory.Search("50 72 6F 66", 0x100000000, 0x100000000); Ext.
 - Use single-line Lua only (or define functions in mod files)
 
 ### Debugging
-- All logs go to `~/Library/Application Support/BG3SE/bg3se.log` and syslog
-- Cache files stored in `~/Library/Application Support/BG3SE/`
+- All logs go to `/Users/tomdimino/Library/Application Support/BG3SE/bg3se.log` and syslog
+- Cache files stored in `/Users/tomdimino/Library/Application Support/BG3SE/`
 - Use `log_message()` for consistent logging
 - Osiris events logged with `[Osiris]` prefix
 
@@ -227,25 +231,39 @@ See **Modular Architecture** section above for the design pattern. Steps:
 
 ### Ghidra Analysis
 
-For the 1GB+ BG3 binary, use the optimized analysis workflow:
+For the 1GB+ BG3 binary, **always use the wrapper script** to ensure optimized analysis:
 
 ```bash
-# OPTIMIZED: Run with prescript to disable slow analyzers
+# RECOMMENDED: Use wrapper script (auto-includes optimize_analysis.py)
+./ghidra/scripts/run_analysis.sh find_modifierlist_offsets.py
+
+# Monitor progress in real-time:
+tail -f /tmp/ghidra_progress.log
+```
+
+The wrapper script:
+- Automatically applies `optimize_analysis.py` prescript (prevents 2-3x slower analysis)
+- Logs progress to `/tmp/ghidra_progress.log` for real-time monitoring
+- Saves full output to `/tmp/ghidra_output.log`
+
+**Available scripts:**
+- `find_modifierlist_offsets.py` - Find ModifierList structure offsets
+- `find_rpgstats.py` - Find gRPGStats global pointer
+- `find_uuid_mapping.py` - Find UuidToHandleMappingComponent for GUID lookup
+- `find_entity_offsets.py` - Discover Entity system offsets
+- `quick_component_search.py` - Find XREFs to component strings
+
+**Manual command (if needed):**
+```bash
 JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home" \
   ~/ghidra/support/analyzeHeadless ~/ghidra_projects BG3Analysis \
   -process BG3_arm64_thin \
   -scriptPath /Users/tomdimino/Desktop/Programming/bg3se-macos/ghidra/scripts \
   -preScript optimize_analysis.py \
-  -postScript quick_component_search.py
-
-# Key scripts in ghidra/scripts/:
-# - optimize_analysis.py     - Prescript that disables slow analyzers (Stack, Decompiler, etc.)
-# - quick_component_search.py - Find XREFs to component strings (needs analysis complete)
-# - find_uuid_mapping.py     - Find UuidToHandleMappingComponent for GUID lookup
-# - find_entity_offsets.py   - Discover Entity system offsets and component strings
+  -postScript <your_script.py>
 ```
 
-**Note:** The prescript disables slow analyzers (ARM Constant Reference, Decompiler Parameter ID, Stack) that would cause analysis to hang. Reference and Data Reference analyzers are kept enabled for XREF discovery.
+**Note:** The prescript disables slow analyzers (ARM Constant Reference, Decompiler Parameter ID, Stack) that would cause analysis to take hours instead of 30-45 minutes.
 
 ## Codebase Search
 

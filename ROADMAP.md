@@ -37,7 +37,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
 | `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
 | `Ext.Entity` | ✅ Full | ⚠️ Basic access | **40%** | 2 |
-| `Ext.Stats` | ✅ Full | ⚠️ Read + partial write | **60%** | 3 |
+| `Ext.Stats` | ✅ Full | ✅ Read working, write partial | **75%** | 3 |
 | `Ext.Events` | ✅ Full | ⚠️ 3 events only | **10%** | 2.5 |
 | `Ext.Timer` | ✅ Full | ❌ Not impl | **0%** | 2.3 |
 | `Ext.Vars` | ✅ Full | ❌ Not impl | **0%** | 2.6 |
@@ -359,9 +359,20 @@ end)
 ## Phase 3: Stats System
 
 ### 3.1 Ext.Stats API
-**Status:** 🔄 In Progress (v0.11.0) - Read-only API implemented
+**Status:** ✅ Core Complete (v0.11.0) - FixedString resolution working, 15,774 stats accessible
 
 Access and modify game statistics, character builds, and item properties.
+
+**GlobalStringTable & FixedString Resolution (Dec 5, 2025):**
+- ✅ Found `ls::gst::Get()` function at `0x1064bb224` via Ghidra analysis
+- ✅ GST pointer global variable at offset `0x8aeccd8` from module base
+- ✅ Confirmed GST heap address: `0x1501f8000` (runtime verified)
+- ✅ Decoded SubTable structure: `0x1200` bytes each, 11 SubTables
+- ✅ StringEntry: `+0x00` Hash, `+0x04` RefCount, `+0x08` Length, `+0x18` String
+- ✅ **Implemented `fixed_string_resolve()` - 47,326 strings resolved successfully**
+- ✅ **Ext.Stats.GetAll() returns 15,774 stat names** (full names, not indices)
+- ✅ **Ext.Stats.Get(name) retrieves stats by name**
+- [ ] Enable type filtering for GetAll() (ModifierList name resolution pending)
 
 **Implemented API (v0.11.0):**
 ```lua
@@ -398,16 +409,18 @@ end
 - [x] Created `stats_manager.c/h` module for C-level access
 - [x] Created `lua_stats.c/h` for Lua bindings
 - [x] StatsObject userdata with `__index`, `__newindex`, `__tostring`
+- [x] **GlobalStringTable access** - offset `0x8aeccd8`, 47,326+ strings resolved
+- [x] **Ext.Stats.GetAll()** - returns all 15,774 stat names
+- [x] **Ext.Stats.Get(name)** - retrieves stats by name with property access
+- [x] **stat.Name** - returns resolved string name
 
-**Pending (from API.md):**
-- [ ] **Property read access** via `__index` (Damage, DamageType, SpellFlags, Requirements, etc.)
+**Pending:**
+- [ ] **Type filtering** - `Ext.Stats.GetAll("Weapon")` (needs ModifierList name resolution)
+- [ ] **stat.Type** - resolve type from ModifierListIndex
 - [ ] **Property write access** via `__newindex` (`stat.Damage = "2d6"`)
-- [ ] **Table property handling** - Must reassign after modification
 - [ ] `stat:Sync()` - Propagate changes to clients
 - [ ] `Ext.Stats.Create(name, type, template)` - Create new stats
-- [ ] `Ext.Stats.GetStatsLoadedBefore(modGuid, type)` - Mod ordering
 - [ ] **Level scaling** - `Ext.Stats.Get(name, level)` parameter
-- [ ] `Ext.Stats.ExtraData` - Access Data.txt entries
 
 **Supported Stat Types (from API.md):**
 - `StatusData`, `SpellData`, `PassiveData`, `Armor`, `Weapon`, `Character`, `Object`

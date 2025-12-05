@@ -15,8 +15,9 @@
 #include <syslog.h>
 #include <dlfcn.h>
 #include "../../lib/fishhook/fishhook.h"
+#include "../core/logging.h"
 
-// Log helper
+// Log helper - now uses central logging
 static void hook_log(const char *format, ...) {
     va_list args;
     char buffer[1024];
@@ -25,13 +26,8 @@ static void hook_log(const char *format, ...) {
     vsnprintf(buffer, sizeof(buffer), format, args);
     va_end(args);
 
-    syslog(LOG_ERR, "[BG3SE-Hooks] %s", buffer);
-
-    FILE *f = fopen("/tmp/bg3se_macos.log", "a");
-    if (f) {
-        fprintf(f, "[HOOK] %s\n", buffer);
-        fclose(f);
-    }
+    // Use centralized logging
+    log_message("[HOOK] %s", buffer);
 }
 
 // Track hook state

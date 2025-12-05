@@ -15,6 +15,7 @@ Expected pattern from Windows BG3SE:
 
 from ghidra.program.model.symbol import SourceType
 from ghidra.program.model.address import AddressSet
+from progress_utils import init_progress, progress, finish_progress
 import re
 
 def find_string_address(search_str):
@@ -108,7 +109,9 @@ def search_for_stats_patterns():
         "GetStatsExtraDataValue",
     ]
 
-    for pattern in patterns:
+    for i, pattern in enumerate(patterns):
+        pct = 20 + (i * 40 // len(patterns))
+        progress("Searching for: %s" % pattern, pct)
         print("\n[*] Searching for: {}".format(pattern))
         addr = find_string_address(pattern)
 
@@ -124,6 +127,7 @@ def search_data_segment():
     """Search __DATA segment for potential RPGStats pointer."""
     memory = currentProgram.getMemory()
 
+    progress("Searching __DATA segment", 70)
     print("\n" + "=" * 60)
     print("Searching __DATA segment for potential stats pointers")
     print("=" * 60)
@@ -137,9 +141,13 @@ def search_data_segment():
 
 def main():
     """Main entry point."""
+    init_progress("find_rpgstats.py")
+
     print("\n" + "=" * 60)
     print("RPGStats Global Pointer Finder")
     print("=" * 60 + "\n")
+
+    progress("Starting RPGStats search", 10)
 
     # Search for string patterns
     search_for_stats_patterns()
@@ -147,11 +155,14 @@ def main():
     # Search data segments
     search_data_segment()
 
+    progress("Analysis complete", 90)
     print("\n[*] Analysis complete")
     print("[*] Manual next steps:")
     print("    1. Find XREFs to identified strings")
     print("    2. Trace ADRP+LDR patterns to find global pointers")
     print("    3. Verify pointer leads to CNamedElementManager structure")
+
+    finish_progress()
 
 if __name__ == "__main__":
     main()

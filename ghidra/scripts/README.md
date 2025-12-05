@@ -55,7 +55,24 @@ JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home" \
 
 | Script | Purpose | Status |
 |--------|---------|--------|
-| `find_arm64_global_string_table.py` | Search for GlobalStringTable via multiple patterns | Main script, unicode-safe |
+| `find_global_string_table.py` | **NEW** - Comprehensive GST finder with structure validation | Recommended |
+| `find_arm64_global_string_table.py` | Search for GlobalStringTable via multiple patterns | Exploratory |
+
+#### Running find_global_string_table.py
+
+```bash
+JAVA_HOME="/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home" \
+  ~/ghidra/support/analyzeHeadless ~/ghidra_projects BG3Analysis \
+  -process BG3_arm64_thin \
+  -noanalysis \
+  -scriptPath /Users/tomdimino/Desktop/Programming/bg3se-macos/ghidra/scripts \
+  -postScript find_global_string_table.py
+```
+
+This script uses three discovery methods:
+1. **String XREFs** - Finds references to "GlobalStringTable", "FixedString", etc.
+2. **Data section scan** - Validates pointers in __DATA against SubTable structure
+3. **ADD 0xC600 search** - Finds MainTable offset access patterns
 
 ## Archived Scripts
 

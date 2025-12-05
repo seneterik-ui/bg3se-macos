@@ -129,10 +129,10 @@ static bool safe_read_i32(void *addr, int32_t *out_value) {
 #define CNEM_OFFSET_NAMETOHASH    0x18   // HashMap start
 // NextHandle offset varies, determined at runtime
 
-// RPGStats offsets - empirically determined from runtime probing
-// Log analysis shows valid Objects manager at 0xC0 with 15,774 entries
-#define RPGSTATS_OFFSET_OBJECTS             0xC0   // CNamedElementManager<Object> Objects
-#define RPGSTATS_OFFSET_MODIFIER_LISTS      0x90   // CNamedElementManager<ModifierList> ModifierLists (estimated)
+// RPGStats offsets - empirically determined from runtime probing (Dec 2025)
+// Verified via console: ModifierLists has 9 entries, Objects has 15,774 entries
+#define RPGSTATS_OFFSET_OBJECTS             0xC0   // CNamedElementManager<Object> Objects (verified)
+#define RPGSTATS_OFFSET_MODIFIER_LISTS      0x60   // CNamedElementManager<ModifierList> ModifierLists (verified)
 
 // Array<T*> offsets within CNamedElementManager
 #define ARRAY_OFFSET_BUFFER       0x00
