@@ -29,12 +29,13 @@ Script Extender mods now load and execute on macOS with real game data. Lua scri
 | GUID → Entity Lookup | ✅ Complete | ARM64 ABI fix for TryGetSingleton (see below) |
 | TypeId Discovery | ✅ Complete | 11 component indices discovered at SessionLoaded |
 | Component Access | 🔄 In Progress | Data structure traversal implemented, testing with discovered indices |
-| Stats API | ✅ Complete | 15,774 stats accessible, property read working (`stat.Damage` → "1d8") |
+| Stats API | ✅ Complete | 15,774 stats accessible, property read/write working (`stat.Damage = "2d6"`) |
 | Timer API | ✅ Complete | WaitFor, Cancel, Pause, Resume, IsPaused, MonotonicTime |
 | Debug Console | ✅ Complete | Socket console + file-based, multi-line, commands, introspection |
 | Events API | ✅ Complete | 8 events with priority, Once, handler IDs, GameStateChanged, KeyInput |
 | PersistentVars | ✅ Complete | File-based persistence for mod data |
 | Input API | ✅ Complete | CGEventTap capture, hotkeys, key injection, KeyInput event |
+| Math API | ✅ Complete | Vector/matrix operations (vec3, vec4, mat3, mat4), scalars |
 
 ### Verified Working (Dec 5, 2025)
 
@@ -72,14 +73,15 @@ Script Extender mods now load and execute on macOS with real game data. Lua scri
 - ✅ **FixedString resolution working** - 47,326+ strings resolved successfully
 - ✅ **Ext.Stats.GetAll() returns 15,774 stat names** - Full string names, not indices
 - ✅ **Ext.Stats.Get(name) retrieves stats by name** - Property access via `__index`
-- ✅ **Stats property read working** - `stat.Damage` returns "1d8" for WPN_Longsword
+- ✅ **Stats property read/write working** - `stat.Damage = "2d6"` modifies stats at runtime
 - ✅ **Timer API complete** - Ext.Timer.WaitFor(), Cancel(), Pause(), Resume()
 - ✅ **Socket console (v0.15.0)** - Real-time bidirectional I/O via Unix socket, readline client
 - ✅ **Enhanced debug console** - Multi-line blocks, console commands (!probe, !dumpstat, etc.)
 - ✅ **Memory introspection APIs** - Ext.Debug.ReadPtr/U32/Float, ProbeStruct, HexDump
 - ✅ **Ext.Events expansion (v0.14.0)** - 7 events including GameStateChanged, priority ordering, Once flag
 - ✅ **PersistentVars (v0.14.0)** - File-based mod data persistence across sessions
-- ✅ **Ext.Input API (v0.16.0)** - CGEventTap keyboard capture, hotkey registration, key injection
+- ✅ **Ext.Input (v0.16.0)** - CGEventTap keyboard capture, hotkey registration, key injection
+- ✅ **Ext.Math (v0.17.0)** - Full vector/matrix library (vec3, vec4, mat3, mat4), transforms, decomposition
 
 ## Compatibility
 

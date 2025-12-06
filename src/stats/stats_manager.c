@@ -99,6 +99,16 @@ static bool safe_read_i32(void *addr, int32_t *out_value) {
     return true;
 }
 
+static bool safe_write_i32(void *addr, int32_t value) {
+    if (!addr) return false;
+
+    kern_return_t kr = vm_write(mach_task_self(),
+                                (vm_address_t)addr,
+                                (vm_offset_t)&value,
+                                sizeof(int32_t));
+    return kr == KERN_SUCCESS;
+}
+
 // ============================================================================
 // Symbol Resolution
 // ============================================================================
@@ -530,6 +540,40 @@ static const char* get_rpgstats_fixedstring(int32_t index) {
     return read_fixed_string(fs_addr);
 }
 
+// Find a string value in the RPGStats.FixedStrings pool
+// Returns pool index if found, -1 if not found
+static int32_t find_fixedstring_pool_index(const char *value) {
+    if (!value) return -1;
+
+    void *rpgstats = stats_manager_get_raw();
+    if (!rpgstats) return -1;
+
+    void *fs_array = (char*)rpgstats + RPGSTATS_OFFSET_FIXEDSTRINGS;
+
+    // Read buffer pointer
+    void *buf = NULL;
+    if (!safe_read_ptr(fs_array, &buf) || !buf) {
+        return -1;
+    }
+
+    // Read size
+    uint32_t size = 0;
+    if (!safe_read_u32((char*)fs_array + 0x0C, &size)) {
+        return -1;
+    }
+
+    // Search through the pool for matching string
+    for (uint32_t i = 1; i < size; i++) {  // Start at 1 since 0 is null
+        void *fs_addr = (char*)buf + i * sizeof(uint32_t);
+        const char *str = read_fixed_string(fs_addr);
+        if (str && strcmp(str, value) == 0) {
+            return (int32_t)i;
+        }
+    }
+
+    return -1;  // Not found
+}
+
 // Read FixedString - on macOS this is a 32-bit index into GlobalStringTable
 static const char* read_fixed_string(void *addr) {
     if (!addr) return NULL;
@@ -839,92 +883,129 @@ static int find_property_index_by_name(void *modifier_list, const char *prop_nam
 // Property Access (Read) - Implemented via IndexedProperties
 // ============================================================================
 
+// Helper: Resolve property name to index via ModifierList
+// Returns -1 on failure
+static int get_property_index(StatsObjectPtr obj, const char *prop) {
+    void *modifier_list = get_object_modifier_list(obj);
+    if (!modifier_list) return -1;
+    return find_property_index_by_name(modifier_list, prop);
+}
+
 const char* stats_get_string(StatsObjectPtr obj, const char *prop) {
     if (!obj || !prop) return NULL;
 
-    // Step 1: Get ModifierList for this object's type
-    void *modifier_list = get_object_modifier_list(obj);
-    if (!modifier_list) {
-        return NULL;
-    }
+    int prop_index = get_property_index(obj, prop);
+    if (prop_index < 0) return NULL;
 
-    // Step 2: Find the property index by name
-    int prop_index = find_property_index_by_name(modifier_list, prop);
-    if (prop_index < 0) {
-        return NULL;
-    }
-
-    // Step 3: Read IndexedProperties[prop_index]
     int32_t pool_index = stats_get_property_raw(obj, prop_index);
-    if (pool_index < 0) {
-        return NULL;  // Invalid or unset
-    }
+    if (pool_index < 0) return NULL;
 
-    // Step 4: Dereference from RPGStats.FixedStrings array
-    // The pool_index is an index into RPGStats.FixedStrings[], NOT GlobalStringTable
     return get_rpgstats_fixedstring(pool_index);
 }
 
 bool stats_get_int(StatsObjectPtr obj, const char *prop, int64_t *out_value) {
     if (!obj || !prop || !out_value) return false;
 
-    // Step 1: Get ModifierList for this object's type
-    void *modifier_list = get_object_modifier_list(obj);
-    if (!modifier_list) {
-        return false;
-    }
+    int prop_index = get_property_index(obj, prop);
+    if (prop_index < 0) return false;
 
-    // Step 2: Find the property index by name
-    int prop_index = find_property_index_by_name(modifier_list, prop);
-    if (prop_index < 0) {
-        return false;
-    }
-
-    // Step 3: Read IndexedProperties[prop_index]
-    // For integer properties, the value is stored directly (not as pool index)
-    int32_t value = stats_get_property_raw(obj, prop_index);
-    if (value == -1) {
-        // Check if this is a valid -1 or an error
-        // We can't distinguish, so assume valid for now
-    }
-
-    *out_value = (int64_t)value;
+    *out_value = (int64_t)stats_get_property_raw(obj, prop_index);
     return true;
 }
 
 bool stats_get_float(StatsObjectPtr obj, const char *prop, float *out_value) {
     if (!obj || !prop || !out_value) return false;
 
-    // TODO: Implement property lookup
-    log_stats("stats_get_float not yet implemented");
-    return false;
+    int prop_index = get_property_index(obj, prop);
+    if (prop_index < 0) return false;
+
+    int32_t raw_value = stats_get_property_raw(obj, prop_index);
+    union { int32_t i; float f; } conv;
+    conv.i = raw_value;
+    *out_value = conv.f;
+    return true;
 }
 
 // ============================================================================
-// Property Access (Write) - Stub implementations
+// Property Access (Write)
 // ============================================================================
+
+// Helper: Get write address for a property in IndexedProperties array
+// Returns NULL on failure, logs errors with caller_name
+static void *get_property_write_address(StatsObjectPtr obj, const char *prop,
+                                         int *out_prop_index, const char *caller_name) {
+    int prop_index = get_property_index(obj, prop);
+    if (prop_index < 0) {
+        log_stats("%s: property '%s' not found", caller_name, prop);
+        return NULL;
+    }
+
+    void *idx_props = (char*)obj + OBJECT_OFFSET_INDEXED_PROPS;
+    void *begin_ptr = NULL;
+    if (!safe_read_ptr((char*)idx_props + VECTOR_OFFSET_BEGIN, &begin_ptr) || !begin_ptr) {
+        log_stats("%s: failed to read IndexedProperties", caller_name);
+        return NULL;
+    }
+
+    if (out_prop_index) *out_prop_index = prop_index;
+    return (char*)begin_ptr + prop_index * sizeof(int32_t);
+}
 
 bool stats_set_string(StatsObjectPtr obj, const char *prop, const char *value) {
     if (!obj || !prop || !value) return false;
 
-    log_stats("stats_set_string not yet implemented");
-    return false;
+    int prop_index;
+    void *write_addr = get_property_write_address(obj, prop, &prop_index, "stats_set_string");
+    if (!write_addr) return false;
+
+    int32_t pool_index = find_fixedstring_pool_index(value);
+    if (pool_index < 0) {
+        log_stats("stats_set_string: value '%s' not found in FixedStrings pool", value);
+        return false;
+    }
+
+    if (!safe_write_i32(write_addr, pool_index)) {
+        log_stats("stats_set_string: failed to write pool index");
+        return false;
+    }
+
+    log_stats("stats_set_string: %s = '%s' (prop_index=%d, pool_index=%d)", prop, value, prop_index, pool_index);
+    return true;
 }
 
 bool stats_set_int(StatsObjectPtr obj, const char *prop, int64_t value) {
     if (!obj || !prop) return false;
 
-    (void)value;  // Unused for now
-    log_stats("stats_set_int not yet implemented");
-    return false;
+    int prop_index;
+    void *write_addr = get_property_write_address(obj, prop, &prop_index, "stats_set_int");
+    if (!write_addr) return false;
+
+    int32_t val32 = (int32_t)value;
+    if (!safe_write_i32(write_addr, val32)) {
+        log_stats("stats_set_int: failed to write value");
+        return false;
+    }
+
+    log_stats("stats_set_int: %s = %d (index %d)", prop, val32, prop_index);
+    return true;
 }
 
 bool stats_set_float(StatsObjectPtr obj, const char *prop, float value) {
     if (!obj || !prop) return false;
 
-    (void)value;  // Unused for now
-    log_stats("stats_set_float not yet implemented");
-    return false;
+    int prop_index;
+    void *write_addr = get_property_write_address(obj, prop, &prop_index, "stats_set_float");
+    if (!write_addr) return false;
+
+    union { float f; int32_t i; } conv;
+    conv.f = value;
+    if (!safe_write_i32(write_addr, conv.i)) {
+        log_stats("stats_set_float: failed to write value");
+        return false;
+    }
+
+    log_stats("stats_set_float: %s = %f (index %d)", prop, value, prop_index);
+    return true;
 }
 
 // ============================================================================

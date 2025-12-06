@@ -87,6 +87,9 @@ extern "C" {
 // Input system
 #include "input.h"
 
+// Math library
+#include "math_ext.h"
+
 // Enable hooks (set to 0 to disable for testing)
 #define ENABLE_HOOKS 1
 
@@ -1559,6 +1562,13 @@ static void init_lua(void) {
         // Set Lua state for input event dispatch
         input_set_lua_state(L);
     }
+
+    // Register Ext.Math namespace
+    lua_getglobal(L, "Ext");
+    if (lua_istable(L, -1)) {
+        lua_math_register(L, lua_gettop(L));
+    }
+    lua_pop(L, 1);  // pop Ext
 
     // Add GetDiscoveredPlayers to Ext.Entity (uses main.c's player tracking)
     lua_getglobal(L, "Ext");

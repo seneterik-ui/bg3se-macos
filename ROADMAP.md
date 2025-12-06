@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.16.0
+## Current Status: v0.18.0
 
-**Overall Feature Parity: ~50%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
+**Overall Feature Parity: ~53%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -37,14 +37,14 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
 | `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
 | `Ext.Entity` | ✅ Full | ⚠️ Basic access | **40%** | 2 |
-| `Ext.Stats` | ✅ Full | ✅ Read complete (`stat.Damage` → "1d8") | **90%** | 3 |
+| `Ext.Stats` | ✅ Full | ✅ Read/Write complete (`stat.Damage = "2d6"`) | **95%** | 3 |
 | `Ext.Events` | ✅ Full | ✅ 7 events + advanced features | **75%** | 2.5 |
 | `Ext.Timer` | ✅ Full | ✅ Complete | **100%** | 2.3 |
 | `Ext.Debug` | ✅ Full | ✅ Complete | **100%** | 2.3 |
 | `Ext.Vars` | ✅ Full | ⚠️ PersistentVars only | **25%** | 2.6 |
 | `Ext.Net` | ✅ Full | ❌ Not impl | **0%** | 6 |
 | `Ext.UI` | ✅ Full | ❌ Not impl | **0%** | 8 |
-| `Ext.Math` | ✅ Full | ❌ Not impl | **0%** | 7.5 |
+| `Ext.Math` | ✅ Full | ✅ Complete | **95%** | 7.5 |
 | `Ext.Input` | ✅ Full | ✅ CGEventTap capture, hotkeys | **85%** | 9 |
 | `Ext.Level` | ✅ Full | ❌ Not impl | **0%** | 9 |
 | Console/REPL | ✅ Full | ✅ Socket + file-based | **90%** | 5 |
@@ -385,7 +385,7 @@ end)
 ## Phase 3: Stats System
 
 ### 3.1 Ext.Stats API
-**Status:** ✅ Complete (v0.11.0) - Property read working (`stat.Damage` → "1d8"), 15,774 stats accessible
+**Status:** ✅ Complete (v0.18.0) - Property read/write working (`stat.Damage = "2d6"`), 15,774 stats accessible
 
 Access and modify game statistics, character builds, and item properties.
 
@@ -446,8 +446,10 @@ end
 - [x] **Property read** - `stat.Damage` → "1d8" via IndexedProperties + FixedStrings
 - [x] **RPGSTATS_OFFSET_FIXEDSTRINGS = 0x348** - Discovered via Ghidra decompilation
 
+**Completed (v0.18.0):**
+- [x] **Property write access** via `__newindex` (`stat.Damage = "2d6"`)
+
 **Pending:**
-- [ ] **Property write access** via `__newindex` (`stat.Damage = "2d6"`)
 - [ ] `stat:Sync()` - Propagate changes to clients
 - [ ] `Ext.Stats.Create(name, type, template)` - Create new stats
 - [ ] **Level scaling** - `Ext.Stats.Get(name, level)` parameter
@@ -943,7 +945,7 @@ Ext.Mod.GetModInfo(guid)
 |----|---------|--------|--------|
 | A1 | Ext.Events API | Medium | ✅ 6 events + Tick (v0.13.0) |
 | A2 | PersistentVars | Medium | ✅ Complete |
-| A3 | Stats Property Read/Write | High | ✅ Read Complete |
+| A3 | Stats Property Read/Write | High | ✅ Complete (v0.18.0) |
 | A4 | Component Property Access | High | 🔄 In Progress |
 | A5 | NetChannel API | High | ❌ Not Started |
 | A6 | User Variables | High | ❌ Not Started |
@@ -963,7 +965,7 @@ Ext.Mod.GetModInfo(guid)
 
 | ID | Feature | Effort | Status |
 |----|---------|--------|--------|
-| C1 | Ext.Math Library | Medium | ❌ Not Started |
+| C1 | Ext.Math Library | Medium | ✅ Complete |
 | C2 | Enum/Bitfield Objects | Medium | ❌ Not Started |
 | C3 | Console Commands | Low | ✅ Complete |
 | C6 | Ext.Debug APIs | Low | ✅ Complete |
@@ -987,6 +989,9 @@ Ext.Mod.GetModInfo(guid)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.18.0 | 2025-12-06 | Stats property write - `stat.Damage = "2d6"` modifies stats at runtime |
+| v0.17.0 | 2025-12-06 | Ext.Math library - vec3/vec4/mat3/mat4 operations, transforms, decomposition |
+| v0.16.0 | 2025-12-06 | Ext.Input API - CGEventTap keyboard capture, hotkey registration, key injection |
 | v0.15.0 | 2025-12-06 | Socket console with Unix domain socket, readline client, real-time bidirectional I/O |
 | v0.14.0 | 2025-12-06 | GameStateChanged event, game state tracking module, event-based state inference for macOS |
 | v0.13.0 | 2025-12-06 | Ext.Events expansion (Tick, StatsLoaded, ModuleLoadStarted), priority/Once/handler IDs, Ext.OnNextTick |
