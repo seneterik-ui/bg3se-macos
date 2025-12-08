@@ -94,18 +94,87 @@ socat - UNIX-CONNECT:/tmp/bg3se.sock
 
 ```
 bg3se-macos/
-├── src/                    # Source code
-│   ├── injector/main.c     # Core injection, hooks, Lua state
-│   ├── lua/                # Ext.* API implementations
-│   ├── entity/             # Entity Component System
-│   ├── stats/              # RPGStats system
-│   └── ...
-├── docs/                   # Documentation
-├── ghidra/                 # Reverse engineering
-│   ├── scripts/            # Ghidra Python scripts
-│   └── offsets/            # Offset documentation
-├── tools/                  # PAK extractor, Frida, test mods
-└── scripts/                # Build and launch scripts
+├── src/
+│   ├── injector/
+│   │   └── main.c              # Core injection, Dobby hooks, Lua state init
+│   ├── core/
+│   │   ├── logging.c/h         # Structured logging (14 modules, 4 levels)
+│   │   ├── safe_memory.c/h     # Safe memory read/write (mach_vm)
+│   │   └── version.h           # Version info, data paths
+│   ├── lua/
+│   │   ├── lua_ext.c/h         # Ext.Print, Ext.Utils, Ext.Memory
+│   │   ├── lua_stats.c/h       # Ext.Stats API
+│   │   ├── lua_events.c/h      # Ext.Events system
+│   │   ├── lua_timer.c/h       # Ext.Timer API
+│   │   ├── lua_osiris.c/h      # Osi.* namespace bindings
+│   │   ├── lua_debug.c/h       # Ext.Debug memory introspection
+│   │   ├── lua_json.c/h        # JSON encode/decode
+│   │   └── lua_persistentvars.c/h  # Ext.Vars persistence
+│   ├── entity/
+│   │   ├── entity_system.c/h   # Core ECS, Lua bindings
+│   │   ├── guid_lookup.c/h     # GUID parsing, HashMap ops
+│   │   ├── arm64_call.c/h      # ARM64 ABI wrappers (x8 indirect return)
+│   │   ├── component_*.c/h     # Component registry, lookup, TypeId
+│   │   └── entity_storage.h    # Storage structures, Ghidra base addr
+│   ├── stats/
+│   │   └── stats_manager.c/h   # RPGStats access, property resolution
+│   ├── strings/
+│   │   └── fixed_string.c/h    # GlobalStringTable resolution
+│   ├── osiris/
+│   │   ├── osiris_functions.c/h    # Osiris function lookup/call
+│   │   ├── osiris_types.h      # FuncDef, OsiArgumentDesc structs
+│   │   └── pattern_scan.c/h    # Memory pattern scanning
+│   ├── console/
+│   │   └── console.c/h         # Socket + file-based console
+│   ├── input/
+│   │   ├── input_hooks.m       # macOS input event hooks
+│   │   └── lua_input.c         # Ext.Input API
+│   ├── overlay/
+│   │   └── overlay.m/h         # In-game debug overlay (NSWindow)
+│   ├── timer/
+│   │   └── timer.c/h           # Timer system implementation
+│   ├── game/
+│   │   └── game_state.c/h      # Game state tracking
+│   ├── mod/
+│   │   └── mod_loader.c/h      # Mod detection, PAK loading
+│   ├── pak/
+│   │   └── pak_reader.c/h      # LSPK v18 PAK file parsing
+│   ├── math/
+│   │   └── math_ext.c/h        # Ext.Math vector/matrix ops
+│   └── hooks/
+│       └── osiris_hooks.c/h    # Osiris event interception
+│
+├── ghidra/
+│   ├── scripts/                # Ghidra Python analysis scripts
+│   │   ├── run_analysis.sh     # Headless analyzer wrapper
+│   │   ├── find_rpgstats.py    # Discover gRPGStats global
+│   │   ├── find_entity_offsets.py
+│   │   └── ...
+│   └── offsets/                # Discovered offset documentation
+│       ├── STATS.md            # RPGStats, FixedStrings (0x348)
+│       ├── ENTITY_SYSTEM.md    # ECS architecture
+│       └── ...
+│
+├── docs/                       # User-facing documentation
+├── tools/
+│   ├── bg3se-console.c         # Standalone readline console client
+│   ├── extract_pak.py          # PAK file extractor
+│   └── frida/                  # Frida instrumentation scripts
+│
+├── scripts/
+│   ├── build.sh                # Build script
+│   ├── bg3w.sh                 # Steam launch wrapper (ARM64)
+│   ├── bg3w-intel.sh           # Steam launch wrapper (Intel)
+│   └── launch_bg3.sh           # Direct launch for testing
+│
+├── lib/                        # Third-party libraries
+│   ├── Dobby/                  # Inline hooking framework
+│   ├── lua/                    # Lua 5.4
+│   └── lz4/                    # Compression for PAK files
+│
+├── agent_docs/                 # Claude Code context docs
+├── plans/                      # Implementation plans
+└── test-mods/                  # Test mod examples
 ```
 
 ## Acknowledgments
