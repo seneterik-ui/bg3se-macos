@@ -1,0 +1,59 @@
+{
+  "mcpServers": {
+    "perplexity": {
+      "description": "Perplexity AI search - ARM64 docs, Ghidra scripting, reverse engineering",
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "/Users/tomdimino/Documents/Cline/MCP/perplexity-mcp/build/index.js"
+      ],
+      "env": {
+        "PERPLEXITY_API_KEY": "YOUR_PERPLEXITY_API_KEY_HERE"
+      },
+      "setup": {
+        "instructions": [
+          "Install: Clone https://github.com/your-repo/perplexity-mcp",
+          "Build: npm install && npm run build",
+          "Get API key from: https://www.perplexity.ai/settings/api",
+          "Replace YOUR_PERPLEXITY_API_KEY_HERE with your actual key"
+        ]
+      }
+    },
+    "context7": {
+      "description": "Context7 library documentation - Lua 5.4, CMake, C/C++ reference",
+      "type": "http",
+      "url": "https://mcp.context7.com/mcp",
+      "setup": {
+        "instructions": [
+          "No installation needed - HTTP endpoint",
+          "Public API, no authentication required",
+          "Useful for: Lua C API, CMake documentation, library docs"
+        ]
+      }
+    }
+  },
+  "plugins": {
+    "exa-mcp-server": {
+      "description": "Exa AI web search and code context search",
+      "package": "exa",
+      "setup": {
+        "instructions": [
+          "This is a Claude Code plugin, not a standard MCP server",
+          "Install via: claude mcp add plugin:exa-mcp-server:exa",
+          "Useful for: searching GitHub issues, ARM64 ABI docs, Ghidra API"
+        ]
+      }
+    }
+  },
+  "metadata": {
+    "version": "1.0.0",
+    "description": "BG3SE-macOS development MCP configuration",
+    "lastUpdated": "2025-12-09",
+    "notes": [
+      "Minimal set of MCP servers for C/reverse engineering workflow",
+      "perplexity: Research ARM64, Ghidra scripting, game engine internals",
+      "context7: Lua C API, CMake, library documentation",
+      "Replace placeholder API keys with your actual keys"
+    ]
+  }
+}

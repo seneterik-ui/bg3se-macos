@@ -41,7 +41,7 @@ echo 'Ext.Print("test")' > "/Users/tomdimino/Library/Application Support/BG3SE/c
 
 ## Codebase Search (osgrep)
 
-> **Priority:** Use OSGrep for all semantic search in this repo or BG3SE. At session start, invoke the `osgrep-reference` skill for CLI options and search strategies.
+> **Priority:** Use OSGrep for all semantic search in this repo or BG3SE. Invoke `osgrep-reference` skill for CLI options. Invoke `bg3se-macos-ghidra` skill for Ghidra workflows, ARM64 patterns, and troubleshooting.
 
 **Semantic search** - use natural language queries, not just keywords:
 

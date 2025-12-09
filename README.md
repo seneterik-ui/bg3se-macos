@@ -71,8 +71,9 @@ See [ROADMAP.md](ROADMAP.md) for detailed progress.
 | **[docs/api-reference.md](docs/api-reference.md)** | Complete Ext.* and Osi.* API docs |
 | **[docs/architecture.md](docs/architecture.md)** | Technical deep-dive: injection, hooks, ARM64 |
 | **[docs/development.md](docs/development.md)** | Contributing, building features, debugging |
-| **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common issues and solutions |
+| **[docs/contributor-workflow.md](docs/contributor-workflow.md)** | End-to-end guide: research, Ghidra, implementation |
 | **[docs/reverse-engineering.md](docs/reverse-engineering.md)** | Ghidra workflows, offset discovery |
+| **[docs/troubleshooting.md](docs/troubleshooting.md)** | Common issues and solutions |
 
 ## Live Console
 

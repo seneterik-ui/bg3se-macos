@@ -9,6 +9,9 @@ description: |
   (5) Understanding ECS architecture, Osiris integration, or stats system
   (6) Analyzing ARM64 assembly or calling conventions for game hooks
   (7) Writing or modifying Ghidra Python scripts for BG3 analysis
+version: 0.20.0
+last_updated: 2025-12-09
+allowed-tools: "Bash(cmake:*), Bash(osgrep:*), Bash(./scripts/*), Read"
 ---
 
 # BG3 Script Extender macOS + Ghidra Development
@@ -219,7 +222,58 @@ For detailed information, see:
 5. Implement in C with runtime address calculation
 
 ### Porting Windows Feature
+
 1. Search Windows BG3SE with osgrep: `osgrep "feature name" -p /path/to/bg3se`
 2. Understand the Windows implementation pattern
 3. Find equivalent ARM64 offsets with Ghidra
 4. Adapt for macOS constraints (Hardened Runtime, ARM64 ABI)
+
+## Troubleshooting
+
+**Game crashes on launch with dylib:**
+- Check dylib is signed: `codesign -dv build/lib/libbg3se.dylib`
+- Verify ARM64: `file build/lib/libbg3se.dylib`
+- Check SIP: `csrutil status` (should be enabled, we use DYLD injection)
+
+**Hooks not being called:**
+- Verify hooking libOsiris.dylib, not main binary (Hardened Runtime blocks __TEXT)
+- Check Dobby hook return value
+- Add logging before/after DobbyHook calls
+
+**Entity lookup returns NULL:**
+- EoCServer may not be initialized yet (hook later in game startup)
+- Verify offset 0x288 for EntityWorld is still valid
+- Check g_EntityWorld capture in entity_system.c
+
+**osgrep shows "indexed 0" or no results:**
+- Run from project directory: `cd /path/to/bg3se-macos && osgrep "query"`
+- Or use explicit path: `osgrep "query" -p /path/to/bg3se-macos`
+- Reindex if needed: `osgrep index --reset`
+
+**Ghidra headless analysis hangs:**
+- Always use `optimize_analysis.py` as prescript
+- Monitor: `tail -f /tmp/ghidra_progress.log`
+- Check Java heap: JAVA_OPTS="-Xmx8g"
+
+## osgrep Search Patterns
+
+```bash
+# Architecture/system questions (run from project dir)
+osgrep "how does entity component lookup work"
+osgrep "Lua API registration pattern"
+osgrep "ARM64 indirect return via x8"
+osgrep "Osiris event dispatch"
+
+# Finding implementations
+osgrep "Ext.Stats property resolution"
+osgrep "GUID to EntityHandle mapping"
+osgrep "socket console command processing"
+
+# Ghidra/offset discovery
+osgrep "ADRP LDR global pointer pattern"
+osgrep "decompile function address extraction"
+
+# Windows reference (use explicit path)
+osgrep "entity component binding" -p /Users/tomdimino/Desktop/Programming/bg3se
+osgrep "stats property accessor" -p /Users/tomdimino/Desktop/Programming/bg3se
+```

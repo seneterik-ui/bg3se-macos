@@ -40,3 +40,4 @@ scripts/launch_via_steam.sh
 
 # Archived plans (completed implementation plans)
 plans/archive/
+.osgrep
