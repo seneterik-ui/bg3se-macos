@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.19.0
+## Current Status: v0.21.0
 
 **Overall Feature Parity: ~55%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
 
@@ -36,7 +36,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Osiris` | ✅ Full | ✅ RegisterListener | **90%** | 1 |
 | `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
 | `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
-| `Ext.Entity` | ✅ Full | ⚠️ Basic access | **40%** | 2 |
+| `Ext.Entity` | ✅ Full | ⚠️ GUID lookup + GetAllEntitiesWithComponent | **50%** | 2 |
 | `Ext.Stats` | ✅ Full | ✅ Read/Write complete (`stat.Damage = "2d6"`) | **95%** | 3 |
 | `Ext.Events` | ✅ Full | ✅ 7 events + advanced features | **75%** | 2.5 |
 | `Ext.Timer` | ✅ Full | ✅ Complete | **100%** | 2.3 |
@@ -155,9 +155,13 @@ buffer + (componentSize * EntryIndex) → Component*
 - [x] **Deferred TypeId retry** - Retry at SessionLoaded when globals are initialized (v0.10.5)
 - [x] **Safe memory APIs** - mach_vm_read for crash-safe memory access (v0.10.5)
 
+**Completed (v0.21.0):**
+- [x] `entity:GetAllComponents()` - Return all attached components (as light userdata)
+- [x] `entity:GetAllComponentNames()` - List all component type names
+- [x] `Ext.Entity.GetAllEntitiesWithComponent(name)` - Get all entities with a component
+- [x] `Ext.Entity.CountEntitiesWithComponent(name)` - Count entities with a component
+
 **Pending (from API.md):**
-- [ ] `entity:GetAllComponents()` - Return all attached components
-- [ ] `entity:GetAllComponentNames()` - List all component type names
 - [ ] `entity:CreateComponent(name)` - Attach new component
 - [ ] `entity:RemoveComponent(name)` - Detach component (v22+)
 - [ ] `entity:GetEntityType()` - Numeric type ID
@@ -970,7 +974,7 @@ Ext.Mod.GetModInfo(guid)
 | B1 | Client Lua State | High | ❌ Not Started |
 | B2 | Timer API | Low | ✅ Complete |
 | B3 | Console/REPL | Medium | ✅ Complete (socket + file + in-game overlay) |
-| B4 | GetAllComponents | Low | ❌ Not Started |
+| B4 | GetAllComponents | Low | ✅ Complete |
 | B5 | Stats Create/Sync | Medium | ❌ Not Started |
 | B6 | Userdata Lifetime Scoping | Medium | ❌ Not Started |
 
@@ -1002,6 +1006,7 @@ Ext.Mod.GetModInfo(guid)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.21.0 | 2025-12-09 | GetAllEntitiesWithComponent/CountEntitiesWithComponent - entity enumeration by component type |
 | v0.20.0 | 2025-12-08 | Structured logging system - 14 modules, 4 log levels, timestamps, consistent formatting |
 | v0.19.0 | 2025-12-06 | In-game console overlay with Tanit symbol, Ctrl+` toggle, command history |
 | v0.18.0 | 2025-12-06 | Stats property write - `stat.Damage = "2d6"` modifies stats at runtime |

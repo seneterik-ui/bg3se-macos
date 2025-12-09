@@ -32,6 +32,10 @@ extern "C" {
 #define ENTITYWORLD_STORAGE_OFFSET      0x2d0   // EntityStorageContainer*
 #define ENTITYWORLD_CACHE_OFFSET        0x3f0   // ImmediateWorldCache*
 
+// EntityStorageContainer offsets (discovered via Ghidra Dec 2025)
+// TryGet decompilation shows: *(long *)this → Entities.buf at offset 0x00
+#define STORAGE_CONTAINER_ENTITIES_OFFSET   0x00   // Array<EntityStorageData*>
+
 // EntityStorageData offsets (from Windows reference + Ghidra decompilation)
 #define STORAGE_DATA_COMPONENTS_OFFSET          0x138  // Array<EntityStorageComponentPage*>
 #define STORAGE_DATA_COMPONENT_TYPE_TO_INDEX    0x180  // HashMap<ComponentTypeIndex, uint8_t>
@@ -94,14 +98,30 @@ typedef struct {
 //   K = uint64_t (EntityHandle)
 //   V = EntityStorageIndex (4 bytes)
 
-// StaticArray/Array layout (16 bytes each):
+// StaticArray layout (16 bytes) - used for hash buckets
 // offset +0x00: void* buf
-// offset +0x08: uint64_t size (or capacity for StaticArray)
-
+// offset +0x08: uint64_t size (single field, no separate capacity)
 typedef struct {
     void *buf;
     uint64_t size;
-} ArrayHeader;
+} StaticArray;
+
+// Array<T> layout (from Windows BG3SE CoreLib/Base/BaseArray.h)
+// Total size: 16 bytes - used for keys, values, nextIds
+typedef struct {
+    void *buf;          // +0x00: pointer to element array
+    uint32_t capacity;  // +0x08: capacity (uint32_t)
+    uint32_t size;      // +0x0C: current size (uint32_t)
+} GenericArray;
+
+// Legacy alias
+typedef StaticArray ArrayHeader;
+
+// Helper to access EntityStorageContainer::Entities array
+// Array<EntityStorageData*> at offset 0x00
+static inline GenericArray* storage_container_get_entities(void *storageContainer) {
+    return (GenericArray *)((char *)storageContainer + STORAGE_CONTAINER_ENTITIES_OFFSET);
+}
 
 // HashMap field offsets within the 64-byte HashMap structure
 #define HASHMAP_HASH_KEYS_OFFSET    0x00  // StaticArray<int32_t>
@@ -113,20 +133,26 @@ typedef struct {
 // Helper Macros for HashMap Access
 // ============================================================================
 
-// Get array header at offset from base pointer
-#define GET_ARRAY_HEADER(base, offset) ((ArrayHeader*)((char*)(base) + (offset)))
+// Get StaticArray at offset (for hash bucket arrays - uses uint64 size)
+#define GET_STATIC_ARRAY(base, offset) ((StaticArray*)((char*)(base) + (offset)))
 
-// Get hash keys array (bucket indices)
-#define GET_HASH_KEYS(map) GET_ARRAY_HEADER(map, HASHMAP_HASH_KEYS_OFFSET)
+// Get GenericArray at offset (for keys/values/nextIds - uses uint32 cap+size)
+#define GET_ARRAY(base, offset) ((GenericArray*)((char*)(base) + (offset)))
 
-// Get next IDs array (collision chains)
-#define GET_NEXT_IDS(map) GET_ARRAY_HEADER(map, HASHMAP_NEXT_IDS_OFFSET)
+// Legacy: Get array header at offset (same as GET_STATIC_ARRAY)
+#define GET_ARRAY_HEADER(base, offset) ((StaticArray*)((char*)(base) + (offset)))
 
-// Get keys array
-#define GET_KEYS(map) GET_ARRAY_HEADER(map, HASHMAP_KEYS_OFFSET)
+// Get hash keys array (bucket indices) - StaticArray<int32_t>
+#define GET_HASH_KEYS(map) GET_STATIC_ARRAY(map, HASHMAP_HASH_KEYS_OFFSET)
 
-// Get values array
-#define GET_VALUES(map) GET_ARRAY_HEADER(map, HASHMAP_VALUES_OFFSET)
+// Get next IDs array (collision chains) - Array<int32_t>
+#define GET_NEXT_IDS(map) GET_ARRAY(map, HASHMAP_NEXT_IDS_OFFSET)
+
+// Get keys array - Array<K>
+#define GET_KEYS(map) GET_ARRAY(map, HASHMAP_KEYS_OFFSET)
+
+// Get values array - Array<V> (or StaticArray<V> for some)
+#define GET_VALUES(map) GET_ARRAY(map, HASHMAP_VALUES_OFFSET)
 
 // ============================================================================
 // EntityHandle Utilities (for thread/bucket extraction)

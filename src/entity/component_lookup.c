@@ -99,14 +99,14 @@ bool storage_data_get_instance_index(void *storageData, uint64_t entityHandle,
     // InstanceToPageMap is at offset 0x1c0 from EntityStorageData
     void *map = (char *)storageData + STORAGE_DATA_INSTANCE_TO_PAGE_MAP;
 
-    // Get HashMap components
-    ArrayHeader *hashKeys = GET_HASH_KEYS(map);
-    ArrayHeader *nextIds = GET_NEXT_IDS(map);
-    ArrayHeader *keys = GET_KEYS(map);
-    ArrayHeader *values = GET_VALUES(map);
+    // Get HashMap components - hashKeys is StaticArray, others are GenericArray
+    StaticArray *hashKeys = GET_HASH_KEYS(map);
+    GenericArray *nextIds = GET_NEXT_IDS(map);
+    GenericArray *keys = GET_KEYS(map);
+    GenericArray *values = GET_VALUES(map);
 
     if (!hashKeys->buf || !keys->buf || !values->buf || hashKeys->size == 0) {
-        LOG_ENTITY_DEBUG("InstanceToPageMap: Empty or invalid (buckets=%llu)", hashKeys->size);
+        LOG_ENTITY_DEBUG("InstanceToPageMap: Empty or invalid (buckets=%llu)", (unsigned long long)hashKeys->size);
         return false;
     }
 
@@ -157,11 +157,11 @@ bool storage_data_get_component_slot(void *storageData, uint16_t typeIndex,
     // ComponentTypeToIndex is at offset 0x180 from EntityStorageData
     void *map = (char *)storageData + STORAGE_DATA_COMPONENT_TYPE_TO_INDEX;
 
-    // Get HashMap components
-    ArrayHeader *hashKeys = GET_HASH_KEYS(map);
-    ArrayHeader *nextIds = GET_NEXT_IDS(map);
-    ArrayHeader *keys = GET_KEYS(map);
-    ArrayHeader *values = GET_VALUES(map);
+    // Get HashMap components - hashKeys is StaticArray, others are GenericArray
+    StaticArray *hashKeys = GET_HASH_KEYS(map);
+    GenericArray *nextIds = GET_NEXT_IDS(map);
+    GenericArray *keys = GET_KEYS(map);
+    GenericArray *values = GET_VALUES(map);
 
     if (!hashKeys->buf || !keys->buf || !values->buf || hashKeys->size == 0) {
         LOG_ENTITY_DEBUG("ComponentTypeToIndex: Empty or invalid");
@@ -351,26 +351,26 @@ void component_lookup_dump_storage_data(void *storageData, uint64_t entityHandle
     }
 
     // Dump Components array info
-    ArrayHeader *components = GET_ARRAY_HEADER(storageData, STORAGE_DATA_COMPONENTS_OFFSET);
+    GenericArray *components = GET_ARRAY(storageData, STORAGE_DATA_COMPONENTS_OFFSET);
     LOG_ENTITY_DEBUG("Components (offset 0x%x):", STORAGE_DATA_COMPONENTS_OFFSET);
     LOG_ENTITY_DEBUG("  buf: %p", components->buf);
-    LOG_ENTITY_DEBUG("  size: %llu", components->size);
+    LOG_ENTITY_DEBUG("  size: %u", components->size);
 
     // Dump ComponentTypeToIndex HashMap info
     void *typeMap = (char *)storageData + STORAGE_DATA_COMPONENT_TYPE_TO_INDEX;
-    ArrayHeader *typeHashKeys = GET_HASH_KEYS(typeMap);
-    ArrayHeader *typeKeys = GET_KEYS(typeMap);
+    StaticArray *typeHashKeys = GET_HASH_KEYS(typeMap);
+    GenericArray *typeKeys = GET_KEYS(typeMap);
     LOG_ENTITY_DEBUG("ComponentTypeToIndex (offset 0x%x):", STORAGE_DATA_COMPONENT_TYPE_TO_INDEX);
-    LOG_ENTITY_DEBUG("  hashKeys.buf: %p, size: %llu", typeHashKeys->buf, typeHashKeys->size);
-    LOG_ENTITY_DEBUG("  keys.buf: %p, size: %llu", typeKeys->buf, typeKeys->size);
+    LOG_ENTITY_DEBUG("  hashKeys.buf: %p, size: %llu", typeHashKeys->buf, (unsigned long long)typeHashKeys->size);
+    LOG_ENTITY_DEBUG("  keys.buf: %p, size: %u", typeKeys->buf, typeKeys->size);
 
     // Dump InstanceToPageMap HashMap info
     void *instanceMap = (char *)storageData + STORAGE_DATA_INSTANCE_TO_PAGE_MAP;
-    ArrayHeader *instanceHashKeys = GET_HASH_KEYS(instanceMap);
-    ArrayHeader *instanceKeys = GET_KEYS(instanceMap);
+    StaticArray *instanceHashKeys = GET_HASH_KEYS(instanceMap);
+    GenericArray *instanceKeys = GET_KEYS(instanceMap);
     LOG_ENTITY_DEBUG("InstanceToPageMap (offset 0x%x):", STORAGE_DATA_INSTANCE_TO_PAGE_MAP);
-    LOG_ENTITY_DEBUG("  hashKeys.buf: %p, size: %llu", instanceHashKeys->buf, instanceHashKeys->size);
-    LOG_ENTITY_DEBUG("  keys.buf: %p, size: %llu", instanceKeys->buf, instanceKeys->size);
+    LOG_ENTITY_DEBUG("  hashKeys.buf: %p, size: %llu", instanceHashKeys->buf, (unsigned long long)instanceHashKeys->size);
+    LOG_ENTITY_DEBUG("  keys.buf: %p, size: %u", instanceKeys->buf, instanceKeys->size);
 
     // Try to look up this entity
     EntityStorageIndex idx;
@@ -403,8 +403,8 @@ int storage_data_enumerate_component_types(void *storageData,
     void *map = (char *)storageData + STORAGE_DATA_COMPONENT_TYPE_TO_INDEX;
 
     // Get HashMap components
-    ArrayHeader *keys = GET_KEYS(map);
-    ArrayHeader *values = GET_VALUES(map);
+    GenericArray *keys = GET_KEYS(map);
+    GenericArray *values = GET_VALUES(map);
 
     if (!keys->buf || !values->buf || keys->size == 0) {
         LOG_ENTITY_DEBUG("ComponentTypeToIndex: Empty or invalid");
@@ -416,12 +416,12 @@ int storage_data_enumerate_component_types(void *storageData,
     uint8_t *valueArray = (uint8_t *)values->buf;
 
     int count = 0;
-    uint64_t size = keys->size;
-    if (size > (uint64_t)maxEntries) {
-        size = (uint64_t)maxEntries;
+    uint32_t size = keys->size;
+    if (size > (uint32_t)maxEntries) {
+        size = (uint32_t)maxEntries;
     }
 
-    for (uint64_t i = 0; i < size && count < maxEntries; i++) {
+    for (uint32_t i = 0; i < size && count < maxEntries; i++) {
         // In the game's HashMap, all entries in the keys array are valid
         // (unused slots would have a sentinel key value, but for discovery
         // we'll just read all of them)
@@ -436,4 +436,112 @@ int storage_data_enumerate_component_types(void *storageData,
     }
 
     return count;
+}
+
+// ============================================================================
+// Entity Enumeration
+// ============================================================================
+
+int component_lookup_get_all_with_component(uint16_t componentTypeIndex,
+                                             uint64_t *outHandles,
+                                             int maxHandles) {
+    if (!component_lookup_ready() || !outHandles || maxHandles <= 0) {
+        return 0;
+    }
+
+    // Get Entities array from StorageContainer
+    GenericArray *entities = storage_container_get_entities(g_StorageContainer);
+
+    // Debug: dump raw bytes to understand layout
+    LOG_ENTITY_DEBUG("GetAllWithComponent: StorageContainer=%p", g_StorageContainer);
+    LOG_ENTITY_DEBUG("  Entities.buf=%p, capacity=%u, size=%u",
+               entities->buf, entities->capacity, entities->size);
+
+    if (!entities->buf || entities->size == 0) {
+        LOG_ENTITY_DEBUG("GetAllWithComponent: Entities array empty or NULL (size=%u)", entities->size);
+        return 0;
+    }
+
+    LOG_ENTITY_DEBUG("GetAllWithComponent: Searching %u entity classes for typeIndex=%u",
+               entities->size, componentTypeIndex);
+
+    int totalCount = 0;
+    void **entityClasses = (void **)entities->buf;
+
+    // Iterate all entity storage classes (archetypes)
+    for (uint32_t classIdx = 0; classIdx < entities->size && totalCount < maxHandles; classIdx++) {
+        void *storageData = entityClasses[classIdx];
+        if (!storageData) continue;
+
+        // Check if this class has the component
+        uint8_t slot;
+        if (!storage_data_get_component_slot(storageData, componentTypeIndex, &slot)) {
+            continue;  // This class doesn't have this component type
+        }
+
+        // This class has the component - collect all entity handles from InstanceToPageMap
+        void *instanceMap = (char *)storageData + STORAGE_DATA_INSTANCE_TO_PAGE_MAP;
+        GenericArray *keys = GET_KEYS(instanceMap);
+
+        if (!keys->buf || keys->size == 0) {
+            continue;
+        }
+
+        uint64_t *handleArray = (uint64_t *)keys->buf;
+        uint32_t entriesToCopy = keys->size;
+
+        // Limit to remaining space in output buffer
+        if (totalCount + (int)entriesToCopy > maxHandles) {
+            entriesToCopy = (uint32_t)(maxHandles - totalCount);
+        }
+
+        // Copy handles
+        for (uint32_t i = 0; i < entriesToCopy; i++) {
+            outHandles[totalCount++] = handleArray[i];
+        }
+
+        LOG_ENTITY_DEBUG("  Class %u: found %u entities with component (total: %d)",
+                   classIdx, keys->size, totalCount);
+    }
+
+    LOG_ENTITY_DEBUG("GetAllWithComponent: Found %d total entities", totalCount);
+    return totalCount;
+}
+
+int component_lookup_count_with_component(uint16_t componentTypeIndex) {
+    if (!component_lookup_ready()) {
+        return 0;
+    }
+
+    // Get Entities array from StorageContainer
+    GenericArray *entities = storage_container_get_entities(g_StorageContainer);
+
+    if (!entities->buf || entities->size == 0) {
+        return 0;
+    }
+
+    int totalCount = 0;
+    void **entityClasses = (void **)entities->buf;
+
+    // Iterate all entity storage classes (archetypes)
+    for (uint32_t classIdx = 0; classIdx < entities->size; classIdx++) {
+        void *storageData = entityClasses[classIdx];
+        if (!storageData) continue;
+
+        // Check if this class has the component
+        uint8_t slot;
+        if (!storage_data_get_component_slot(storageData, componentTypeIndex, &slot)) {
+            continue;
+        }
+
+        // This class has the component - count entities from InstanceToPageMap
+        void *instanceMap = (char *)storageData + STORAGE_DATA_INSTANCE_TO_PAGE_MAP;
+        GenericArray *keys = GET_KEYS(instanceMap);
+
+        if (keys->buf && keys->size > 0) {
+            totalCount += (int)keys->size;
+        }
+    }
+
+    return totalCount;
 }

@@ -602,48 +602,19 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
         UuidToHandleMappingComponent *mapping = (UuidToHandleMappingComponent*)g_UuidMappingComponent;
         HashMapGuidEntityHandle *hashmap = &mapping->Mappings;
 
-        // Debug: dump raw bytes at component pointer
+        // Debug: dump HashMap stats on first lookup (DEBUG level - enable with LOG_LEVEL_DEBUG)
         static bool dumped = false;
         if (!dumped) {
             dumped = true;
-            LOG_ENTITY_DEBUG("=== UuidToHandleMappingComponent raw dump ===");
-            LOG_ENTITY_DEBUG("Component ptr: %p", g_UuidMappingComponent);
-            uint8_t *bytes = (uint8_t*)g_UuidMappingComponent;
-            for (int i = 0; i < 128; i += 8) {
-                LOG_ENTITY_DEBUG("  +0x%02x: %02x %02x %02x %02x %02x %02x %02x %02x",
-                           i, bytes[i], bytes[i+1], bytes[i+2], bytes[i+3],
-                           bytes[i+4], bytes[i+5], bytes[i+6], bytes[i+7]);
-            }
-            LOG_ENTITY_DEBUG("=== HashMap field values ===");
-            LOG_ENTITY_DEBUG("  HashKeys.buf: %p, size: %u", (void*)hashmap->HashKeys.buf, hashmap->HashKeys.size);
-            LOG_ENTITY_DEBUG("  NextIds.buf: %p, cap: %u, size: %u", (void*)hashmap->NextIds.buf, hashmap->NextIds.capacity, hashmap->NextIds.size);
-            LOG_ENTITY_DEBUG("  Keys.buf: %p, cap: %u, size: %u", (void*)hashmap->Keys.buf, hashmap->Keys.capacity, hashmap->Keys.size);
-            LOG_ENTITY_DEBUG("  Values.buf: %p, size: %u", (void*)hashmap->Values.buf, hashmap->Values.size);
-
-            // Dump first few keys if available
-            if (hashmap->Keys.buf && hashmap->Keys.size > 0) {
-                int dump_count = hashmap->Keys.size < 5 ? hashmap->Keys.size : 5;
-                LOG_ENTITY_DEBUG("  First %d keys:", dump_count);
-                for (int i = 0; i < dump_count; i++) {
-                    char guid_str_buf[64];
-                    guid_to_string(&hashmap->Keys.buf[i], guid_str_buf);
-                    LOG_ENTITY_DEBUG("    [%d] %s (hi=0x%llx, lo=0x%llx)", i, guid_str_buf,
-                               (unsigned long long)hashmap->Keys.buf[i].hi,
-                               (unsigned long long)hashmap->Keys.buf[i].lo);
-                }
-            }
+            LOG_ENTITY_DEBUG("UuidToHandleMappingComponent: ptr=%p, Keys.size=%u",
+                       g_UuidMappingComponent, hashmap->Keys.size);
         }
 
         // Validate HashMap structure
         if (!hashmap->HashKeys.buf || hashmap->HashKeys.size == 0) {
-            LOG_ENTITY_DEBUG("HashMap not initialized (HashKeys.buf=%p, size=%u)",
-                       (void*)hashmap->HashKeys.buf, hashmap->HashKeys.size);
+            LOG_ENTITY_DEBUG("HashMap not initialized");
             return ENTITY_HANDLE_INVALID;
         }
-
-        // Debug: show parsed GUID
-        LOG_ENTITY_DEBUG("Looking up GUID: %s (hi=0x%llx, lo=0x%llx)", guid_str,
-                   (unsigned long long)guid.hi, (unsigned long long)guid.lo);
 
         // Hash the GUID: hash = lo ^ hi
         uint64_t hash = guid.lo ^ guid.hi;
@@ -662,6 +633,8 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
 
             // Compare GUID
             Guid *key = &hashmap->Keys.buf[keyIndex];
+            LOG_ENTITY_INFO("Comparing with key[%d]: hi=0x%llx lo=0x%llx",
+                       keyIndex, (unsigned long long)key->hi, (unsigned long long)key->lo);
             if (key->lo == guid.lo && key->hi == guid.hi) {
                 // Found it!
                 EntityHandle handle = hashmap->Values.buf[keyIndex];
@@ -674,7 +647,7 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
                     g_GuidCacheCount++;
                 }
 
-                LOG_ENTITY_DEBUG("GUID lookup success: %s -> 0x%llx", guid_str, (unsigned long long)handle);
+                LOG_ENTITY_DEBUG("GUID lookup SUCCESS: %s -> handle=0x%llx", guid_str, (unsigned long long)handle);
                 return handle;
             }
 
@@ -1323,6 +1296,113 @@ static int lua_entity_get_component(lua_State *L) {
     return 1;
 }
 
+// ============================================================================
+// GetAllComponents / GetAllComponentNames
+// ============================================================================
+
+// Entity:GetAllComponentNames(requireMapped) -> { "name1", "name2", ... }
+// Returns an array of component type names attached to this entity
+static int lua_entity_get_all_component_names(lua_State *L) {
+    EntityHandle *ud = (EntityHandle*)luaL_checkudata(L, 1, "BG3Entity");
+    bool requireMapped = lua_toboolean(L, 2);  // optional, default false
+
+    if (!component_lookup_ready()) {
+        lua_newtable(L);
+        return 1;
+    }
+
+    // Get EntityStorageData for this entity
+    void *storageData = component_lookup_get_storage_data(*ud);
+    if (!storageData) {
+        lua_newtable(L);
+        return 1;
+    }
+
+    // Enumerate component types
+    uint16_t indices[256];
+    uint8_t slots[256];
+    int count = storage_data_enumerate_component_types(storageData, indices, slots, 256);
+
+    // Build result array
+    lua_createtable(L, count, 0);
+    int resultIdx = 1;
+
+    for (int i = 0; i < count; i++) {
+        const ComponentInfo *info = component_registry_lookup_by_index(indices[i]);
+        if (info && info->name) {
+            if (!requireMapped || info->discovered) {
+                lua_pushstring(L, info->name);
+                lua_rawseti(L, -2, resultIdx++);
+            }
+        } else if (!requireMapped) {
+            // Include unknown types as "Unknown_<index>"
+            char buf[32];
+            snprintf(buf, sizeof(buf), "Unknown_%u", indices[i]);
+            lua_pushstring(L, buf);
+            lua_rawseti(L, -2, resultIdx++);
+        }
+    }
+
+    return 1;
+}
+
+// Entity:GetAllComponents(warnOnMissing) -> { ["ComponentName"] = componentData, ... }
+// Returns a table mapping component names to their data (light userdata)
+static int lua_entity_get_all_components(lua_State *L) {
+    EntityHandle *ud = (EntityHandle*)luaL_checkudata(L, 1, "BG3Entity");
+    bool warnOnMissing = lua_toboolean(L, 2);  // optional
+
+    if (!component_lookup_ready() || !g_EntityWorld) {
+        lua_newtable(L);
+        return 1;
+    }
+
+    void *storageData = component_lookup_get_storage_data(*ud);
+    if (!storageData) {
+        lua_newtable(L);
+        return 1;
+    }
+
+    // Enumerate component types
+    uint16_t indices[256];
+    uint8_t slots[256];
+    int count = storage_data_enumerate_component_types(storageData, indices, slots, 256);
+
+    lua_newtable(L);
+
+    for (int i = 0; i < count; i++) {
+        const ComponentInfo *info = component_registry_lookup_by_index(indices[i]);
+        const char *name = info ? info->name : NULL;
+
+        // Get component data
+        void *component = component_lookup_by_index(
+            *ud, indices[i],
+            info ? info->size : 0,
+            info ? info->is_proxy : false
+        );
+
+        if (component) {
+            // Use name or fallback
+            if (name) {
+                lua_pushstring(L, name);
+            } else {
+                char buf[32];
+                snprintf(buf, sizeof(buf), "Unknown_%u", indices[i]);
+                lua_pushstring(L, buf);
+            }
+
+            // Push component data (light userdata for now)
+            // TODO: Eventually convert to proper Lua tables like Transform
+            lua_pushlightuserdata(L, component);
+            lua_rawset(L, -3);
+        } else if (warnOnMissing && name) {
+            LOG_ENTITY_DEBUG("GetAllComponents: Failed to get %s (type %u)", name, indices[i]);
+        }
+    }
+
+    return 1;
+}
+
 // Entity metatable __index
 static int lua_entity_index(lua_State *L) {
     EntityHandle *ud = (EntityHandle*)luaL_checkudata(L, 1, "BG3Entity");
@@ -1339,6 +1419,14 @@ static int lua_entity_index(lua_State *L) {
     }
     if (strcmp(key, "GetComponent") == 0) {
         lua_pushcfunction(L, lua_entity_get_component);
+        return 1;
+    }
+    if (strcmp(key, "GetAllComponents") == 0) {
+        lua_pushcfunction(L, lua_entity_get_all_components);
+        return 1;
+    }
+    if (strcmp(key, "GetAllComponentNames") == 0) {
+        lua_pushcfunction(L, lua_entity_get_all_component_names);
         return 1;
     }
 
@@ -1654,6 +1742,84 @@ static int lua_entity_dump_uuid_map(lua_State *L) {
     return 1;
 }
 
+// Ext.Entity.GetAllEntitiesWithComponent(componentName) -> { entity1, entity2, ... }
+// Returns an array of all entities that have the specified component
+static int lua_entity_get_all_with_component(lua_State *L) {
+    const char *componentName = luaL_checkstring(L, 1);
+
+    if (!component_lookup_ready()) {
+        lua_newtable(L);  // Return empty table
+        return 1;
+    }
+
+    // Look up component type index from name
+    const ComponentInfo *info = component_registry_lookup(componentName);
+    if (!info) {
+        // Try common aliases
+        if (strcmp(componentName, "ServerCharacter") == 0) {
+            info = component_registry_lookup("esv::Character");
+        } else if (strcmp(componentName, "ServerItem") == 0) {
+            info = component_registry_lookup("esv::Item");
+        }
+    }
+
+    if (!info) {
+        LOG_ENTITY_DEBUG("GetAllEntitiesWithComponent: Unknown component '%s'", componentName);
+        lua_newtable(L);
+        return 1;
+    }
+
+    // Get all entity handles with this component
+    static uint64_t handles[65536];  // Static to avoid large stack allocation
+    int count = component_lookup_get_all_with_component(info->index, handles, 65536);
+
+    LOG_ENTITY_DEBUG("GetAllEntitiesWithComponent('%s'): Found %d entities (typeIndex=%u)",
+                     componentName, count, info->index);
+
+    // Create result table of entity userdata
+    lua_createtable(L, count, 0);
+
+    for (int i = 0; i < count; i++) {
+        // Push entity as userdata (same pattern as lua_entity_get)
+        EntityHandle *ud = (EntityHandle *)lua_newuserdata(L, sizeof(EntityHandle));
+        *ud = handles[i];
+        luaL_getmetatable(L, "BG3Entity");
+        lua_setmetatable(L, -2);
+        lua_rawseti(L, -2, i + 1);
+    }
+
+    return 1;
+}
+
+// Ext.Entity.CountEntitiesWithComponent(componentName) -> number
+// Returns the count of entities with the specified component (faster than GetAllEntitiesWithComponent)
+static int lua_entity_count_with_component(lua_State *L) {
+    const char *componentName = luaL_checkstring(L, 1);
+
+    if (!component_lookup_ready()) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+
+    const ComponentInfo *info = component_registry_lookup(componentName);
+    if (!info) {
+        if (strcmp(componentName, "ServerCharacter") == 0) {
+            info = component_registry_lookup("esv::Character");
+        } else if (strcmp(componentName, "ServerItem") == 0) {
+            info = component_registry_lookup("esv::Item");
+        }
+    }
+
+    if (!info) {
+        lua_pushinteger(L, 0);
+        return 1;
+    }
+
+    int count = component_lookup_count_with_component(info->index);
+    lua_pushinteger(L, count);
+    return 1;
+}
+
 void entity_register_lua(lua_State *L) {
     // Create BG3Entity metatable
     luaL_newmetatable(L, "BG3Entity");
@@ -1723,6 +1889,13 @@ void entity_register_lua(lua_State *L) {
 
     lua_pushcfunction(L, lua_entity_dump_uuid_map);
     lua_setfield(L, -2, "DumpUuidMap");
+
+    // Entity enumeration API
+    lua_pushcfunction(L, lua_entity_get_all_with_component);
+    lua_setfield(L, -2, "GetAllEntitiesWithComponent");
+
+    lua_pushcfunction(L, lua_entity_count_with_component);
+    lua_setfield(L, -2, "CountEntitiesWithComponent");
 
     lua_setfield(L, -2, "Entity");  // Ext.Entity = table
 

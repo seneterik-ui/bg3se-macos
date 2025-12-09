@@ -92,11 +92,43 @@ void guid_to_string(const Guid *guid, char *out_str) {
 // HashMap Lookup
 // ============================================================================
 
+// Debug flag - set to 1 to enable verbose GUID lookup logging
+static int g_guid_lookup_debug = 1;
+
 EntityHandle hashmap_lookup_guid(const HashMapGuidEntityHandle *hashmap, const Guid *guid) {
-    if (!hashmap || !guid) return ENTITY_HANDLE_INVALID;
+    if (!hashmap || !guid) {
+        if (g_guid_lookup_debug) {
+            LOG_ENTITY_DEBUG("[GuidLookup] NULL hashmap or guid");
+        }
+        return ENTITY_HANDLE_INVALID;
+    }
+
+    // Log HashMap state on first lookup (or always for debugging)
+    if (g_guid_lookup_debug) {
+        LOG_ENTITY_DEBUG("[GuidLookup] HashMap state: HashKeys.buf=%p size=%u, Keys.buf=%p cap=%u size=%u, Values.buf=%p size=%u",
+            (void*)hashmap->HashKeys.buf, hashmap->HashKeys.size,
+            (void*)hashmap->Keys.buf, hashmap->Keys.capacity, hashmap->Keys.size,
+            (void*)hashmap->Values.buf, hashmap->Values.size);
+
+        LOG_ENTITY_DEBUG("[GuidLookup] Searching for GUID: lo=%016llx hi=%016llx",
+            (unsigned long long)guid->lo, (unsigned long long)guid->hi);
+
+        // Show first few HashMap entries for comparison
+        if (hashmap->Keys.size > 0 && hashmap->Keys.buf) {
+            int show_count = (hashmap->Keys.size < 3) ? hashmap->Keys.size : 3;
+            for (int i = 0; i < show_count; i++) {
+                Guid *k = &hashmap->Keys.buf[i];
+                LOG_ENTITY_DEBUG("[GuidLookup] HashMap key[%d]: lo=%016llx hi=%016llx",
+                    i, (unsigned long long)k->lo, (unsigned long long)k->hi);
+            }
+        }
+    }
 
     // Validate structure
     if (!hashmap->HashKeys.buf || hashmap->HashKeys.size == 0) {
+        if (g_guid_lookup_debug) {
+            LOG_ENTITY_DEBUG("[GuidLookup] FAIL: HashKeys empty or NULL");
+        }
         return ENTITY_HANDLE_INVALID;
     }
 
@@ -104,28 +136,67 @@ EntityHandle hashmap_lookup_guid(const HashMapGuidEntityHandle *hashmap, const G
     uint64_t hash = guid->lo ^ guid->hi;
     uint32_t bucket = (uint32_t)(hash % hashmap->HashKeys.size);
 
+    if (g_guid_lookup_debug) {
+        LOG_ENTITY_DEBUG("[GuidLookup] hash=%016llx bucket=%u",
+            (unsigned long long)hash, bucket);
+    }
+
     // Get initial index from bucket
     int32_t keyIndex = hashmap->HashKeys.buf[bucket];
 
+    if (g_guid_lookup_debug) {
+        LOG_ENTITY_DEBUG("[GuidLookup] Initial keyIndex from bucket: %d", keyIndex);
+    }
+
     // Follow collision chain
+    int iterations = 0;
     while (keyIndex >= 0) {
+        iterations++;
         // Bounds check
         if ((uint32_t)keyIndex >= hashmap->Keys.size) {
+            if (g_guid_lookup_debug) {
+                LOG_ENTITY_DEBUG("[GuidLookup] BOUNDS: keyIndex %d >= Keys.size %u",
+                    keyIndex, hashmap->Keys.size);
+            }
             break;
         }
 
         // Compare GUID
         const Guid *key = &hashmap->Keys.buf[keyIndex];
+
+        if (g_guid_lookup_debug && iterations <= 3) {
+            LOG_ENTITY_DEBUG("[GuidLookup] Comparing with key[%d]: lo=%016llx hi=%016llx",
+                keyIndex, (unsigned long long)key->lo, (unsigned long long)key->hi);
+        }
+
         if (key->lo == guid->lo && key->hi == guid->hi) {
             // Found it!
-            return hashmap->Values.buf[keyIndex];
+            EntityHandle result = hashmap->Values.buf[keyIndex];
+            if (g_guid_lookup_debug) {
+                LOG_ENTITY_DEBUG("[GuidLookup] FOUND at index %d: handle=0x%llx",
+                    keyIndex, (unsigned long long)result);
+            }
+            return result;
+        }
+
+        // Also check with SWAPPED byte order for debugging
+        if (g_guid_lookup_debug && key->lo == guid->hi && key->hi == guid->lo) {
+            LOG_ENTITY_DEBUG("[GuidLookup] WOULD MATCH with SWAPPED lo/hi!");
         }
 
         // Follow collision chain
         if ((uint32_t)keyIndex >= hashmap->NextIds.size) {
+            if (g_guid_lookup_debug) {
+                LOG_ENTITY_DEBUG("[GuidLookup] BOUNDS: keyIndex %d >= NextIds.size %u",
+                    keyIndex, hashmap->NextIds.size);
+            }
             break;
         }
         keyIndex = hashmap->NextIds.buf[keyIndex];
+    }
+
+    if (g_guid_lookup_debug) {
+        LOG_ENTITY_DEBUG("[GuidLookup] NOT FOUND after %d iterations", iterations);
     }
 
     return ENTITY_HANDLE_INVALID;

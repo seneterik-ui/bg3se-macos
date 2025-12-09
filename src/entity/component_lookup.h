@@ -138,6 +138,32 @@ int storage_data_enumerate_component_types(void *storageData,
                                             uint8_t *outSlots,
                                             int maxEntries);
 
+// ============================================================================
+// Entity Enumeration
+// ============================================================================
+
+/**
+ * Get all entity handles that have a specific component type.
+ * Iterates through all EntityStorageData classes and collects handles
+ * from those that have the component registered.
+ *
+ * @param componentTypeIndex The component type to search for
+ * @param outHandles Output array for entity handles
+ * @param maxHandles Maximum handles to return
+ * @return Number of entities found
+ */
+int component_lookup_get_all_with_component(uint16_t componentTypeIndex,
+                                             uint64_t *outHandles,
+                                             int maxHandles);
+
+/**
+ * Count entities with a specific component (without returning handles).
+ *
+ * @param componentTypeIndex The component type to count
+ * @return Number of entities with this component
+ */
+int component_lookup_count_with_component(uint16_t componentTypeIndex);
+
 #ifdef __cplusplus
 }
 #endif

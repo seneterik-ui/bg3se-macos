@@ -177,6 +177,35 @@ EntityHandle lookup(HashMap *map, Guid *guid) {
 }
 ```
 
+### Verified Working (Dec 9, 2025)
+
+**GUID lookup confirmed working** with diagnostic testing:
+- HashMap contains ~23,100 entity UUIDs
+- Lookup of known key `a5eaeafe-220d-bc4d-4cc3-b94574d334c7` returns `handle=0x200000100000665`
+- Hash function `guid->lo ^ guid->hi` with bucket `hash % HashKeys.size` works correctly
+
+### Character/Player GUIDs NOT in UuidToHandleMappingComponent
+
+**IMPORTANT:** Player GUIDs from Osiris events (e.g., `c7c13742-bacd-460a-8f65-f864fe41f255`) are NOT stored in `UuidToHandleMappingComponent`. This has been verified via runtime testing (Dec 9, 2025).
+
+The `UuidToHandleMappingComponent` singleton contains ~23,100 entity UUID mappings, but these are primarily for game objects (items, scenery, etc.), not player characters.
+
+**Windows BG3SE uses the same approach** - `Ext.Entity.Get(guid)` calls `GetEntityHandle(uuid)` which looks up in `UuidToHandleMappingComponent->Mappings.try_get(uuid)`. See `BG3Extender/Lua/Libs/Entity.inl:31-37`.
+
+**Entity GUID vs Character GUID:**
+
+1. **Entity UUID** - Stored in `UuidComponent.EntityUuid` on entities that have one. The `UuidToHandleMappingComponent` maps these to EntityHandles.
+
+2. **Character/Template GUID** - The GUIDs from Osiris events (like `CharacterCreatedUser`) are **template GUIDs** or **character identifiers**, not entity UUIDs. These identify the character template/definition, not the ECS entity.
+
+**How to access characters:**
+
+- Use `Ext.GetAllEntitiesWithComponent("ServerCharacter")` to get all character entities
+- Each character entity has a `ServerCharacter` component with a `GUID` property that contains the template GUID
+- To lookup by template GUID, iterate characters and compare their `ServerCharacter.GUID`
+
+**Alternative approach:** Characters may have their own mapping component (e.g., character-specific lookup) that we haven't discovered yet. Windows BG3SE test files use `Ext.GetCharacter(GUID_LAEZEL)` which suggests a dedicated character lookup API exists.
+
 ## ECS Helper Functions
 
 | Function | Address | Signature | Notes |

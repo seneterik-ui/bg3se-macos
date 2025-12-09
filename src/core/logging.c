@@ -95,7 +95,7 @@ typedef struct {
 } LogConfig;
 
 static LogConfig g_config = {
-    .global_level = LOG_LEVEL_INFO,
+    .global_level = LOG_LEVEL_DEBUG,  // DEBUG enabled by default during development
     .output_flags = LOG_OUTPUT_FILE | LOG_OUTPUT_SYSLOG,
     .format = LOG_FORMAT_HUMAN,
     .color_enabled = true,
