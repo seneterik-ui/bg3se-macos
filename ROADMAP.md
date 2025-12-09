@@ -4,7 +4,7 @@ This document tracks the development roadmap for achieving feature parity with W
 
 ## Current Status: v0.21.0
 
-**Overall Feature Parity: ~55%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
+**Overall Feature Parity: ~60%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
