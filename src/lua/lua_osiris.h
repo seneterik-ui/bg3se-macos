@@ -62,6 +62,18 @@ int lua_ext_osiris_newquery(lua_State *L);
  */
 int lua_ext_osiris_newevent(lua_State *L);
 
+/**
+ * Ext.Osiris.GetCustomFunctions()
+ * Returns a table of all registered custom functions (for debugging).
+ */
+int lua_ext_osiris_getcustomfunctions(lua_State *L);
+
+/**
+ * Ext.Osiris.RaiseEvent(name, ...)
+ * Raises a custom Osiris event, dispatching to registered listeners.
+ */
+int lua_ext_osiris_raiseevent(lua_State *L);
+
 // ============================================================================
 // Listener Access Functions
 // ============================================================================

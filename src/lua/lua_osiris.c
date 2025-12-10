@@ -116,6 +116,136 @@ int lua_ext_osiris_newevent(lua_State *L) {
     return 1;
 }
 
+/**
+ * Ext.Osiris.RaiseEvent(name, ...)
+ *
+ * Raises a custom Osiris event, dispatching to all registered listeners.
+ *
+ * Example:
+ *   Ext.Osiris.NewEvent("MyMod_ItemCollected", "(GUIDSTRING)_Item,(GUIDSTRING)_Collector")
+ *   -- Later:
+ *   Ext.Osiris.RaiseEvent("MyMod_ItemCollected", itemGuid, playerGuid)
+ *   -- Listeners registered via RegisterListener will receive the event
+ */
+int lua_ext_osiris_raiseevent(lua_State *L) {
+    const char *eventName = luaL_checkstring(L, 1);
+
+    // Find the custom event
+    CustomFunction *func = custom_func_get_by_name(eventName);
+    if (!func) {
+        return luaL_error(L, "RaiseEvent: unknown event '%s'", eventName);
+    }
+    if (func->type != CUSTOM_FUNC_EVENT) {
+        return luaL_error(L, "RaiseEvent: '%s' is not an event (it's a %s)",
+                         eventName,
+                         func->type == CUSTOM_FUNC_CALL ? "Call" : "Query");
+    }
+
+    // Get the number of arguments passed (excluding event name)
+    int nargs = lua_gettop(L) - 1;
+    if ((uint32_t)nargs != func->arity) {
+        return luaL_error(L, "RaiseEvent: '%s' expects %d arguments, got %d",
+                         eventName, func->arity, nargs);
+    }
+
+    LOG_LUA_DEBUG("RaiseEvent: raising '%s' with %d arguments", eventName, nargs);
+
+    // Dispatch to all registered listeners
+    int listener_count = lua_osiris_get_listener_count();
+    int dispatched = 0;
+
+    for (int i = 0; i < listener_count; i++) {
+        OsirisListener *listener = lua_osiris_get_listener(i);
+        if (!listener) continue;
+
+        // Match by event name (timing doesn't matter for custom events - call both "before" and "after")
+        if (strcmp(listener->event_name, eventName) != 0) continue;
+
+        // Get callback from Lua registry
+        lua_rawgeti(L, LUA_REGISTRYINDEX, listener->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Push arguments (up to listener's requested arity)
+        int argsToPass = (listener->arity < nargs) ? listener->arity : nargs;
+        for (int j = 0; j < argsToPass; j++) {
+            lua_pushvalue(L, j + 2);  // +2 because arg 1 is eventName
+        }
+
+        // Call the callback
+        if (lua_pcall(L, argsToPass, 0, 0) != LUA_OK) {
+            LOG_OSIRIS_ERROR("RaiseEvent callback error for %s: %s",
+                       eventName, lua_tostring(L, -1));
+            lua_pop(L, 1);
+        } else {
+            dispatched++;
+        }
+    }
+
+    LOG_LUA_DEBUG("RaiseEvent: '%s' dispatched to %d listeners", eventName, dispatched);
+
+    // Return number of listeners called
+    lua_pushinteger(L, dispatched);
+    return 1;
+}
+
+/**
+ * Ext.Osiris.GetCustomFunctions() -> table
+ *
+ * Returns a table of all registered custom functions:
+ * {
+ *   ["FunctionName"] = {
+ *     Type = "Call" | "Query" | "Event",
+ *     Arity = number,
+ *     InParams = number,
+ *     OutParams = number,
+ *     Id = number
+ *   },
+ *   ...
+ * }
+ */
+int lua_ext_osiris_getcustomfunctions(lua_State *L) {
+    lua_newtable(L);  // Result table
+
+    int count = custom_func_get_count();
+    for (int i = 0; i < count; i++) {
+        CustomFunction *func = custom_func_get_by_index(i);
+        if (!func) continue;
+
+        // Create entry table
+        lua_newtable(L);
+
+        // Type field
+        const char *type_str = (func->type == CUSTOM_FUNC_CALL) ? "Call" :
+                               (func->type == CUSTOM_FUNC_QUERY) ? "Query" : "Event";
+        lua_pushstring(L, type_str);
+        lua_setfield(L, -2, "Type");
+
+        // Arity field
+        lua_pushinteger(L, (lua_Integer)func->arity);
+        lua_setfield(L, -2, "Arity");
+
+        // InParams field
+        lua_pushinteger(L, (lua_Integer)func->num_in_params);
+        lua_setfield(L, -2, "InParams");
+
+        // OutParams field
+        lua_pushinteger(L, (lua_Integer)func->num_out_params);
+        lua_setfield(L, -2, "OutParams");
+
+        // Id field (as hex-friendly integer)
+        lua_pushinteger(L, (lua_Integer)func->assigned_id);
+        lua_setfield(L, -2, "Id");
+
+        // Set this table as result[func->name]
+        lua_setfield(L, -2, func->name);
+    }
+
+    return 1;
+}
+
 // ============================================================================
 // Listener Access Functions
 // ============================================================================
@@ -164,6 +294,12 @@ void lua_osiris_register(lua_State *L) {
 
     lua_pushcfunction(L, lua_ext_osiris_newevent);
     lua_setfield(L, -2, "NewEvent");
+
+    lua_pushcfunction(L, lua_ext_osiris_getcustomfunctions);
+    lua_setfield(L, -2, "GetCustomFunctions");
+
+    lua_pushcfunction(L, lua_ext_osiris_raiseevent);
+    lua_setfield(L, -2, "RaiseEvent");
 
     lua_setfield(L, -2, "Osiris");
 

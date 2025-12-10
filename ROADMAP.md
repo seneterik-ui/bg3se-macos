@@ -2,15 +2,15 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.22.0
+## Current Status: v0.23.0
 
-**Overall Feature Parity: ~60%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
+**Overall Feature Parity: ~65%** (based on [comprehensive gap analysis](plans/bg3se-docs-gap-analysis.md))
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
 - Osiris event observation (2000+ events captured per session)
 - Lua runtime with mod loading (BootstrapServer.lua)
-- Basic Ext.* API (Print, Require, RegisterListener, NewCall/NewQuery/NewEvent, Json, IO)
+- Basic Ext.* API (Print, Require, RegisterListener, NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions, Json, IO)
 - Osiris listener callbacks (before/after event dispatch)
 - Dynamic Osi.* metatable with lazy function lookup
 - Query output parameters (queries return values, not just bool)
@@ -33,7 +33,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | Namespace | Windows BG3SE | bg3se-macos | Parity | Phase |
 |-----------|---------------|-------------|--------|-------|
 | `Osi.*` | ✅ Full | ✅ Dynamic metatable | **95%** | 1 |
-| `Ext.Osiris` | ✅ Full | ✅ RegisterListener + NewCall/NewQuery/NewEvent | **95%** | 1 |
+| `Ext.Osiris` | ✅ Full | ✅ RegisterListener + NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions | **98%** | 1 |
 | `Ext.Json` | ✅ Full | ✅ Parse, Stringify | **90%** | 1 |
 | `Ext.IO` | ✅ Full | ✅ LoadFile, SaveFile | **80%** | 1 |
 | `Ext.Entity` | ✅ Full | ⚠️ GUID lookup + GetAllEntitiesWithComponent | **50%** | 2 |
@@ -110,8 +110,21 @@ Ext.Osiris.NewCall("MyMod_Log", "(STRING)_Message",
 -- Call it
 Osi.MyMod_Log("Hello from Lua!")
 
--- Register a custom event (for future use)
+-- Register a custom event
 Ext.Osiris.NewEvent("MyMod_OnItemUsed", "(GUIDSTRING)_Item,(GUIDSTRING)_User")
+
+-- Register a listener for the custom event
+Ext.Osiris.RegisterListener("MyMod_OnItemUsed", 2, "after", function(item, user)
+    _P("Item " .. item .. " used by " .. user)
+end)
+
+-- Raise the event from Lua (dispatches to all listeners)
+local numCalled = Ext.Osiris.RaiseEvent("MyMod_OnItemUsed", itemGuid, userGuid)
+
+-- Debug: List all registered custom functions
+for name, info in pairs(Ext.Osiris.GetCustomFunctions()) do
+    _P(name .. " (" .. info.Type .. ") - Arity: " .. info.Arity)
+end
 ```
 
 **Implementation details:**
@@ -121,6 +134,8 @@ Ext.Osiris.NewEvent("MyMod_OnItemUsed", "(GUIDSTRING)_Item,(GUIDSTRING)_User")
 - [x] Lua callbacks stored in registry for persistence
 - [x] Integration with `Osi.*` metatable dispatch
 - [x] Session lifecycle management (cleanup on Lua shutdown)
+- [x] **RaiseEvent** - Dispatch custom events to registered listeners (v0.23.0)
+- [x] **GetCustomFunctions** - Debug introspection of registered functions (v0.23.0)
 
 ---
 
@@ -156,7 +171,7 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access & Property System
-**Status:** 🔄 In Progress (TypeId discovery complete, property access needed)
+**Status:** ✅ Complete (v0.23.0) - Health component properties working
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -197,6 +212,18 @@ buffer + (componentSize * EntryIndex) → Component*
 - [x] `entity:GetAllComponentNames()` - List all component type names
 - [x] `Ext.Entity.GetAllEntitiesWithComponent(name)` - Get all entities with a component
 - [x] `Ext.Entity.CountEntitiesWithComponent(name)` - Count entities with a component
+
+**Completed (v0.23.0) - Health Component Properties:**
+- [x] `entity.Health.Hp` - Current health (int32)
+- [x] `entity.Health.MaxHp` - Maximum health (int32)
+- [x] `entity.Health.TemporaryHp` - Temporary HP (int32)
+- [x] `entity.Health.MaxTemporaryHp` - Max temporary HP (int32)
+- [x] `entity.Health.IsInvulnerable` - Invulnerability flag (uint8)
+- [x] **Hash function fix** - ComponentTypeIndex HashMap uses BG3-specific hash:
+  ```c
+  h0 = (typeIndex & 0x7FFF) + (typeIndex >> 15) * 0x880
+  hash = h0 | (h0 << 16)
+  ```
 
 **Pending (from API.md):**
 - [ ] `entity:CreateComponent(name)` - Attach new component
@@ -1043,6 +1070,7 @@ Ext.Mod.GetModInfo(guid)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.23.0 | 2025-12-10 | Health component property access - entity.Health.Hp/MaxHp/TemporaryHp working via data structure traversal + hash fix; Ext.Osiris.RaiseEvent() and GetCustomFunctions() for custom event dispatch |
 | v0.22.0 | 2025-12-09 | Custom Osiris function registration - Ext.Osiris.NewCall/NewQuery/NewEvent for Lua-defined Osiris functions |
 | v0.21.0 | 2025-12-09 | GetAllEntitiesWithComponent/CountEntitiesWithComponent - entity enumeration by component type |
 | v0.20.0 | 2025-12-08 | Structured logging system - 14 modules, 4 log levels, timestamps, consistent formatting |

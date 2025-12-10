@@ -59,6 +59,7 @@ add_library(bg3se SHARED
     src/entity/component_registry.c
     src/entity/component_lookup.c
     src/entity/component_typeid.c
+    src/entity/component_property.c
     src/stats/stats_manager.c
     src/strings/fixed_string.c
     src/console/console.c

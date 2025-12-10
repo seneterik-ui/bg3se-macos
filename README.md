@@ -44,15 +44,15 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.22.0 | **Feature Parity:** ~60%
+**Version:** v0.23.0 | **Feature Parity:** ~65%
 
 | Feature | Status |
 |---------|--------|
 | DYLD Injection | ✅ Complete |
 | Lua Runtime | ✅ Lua 5.4 with Ext API |
 | Mod Loading | ✅ PAK file reading, auto-detection |
-| Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent) |
-| Ext.Entity | ✅ GUID lookup, components, GetAllEntitiesWithComponent |
+| Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions) |
+| Ext.Entity | ✅ GUID lookup, Health component properties, GetAllEntitiesWithComponent |
 | Ext.Stats | ✅ 15,774 stats, property read/write |
 | Ext.Events | ✅ 8 events with GameStateChanged |
 | Ext.Timer | ✅ WaitFor, Cancel, Pause, Resume |

@@ -181,6 +181,15 @@ void custom_func_clear(lua_State *L);
  */
 int custom_func_get_count(void);
 
+/**
+ * Get the Nth registered custom function (for iteration).
+ * Returns the Nth function that is registered (skips unregistered slots).
+ *
+ * @param n Index (0-based) into registered functions
+ * @return Pointer to function definition, or NULL if n is out of range
+ */
+CustomFunction *custom_func_get_by_index(int n);
+
 // ============================================================================
 // Debugging
 // ============================================================================

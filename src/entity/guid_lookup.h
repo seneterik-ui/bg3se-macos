@@ -104,6 +104,21 @@ typedef struct {
 // ============================================================================
 
 /**
+ * Extract the 36-character UUID from a full template GUID string.
+ *
+ * BG3 character entities use template GUIDs with prefixes like:
+ *   "S_PLA_ConflictedFlind_Hyena_01_69bc3485-8f3b-4a76-a3ca-fd9da89bb908"
+ *
+ * This function extracts just the UUID portion:
+ *   "69bc3485-8f3b-4a76-a3ca-fd9da89bb908"
+ *
+ * @param guid The full template GUID string
+ * @return Pointer to the 36-char UUID portion (within the same string),
+ *         or the original string if already a valid UUID or not extractable
+ */
+const char *extract_uuid_from_guid(const char *guid);
+
+/**
  * Parse a GUID string into a Guid structure
  * @param guid_str String in format "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
  * @param out_guid Output Guid structure

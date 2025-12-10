@@ -469,6 +469,21 @@ int custom_func_get_count(void) {
     return g_custom_func_count;
 }
 
+CustomFunction *custom_func_get_by_index(int n) {
+    if (n < 0 || n >= g_custom_func_count) return NULL;
+
+    int found = 0;
+    for (int i = 0; i < MAX_CUSTOM_FUNCTIONS; i++) {
+        if (g_custom_functions[i].registered) {
+            if (found == n) {
+                return &g_custom_functions[i];
+            }
+            found++;
+        }
+    }
+    return NULL;
+}
+
 // ============================================================================
 // Public API - Debugging
 // ============================================================================

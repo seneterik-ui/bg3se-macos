@@ -53,6 +53,28 @@ Entity Component System access for querying game objects.
 | `entity:IsAlive()` | ✅ | Check if entity is valid |
 | `entity:GetHandle()` | ✅ | Get raw EntityHandle value |
 
+### Component Property Access
+
+| Property | Status | Description |
+|----------|--------|-------------|
+| `entity.Health` | ✅ | Health component with Hp, MaxHp, TemporaryHp, etc. |
+| `entity.Health.Hp` | ✅ | Current HP (int32) |
+| `entity.Health.MaxHp` | ✅ | Maximum HP (int32) |
+| `entity.Health.TemporaryHp` | ✅ | Temporary HP (int32) |
+| `entity.Health.MaxTemporaryHp` | ✅ | Max temporary HP (int32) |
+| `entity.Health.IsInvulnerable` | ✅ | Invulnerability flag (uint8) |
+
+**Example:**
+```lua
+local entity = Ext.Entity.Get("S_PLA_Gale_...")
+if entity and entity.Health then
+    _P("HP: " .. entity.Health.Hp .. "/" .. entity.Health.MaxHp)
+    if entity.Health.TemporaryHp > 0 then
+        _P("Temp HP: " .. entity.Health.TemporaryHp)
+    end
+end
+```
+
 ### Debug/Discovery Functions
 
 | API | Status | Description |
@@ -203,6 +225,8 @@ Interface to the Osiris scripting engine.
 | `Ext.Osiris.NewQuery(name, signature, handler)` | ✅ | Register custom query (returns values) |
 | `Ext.Osiris.NewCall(name, signature, handler)` | ✅ | Register custom call (no return) |
 | `Ext.Osiris.NewEvent(name, signature)` | ✅ | Register custom event |
+| `Ext.Osiris.RaiseEvent(name, ...)` | ✅ | Raise a custom event to dispatch to listeners |
+| `Ext.Osiris.GetCustomFunctions()` | ✅ | Get table of all registered custom functions (debug) |
 
 **Timing values:** `"before"` or `"after"`
 
@@ -242,6 +266,30 @@ Osi.MyMod_Log("Hello from Lua!")
 - `[out]` - Output parameter (for queries)
 - Types: `INTEGER`, `INTEGER64`, `REAL`, `STRING`, `GUIDSTRING`
 - Example: `"[in](GUIDSTRING)_Target,[out](INTEGER)_Health"`
+
+**Example - Custom Event with RaiseEvent:**
+```lua
+-- Register a custom event
+Ext.Osiris.NewEvent("MyMod_ItemCollected", "(GUIDSTRING)_Item,(GUIDSTRING)_Collector")
+
+-- Register a listener for the event
+Ext.Osiris.RegisterListener("MyMod_ItemCollected", 2, "after", function(item, collector)
+    Ext.Print("Item " .. item .. " collected by " .. collector)
+end)
+
+-- Raise the event from Lua (dispatches to all listeners)
+local itemGuid = "ITEM_Gold_123"
+local playerGuid = "S_PLA_Gale_..."
+local numListenersCalled = Ext.Osiris.RaiseEvent("MyMod_ItemCollected", itemGuid, playerGuid)
+```
+
+**Example - Debug Custom Functions:**
+```lua
+-- List all registered custom functions
+for name, info in pairs(Ext.Osiris.GetCustomFunctions()) do
+    Ext.Print(name .. " (" .. info.Type .. ") - " .. info.Arity .. " params")
+end
+```
 
 ---
 

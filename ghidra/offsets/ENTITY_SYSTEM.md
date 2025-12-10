@@ -134,29 +134,75 @@ offset 0x20: Array<Guid> Keys                (key storage)
 offset 0x30: StaticArray<EntityHandle> Values
 ```
 
-### GUID Byte Order (CRITICAL)
+### GUID Byte Order (CRITICAL - Fixed Dec 9, 2025)
 
-**BG3 stores GUIDs with hi/lo swapped compared to standard parsing!**
+**BG3 uses Windows UUID structure with additional byte swapping on Val[1]!**
 
-For GUID string `"a5eaeafe-220d-bc4d-4cc3-b94574d334c7"`:
-- Format: `AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE`
-- **hi** = `(A << 32) | (B << 16) | C` = first 8 bytes
-- **lo** = `(D << 48) | E` = last 8 bytes
+The GUID format is `AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE` (36 chars).
 
-This was discovered by comparing parsed GUIDs to HashMap keys (Dec 2025).
+BG3's GUID storage (from Windows BG3SE `CoreLib/Base/Base.cpp`):
+1. Parse as standard Windows UUID (little-endian sections A/B/C, big-endian D/E)
+2. Apply byte-pair swap to Val[1] (the second 64-bit value)
 
 ```c
-bool guid_parse(const char *guid_str, Guid *out_guid) {
-    // Parse sections: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE
-    uint64_t a, b, c, d, e;
-    // ... parse hex sections ...
+// Standard UUID layout after parsing:
+// bytes 0-3:   time_low (little-endian from AAAAAAAA)
+// bytes 4-5:   time_mid (little-endian from BBBB)
+// bytes 6-7:   time_hi_and_version (little-endian from CCCC)
+// bytes 8-9:   clock_seq (DDDD - big-endian)
+// bytes 10-15: node (EEEEEEEEEEEE - big-endian)
+//
+// Val[0] = bytes 0-7 (stored directly)
+// Val[1] = bytes 8-15 (with BG3's byte-pair swap applied)
 
-    // BG3 storage order (hi/lo swapped from intuition)
-    out_guid->hi = (a << 32) | (b << 16) | c;  // First parts go to hi
-    out_guid->lo = (d << 48) | e;              // Last parts go to lo
+bool guid_parse(const char *guid_str, Guid *out_guid) {
+    uint8_t bytes[16];
+
+    // Section A (bytes 0-3): little-endian, so reverse byte order
+    for (int i = 0; i < 4; i++) {
+        bytes[3 - i] = parse_hex_pair(guid_str + i*2);
+    }
+
+    // Section B (bytes 4-5): little-endian
+    for (int i = 0; i < 2; i++) {
+        bytes[5 - i] = parse_hex_pair(guid_str + 9 + i*2);
+    }
+
+    // Section C (bytes 6-7): little-endian
+    for (int i = 0; i < 2; i++) {
+        bytes[7 - i] = parse_hex_pair(guid_str + 14 + i*2);
+    }
+
+    // Section D (bytes 8-9): big-endian (no reverse)
+    for (int i = 0; i < 2; i++) {
+        bytes[8 + i] = parse_hex_pair(guid_str + 19 + i*2);
+    }
+
+    // Section E (bytes 10-15): big-endian (no reverse)
+    for (int i = 0; i < 6; i++) {
+        bytes[10 + i] = parse_hex_pair(guid_str + 24 + i*2);
+    }
+
+    // Val[0] = bytes 0-7 (little-endian uint64_t)
+    out_guid->lo = *(uint64_t*)&bytes[0];
+
+    // Val[1] = bytes 8-15 with BG3's byte-pair swap
+    // Original: 8, 9, 10, 11, 12, 13, 14, 15
+    // Swapped:  9, 8, 11, 10, 13, 12, 15, 14
+    out_guid->hi = ((uint64_t)bytes[9]) |
+                   ((uint64_t)bytes[8] << 8) |
+                   ((uint64_t)bytes[11] << 16) |
+                   ((uint64_t)bytes[10] << 24) |
+                   ((uint64_t)bytes[13] << 32) |
+                   ((uint64_t)bytes[12] << 40) |
+                   ((uint64_t)bytes[15] << 48) |
+                   ((uint64_t)bytes[14] << 56);
+
     return true;
 }
 ```
+
+**Why the swap?** Windows BG3SE applies this transform in `Guid::Parse()` (Base.cpp:29-38).
 
 ### Lookup Algorithm
 
@@ -184,27 +230,47 @@ EntityHandle lookup(HashMap *map, Guid *guid) {
 - Lookup of known key `a5eaeafe-220d-bc4d-4cc3-b94574d334c7` returns `handle=0x200000100000665`
 - Hash function `guid->lo ^ guid->hi` with bucket `hash % HashKeys.size` works correctly
 
-### Character/Player GUIDs NOT in UuidToHandleMappingComponent
+### Template GUID Extraction (WORKING - Dec 9, 2025)
 
-**IMPORTANT:** Player GUIDs from Osiris events (e.g., `c7c13742-bacd-460a-8f65-f864fe41f255`) are NOT stored in `UuidToHandleMappingComponent`. This has been verified via runtime testing (Dec 9, 2025).
+Character entities use **template GUIDs** with name prefixes:
+- `S_PLA_ConflictedFlind_Gnoll_Ranger_03_81b29ac1-ba32-466b-bca8-9bb555aa3a6d`
+- `S_HAG_ForestIllusion_Redcap_01_ff840420-d46a-4837-868b-ac02f45e4586`
+- `S_Player_Astarion_c7c13742-bacd-460a-8f65-f864fe41f255`
 
-The `UuidToHandleMappingComponent` singleton contains ~23,100 entity UUID mappings, but these are primarily for game objects (items, scenery, etc.), not player characters.
+The last 36 characters are the actual UUID used in `UuidToHandleMappingComponent`.
 
-**Windows BG3SE uses the same approach** - `Ext.Entity.Get(guid)` calls `GetEntityHandle(uuid)` which looks up in `UuidToHandleMappingComponent->Mappings.try_get(uuid)`. See `BG3Extender/Lua/Libs/Entity.inl:31-37`.
+```c
+// Extract UUID from template GUID
+const char *extract_uuid_from_guid(const char *guid) {
+    if (!guid) return guid;
+    size_t len = strlen(guid);
+    if (len < 36) return guid;
 
-**Entity GUID vs Character GUID:**
+    const char *uuid_start = guid + len - 36;
 
-1. **Entity UUID** - Stored in `UuidComponent.EntityUuid` on entities that have one. The `UuidToHandleMappingComponent` maps these to EntityHandles.
+    // Validate: preceded by underscore and has UUID format
+    if (uuid_start != guid && uuid_start[-1] != '_') return guid;
+    if (uuid_start[8] != '-' || uuid_start[13] != '-' ||
+        uuid_start[18] != '-' || uuid_start[23] != '-') return guid;
 
-2. **Character/Template GUID** - The GUIDs from Osiris events (like `CharacterCreatedUser`) are **template GUIDs** or **character identifiers**, not entity UUIDs. These identify the character template/definition, not the ECS entity.
+    return uuid_start;
+}
+```
 
-**How to access characters:**
+**Usage in `entity_get_by_guid()`:**
+```c
+EntityHandle entity_get_by_guid(const char *guid_str) {
+    // Extract UUID from template GUID before parsing
+    const char *uuid_str = extract_uuid_from_guid(guid_str);
+    // ... parse uuid_str and lookup in HashMap ...
+}
+```
 
-- Use `Ext.GetAllEntitiesWithComponent("ServerCharacter")` to get all character entities
-- Each character entity has a `ServerCharacter` component with a `GUID` property that contains the template GUID
-- To lookup by template GUID, iterate characters and compare their `ServerCharacter.GUID`
-
-**Alternative approach:** Characters may have their own mapping component (e.g., character-specific lookup) that we haven't discovered yet. Windows BG3SE test files use `Ext.GetCharacter(GUID_LAEZEL)` which suggests a dedicated character lookup API exists.
+**Verified Working (Dec 9, 2025):**
+```
+GUID lookup SUCCESS: S_PLA_ConflictedFlind_Gnoll_Ranger_03_81b29ac1-... -> handle=0x200000100003253
+GUID lookup SUCCESS: S_HAG_ForestIllusion_Redcap_01_ff840420-... -> handle=0x20000010000324e
+```
 
 ## ECS Helper Functions
 
@@ -404,3 +470,55 @@ Component type indices are stored in static globals (pattern `TypeId<T>::m_TypeI
 - `ecl::Character`: `PTR___ZN2ls6TypeIdIN3ecl9CharacterEN3ecs22ComponentTypeIdContextEE11m_TypeIndexE_1083c7818`
 
 These can be read at runtime to discover component type indices.
+
+## ComponentTypeIndex HashMap Hash Function (Fixed Dec 10, 2025)
+
+**CRITICAL FIX:** The `ComponentTypeToIndex` HashMap uses a specific BG3 hash function for `ComponentTypeIndex`, NOT a simple modulo.
+
+### Wrong (What we had)
+
+```c
+// WRONG - simple modulo doesn't match BG3's hash function
+uint32_t bucket = typeIndex % hashKeys->size;
+```
+
+### Correct (BG3 Hash Function)
+
+From Windows BG3SE `GameDefinitions/EntitySystem.h` lines 82-86:
+
+```c
+// ComponentMapSize = 0x880 = 2176 (constant used in the hash formula)
+#define COMPONENT_MAP_SIZE 0x880
+
+static uint64_t hash_component_type_index(uint16_t typeIndex) {
+    // BG3's special hash for ComponentTypeIndex
+    uint64_t h0 = ((uint64_t)typeIndex & 0x7FFF) + ((uint64_t)typeIndex >> 15) * COMPONENT_MAP_SIZE;
+    return h0 | (h0 << 16);
+}
+
+// Then bucket = hash % hashKeys->size
+uint64_t hash = hash_component_type_index(typeIndex);
+uint32_t bucket = (uint32_t)(hash % hashKeys->size);
+```
+
+### Why This Matters
+
+Without the correct hash function:
+- `component_lookup_by_index()` would compute wrong bucket indices
+- HashMap lookups would miss, returning `initial_idx = -1`
+- `entity.Health` would return `nil` even when the entity has the component
+
+### Verification (Dec 10, 2025)
+
+After fixing the hash function:
+
+```lua
+-- BEFORE (wrong hash):
+-- ComponentTypeToIndex lookup: type=575, bucket=186, initial_idx=-1
+-- entity.Health = nil
+
+-- AFTER (correct hash):
+-- ComponentTypeToIndex lookup: type=575, bucket=575, initial_idx=1
+local e = Ext.Entity.Get("S_PLA_...")
+_P(e.Health.Hp .. "/" .. e.Health.MaxHp)  -- "12/12"
+```

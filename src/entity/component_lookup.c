@@ -150,6 +150,17 @@ bool storage_data_get_instance_index(void *storageData, uint64_t entityHandle,
 // HashMap Lookup: ComponentTypeToIndex
 // ============================================================================
 
+// BG3 ComponentTypeIndex hash function (from Windows BG3SE)
+// ComponentMapSize = 0x880 = 2176
+#define COMPONENT_MAP_SIZE 0x880
+
+static uint64_t hash_component_type_index(uint16_t typeIndex) {
+    // From BG3Extender/GameDefinitions/EntitySystem.h:82-86
+    // HashMapHash<ecs::ComponentTypeIndex>
+    uint64_t h0 = ((uint64_t)typeIndex & 0x7FFF) + ((uint64_t)typeIndex >> 15) * COMPONENT_MAP_SIZE;
+    return h0 | (h0 << 16);
+}
+
 bool storage_data_get_component_slot(void *storageData, uint16_t typeIndex,
                                       uint8_t *outSlot) {
     if (!storageData || !outSlot) return false;
@@ -168,15 +179,16 @@ bool storage_data_get_component_slot(void *storageData, uint16_t typeIndex,
         return false;
     }
 
-    // Calculate bucket (simple hash for uint16_t)
-    uint32_t bucket = typeIndex % (uint32_t)hashKeys->size;
+    // Calculate bucket using BG3's component type hash function
+    uint64_t hash = hash_component_type_index(typeIndex);
+    uint32_t bucket = (uint32_t)(hash % hashKeys->size);
 
     // Get initial index from bucket
     int32_t *bucketArray = (int32_t *)hashKeys->buf;
     int32_t idx = bucketArray[bucket];
 
-    LOG_ENTITY_DEBUG("ComponentTypeToIndex lookup: type=%u, bucket=%u, initial_idx=%d",
-               typeIndex, bucket, idx);
+    LOG_ENTITY_DEBUG("ComponentTypeToIndex lookup: type=%u, hash=0x%llx, bucket=%u, initial_idx=%d",
+               typeIndex, (unsigned long long)hash, bucket, idx);
 
     // Traverse collision chain
     uint16_t *keyArray = (uint16_t *)keys->buf;

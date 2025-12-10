@@ -15,6 +15,47 @@
 // GUID Parsing
 // ============================================================================
 
+/**
+ * Extract the 36-character UUID from a full template GUID string.
+ *
+ * BG3 character entities use template GUIDs with prefixes like:
+ *   "S_PLA_ConflictedFlind_Hyena_01_69bc3485-8f3b-4a76-a3ca-fd9da89bb908"
+ *
+ * This function extracts just the UUID portion:
+ *   "69bc3485-8f3b-4a76-a3ca-fd9da89bb908"
+ *
+ * @param guid The full template GUID string
+ * @return Pointer to the 36-char UUID portion (within the same string),
+ *         or the original string if already a valid UUID or not extractable
+ */
+const char *extract_uuid_from_guid(const char *guid) {
+    if (!guid) return guid;
+
+    size_t len = strlen(guid);
+
+    // If it's already 36 chars (raw UUID), return as-is
+    if (len == 36) return guid;
+
+    // Must be at least 36 chars to contain a UUID
+    if (len < 36) return guid;
+
+    // Check if last 36 chars form a valid UUID pattern
+    const char *uuid_start = guid + len - 36;
+
+    // Validate: must be preceded by underscore (or be at start)
+    if (uuid_start != guid && uuid_start[-1] != '_') {
+        return guid;
+    }
+
+    // Validate UUID format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+    if (uuid_start[8] == '-' && uuid_start[13] == '-' &&
+        uuid_start[18] == '-' && uuid_start[23] == '-') {
+        return uuid_start;
+    }
+
+    return guid;
+}
+
 // Helper: Convert hex character to value
 static int hex_char_to_int(char c) {
     if (c >= '0' && c <= '9') return c - '0';
@@ -47,26 +88,94 @@ bool guid_parse(const char *guid_str, Guid *out_guid) {
         return false;
     }
 
-    // Parse each section
+    // Parse each section as hex bytes directly
     // Format: AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE
-    // where GUID.lo = swapped(AAAAAAAA BBBB CCCC)
-    //       GUID.hi = swapped(DDDD EEEEEEEEEEEE)
     //
-    // BG3 stores GUIDs in little-endian byte order within each section
+    // BG3 uses a specific byte layout for GUIDs (from Windows BG3SE):
+    // The UUID is first parsed into standard format, then Val[1] gets byte-swapped.
+    //
+    // Standard UUID layout (after UuidFromStringA):
+    //   bytes 0-3:   time_low (little-endian from AAAAAAAA)
+    //   bytes 4-5:   time_mid (little-endian from BBBB)
+    //   bytes 6-7:   time_hi_and_version (little-endian from CCCC)
+    //   bytes 8-9:   clock_seq (DDDD - big-endian in UUID)
+    //   bytes 10-15: node (EEEEEEEEEEEE - big-endian in UUID)
+    //
+    // Val[0] = bytes 0-7
+    // Val[1] = bytes 8-15 (with BG3's byte swap applied)
 
-    uint64_t a, b, c, d, e;
-    if (!parse_hex_bytes(guid_str + 0, 8, &a)) return false;
-    if (!parse_hex_bytes(guid_str + 9, 4, &b)) return false;
-    if (!parse_hex_bytes(guid_str + 14, 4, &c)) return false;
-    if (!parse_hex_bytes(guid_str + 19, 4, &d)) return false;
-    if (!parse_hex_bytes(guid_str + 24, 12, &e)) return false;
+    uint8_t bytes[16];
 
-    // Pack into 128-bit GUID
-    // BG3 stores GUIDs with the last parts (DDDD-EEEEEEEEEEEE) in lo
-    // and first parts (AAAAAAAA-BBBB-CCCC) in hi
-    // This was discovered by comparing parsed GUIDs to HashMap keys
-    out_guid->hi = (a << 32) | (b << 16) | c;  // First 8 bytes go to hi
-    out_guid->lo = (d << 48) | e;              // Last 8 bytes go to lo
+    // Parse each hex pair into the byte array
+    // Section A: bytes 0-3 (little-endian, so reverse)
+    for (int i = 0; i < 4; i++) {
+        int v = hex_char_to_int(guid_str[i*2]) * 16 + hex_char_to_int(guid_str[i*2 + 1]);
+        if (v < 0) return false;
+        bytes[3 - i] = (uint8_t)v;  // Reverse for little-endian
+    }
+
+    // Section B: bytes 4-5 (little-endian, so reverse)
+    for (int i = 0; i < 2; i++) {
+        int v = hex_char_to_int(guid_str[9 + i*2]) * 16 + hex_char_to_int(guid_str[9 + i*2 + 1]);
+        if (v < 0) return false;
+        bytes[5 - i] = (uint8_t)v;  // Reverse for little-endian
+    }
+
+    // Section C: bytes 6-7 (little-endian, so reverse)
+    for (int i = 0; i < 2; i++) {
+        int v = hex_char_to_int(guid_str[14 + i*2]) * 16 + hex_char_to_int(guid_str[14 + i*2 + 1]);
+        if (v < 0) return false;
+        bytes[7 - i] = (uint8_t)v;  // Reverse for little-endian
+    }
+
+    // Section D: bytes 8-9 (big-endian in UUID, so no reverse)
+    for (int i = 0; i < 2; i++) {
+        int v = hex_char_to_int(guid_str[19 + i*2]) * 16 + hex_char_to_int(guid_str[19 + i*2 + 1]);
+        if (v < 0) return false;
+        bytes[8 + i] = (uint8_t)v;
+    }
+
+    // Section E: bytes 10-15 (big-endian in UUID, so no reverse)
+    for (int i = 0; i < 6; i++) {
+        int v = hex_char_to_int(guid_str[24 + i*2]) * 16 + hex_char_to_int(guid_str[24 + i*2 + 1]);
+        if (v < 0) return false;
+        bytes[10 + i] = (uint8_t)v;
+    }
+
+    // Now apply BG3's byte swap to the second 64-bit value
+    // From Windows BG3SE:
+    //   uuid.Val[1] = (((v1 >> 56) & 0xff) << 48) |
+    //                 (((v1 >> 48) & 0xff) << 56) |
+    //                 (((v1 >> 40) & 0xff) << 32) |
+    //                 (((v1 >> 32) & 0xff) << 40) |
+    //                 (((v1 >> 24) & 0xff) << 16) |
+    //                 (((v1 >> 16) & 0xff) << 24) |
+    //                 (((v1 >> 8) & 0xff) << 0) |
+    //                 (((v1 >> 0) & 0xff) << 8);
+    //
+    // This swaps adjacent byte pairs: bytes 8-9, 10-11, 12-13, 14-15
+
+    // Copy Val[0] directly (bytes 0-7)
+    out_guid->lo = ((uint64_t)bytes[0]) |
+                   ((uint64_t)bytes[1] << 8) |
+                   ((uint64_t)bytes[2] << 16) |
+                   ((uint64_t)bytes[3] << 24) |
+                   ((uint64_t)bytes[4] << 32) |
+                   ((uint64_t)bytes[5] << 40) |
+                   ((uint64_t)bytes[6] << 48) |
+                   ((uint64_t)bytes[7] << 56);
+
+    // Build Val[1] with BG3's byte swap (swap adjacent pairs)
+    // Original order: 8, 9, 10, 11, 12, 13, 14, 15
+    // BG3 order:      9, 8, 11, 10, 13, 12, 15, 14
+    out_guid->hi = ((uint64_t)bytes[9]) |
+                   ((uint64_t)bytes[8] << 8) |
+                   ((uint64_t)bytes[11] << 16) |
+                   ((uint64_t)bytes[10] << 24) |
+                   ((uint64_t)bytes[13] << 32) |
+                   ((uint64_t)bytes[12] << 40) |
+                   ((uint64_t)bytes[15] << 48) |
+                   ((uint64_t)bytes[14] << 56);
 
     return true;
 }

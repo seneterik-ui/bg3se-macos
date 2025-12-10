@@ -9,6 +9,7 @@
 #include "component_registry.h"
 #include "component_lookup.h"
 #include "component_typeid.h"
+#include "component_property.h"
 #include "arm64_call.h"
 #include "logging.h"
 
@@ -129,6 +130,46 @@ static GetComponentFn g_GetBaseHpComponent = NULL;
 static GetComponentFn g_GetHealthComponent = NULL;
 static GetComponentFn g_GetArmorComponent = NULL;
 static GetComponentFn g_GetClassesComponent = NULL;
+
+// ============================================================================
+// Component Type Helpers (for data structure traversal)
+// ============================================================================
+
+/**
+ * Get the full component name for a ComponentType enum.
+ * Used to look up component info in the registry.
+ */
+static const char* get_component_full_name(ComponentType type) {
+    switch (type) {
+        case COMPONENT_TRANSFORM: return "ls::TransformComponent";
+        case COMPONENT_LEVEL:     return "ls::LevelComponent";
+        case COMPONENT_PHYSICS:   return "ls::PhysicsComponent";
+        case COMPONENT_VISUAL:    return "ls::VisualComponent";
+        case COMPONENT_STATS:     return "eoc::StatsComponent";
+        case COMPONENT_BASE_HP:   return "eoc::BaseHpComponent";
+        case COMPONENT_HEALTH:    return "eoc::HealthComponent";
+        case COMPONENT_ARMOR:     return "eoc::ArmorComponent";
+        default: return NULL;
+    }
+}
+
+/**
+ * Get component size for data structure traversal.
+ * Returns 0 if component size is unknown.
+ */
+static size_t get_component_size_for_type(ComponentType type) {
+    switch (type) {
+        case COMPONENT_HEALTH:    return 0x24;  // From component_offsets.h
+        case COMPONENT_BASE_HP:   return 0x08;
+        case COMPONENT_ARMOR:     return 0x10;
+        case COMPONENT_STATS:     return 0xA0;
+        case COMPONENT_TRANSFORM: return 0x50;  // Estimated from Windows BG3SE
+        case COMPONENT_LEVEL:     return 0x10;  // Estimated
+        case COMPONENT_PHYSICS:   return 0x30;  // Estimated
+        case COMPONENT_VISUAL:    return 0x20;  // Estimated
+        default: return 0;
+    }
+}
 
 // ============================================================================
 // TryGetSingleton Function Pointer
@@ -569,7 +610,11 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
         return ENTITY_HANDLE_INVALID;
     }
 
-    // Check cache first
+    // Extract UUID from full template GUID (e.g., "S_PLA_*_<uuid>" → "<uuid>")
+    // This handles character entity GUIDs that have prefixes
+    const char *uuid_str = extract_uuid_from_guid(guid_str);
+
+    // Check cache first (use original guid_str for exact match)
     for (int i = 0; i < g_GuidCacheCount; i++) {
         if (strcmp(g_GuidCache[i].guid, guid_str) == 0) {
             return g_GuidCache[i].handle;
@@ -591,12 +636,16 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
     }
 
     if (g_UuidMappingComponent) {
-        // Parse the GUID
+        // Parse the extracted UUID (not the full template GUID)
         Guid guid;
-        if (!guid_parse(guid_str, &guid)) {
-            LOG_ENTITY_DEBUG("Failed to parse GUID: %s", guid_str);
+        if (!guid_parse(uuid_str, &guid)) {
+            LOG_ENTITY_DEBUG("Failed to parse GUID: %s (extracted: %s)", guid_str, uuid_str);
             return ENTITY_HANDLE_INVALID;
         }
+
+        // Debug: Log what we're searching for
+        LOG_ENTITY_INFO("Searching for: %s -> hi=0x%llx lo=0x%llx",
+                   uuid_str, (unsigned long long)guid.hi, (unsigned long long)guid.lo);
 
         // Cast to our structure
         UuidToHandleMappingComponent *mapping = (UuidToHandleMappingComponent*)g_UuidMappingComponent;
@@ -679,87 +728,43 @@ void* entity_get_component(EntityHandle handle, ComponentType type) {
         return NULL;
     }
 
-    void *component = NULL;
-
-    switch (type) {
-        case COMPONENT_TRANSFORM:
-            if (g_GetTransformComponent) {
-                component = g_GetTransformComponent(g_EntityWorld, handle);
-            }
-            break;
-
-        case COMPONENT_LEVEL:
-            if (g_GetLevelComponent) {
-                component = g_GetLevelComponent(g_EntityWorld, handle);
-            }
-            break;
-
-        case COMPONENT_PHYSICS:
-            if (g_GetPhysicsComponent) {
-                component = g_GetPhysicsComponent(g_EntityWorld, handle);
-            }
-            break;
-
-        case COMPONENT_VISUAL:
-            if (g_GetVisualComponent) {
-                component = g_GetVisualComponent(g_EntityWorld, handle);
-            }
-            break;
-
-        // eoc:: components - function pointers set when addresses discovered
-        case COMPONENT_STATS:
-            if (g_GetStatsComponent) {
-                component = g_GetStatsComponent(g_EntityWorld, handle);
-            } else {
-                LOG_ENTITY_DEBUG("GetComponent<Stats> address not yet discovered");
-            }
-            break;
-
-        case COMPONENT_BASE_HP:
-            if (g_GetBaseHpComponent) {
-                component = g_GetBaseHpComponent(g_EntityWorld, handle);
-            } else {
-                LOG_ENTITY_DEBUG("GetComponent<BaseHp> address not yet discovered");
-            }
-            break;
-
-        case COMPONENT_HEALTH:
-            if (g_GetHealthComponent) {
-                component = g_GetHealthComponent(g_EntityWorld, handle);
-            } else {
-                LOG_ENTITY_DEBUG("GetComponent<Health> address not yet discovered");
-            }
-            break;
-
-        case COMPONENT_ARMOR:
-            if (g_GetArmorComponent) {
-                component = g_GetArmorComponent(g_EntityWorld, handle);
-            } else {
-                LOG_ENTITY_DEBUG("GetComponent<Armor> address not yet discovered");
-            }
-            break;
-
-        case COMPONENT_CLASSES:
-            if (g_GetClassesComponent) {
-                component = g_GetClassesComponent(g_EntityWorld, handle);
-            } else {
-                LOG_ENTITY_DEBUG("GetComponent<Classes> address not yet discovered");
-            }
-            break;
-
-        case COMPONENT_RACE:
-        case COMPONENT_PLAYER:
-            LOG_ENTITY_DEBUG("GetComponent for type %d not yet implemented", type);
-            break;
-
-        default:
-            LOG_ENTITY_DEBUG("Unknown component type: %d", type);
-            break;
+    // Get the full component name for registry lookup
+    const char *componentName = get_component_full_name(type);
+    if (!componentName) {
+        LOG_ENTITY_DEBUG("Unknown component type: %d", type);
+        return NULL;
     }
 
+    // Look up component info in the registry
+    const ComponentInfo *info = component_registry_lookup(componentName);
+    if (!info) {
+        LOG_ENTITY_DEBUG("Component '%s' not found in registry", componentName);
+        return NULL;
+    }
+
+    // Check if we have a valid type index
+    if (info->index == COMPONENT_INDEX_UNDEFINED) {
+        LOG_ENTITY_DEBUG("Component '%s' has undefined type index (TypeId not discovered)", componentName);
+        return NULL;
+    }
+
+    // Get component size (use registry size if available, otherwise our fallback)
+    size_t componentSize = info->size;
+    if (componentSize == 0) {
+        componentSize = get_component_size_for_type(type);
+    }
+
+    // Use data structure traversal to get the component
+    void *component = component_lookup_by_index(
+        handle,
+        info->index,
+        componentSize,
+        info->is_proxy
+    );
+
     if (component) {
-        LOG_ENTITY_DEBUG("Got component type %d for handle 0x%llx: %p",
-                   type, (unsigned long long)handle, component);
+        LOG_ENTITY_DEBUG("Got component %s (index=%u) for handle 0x%llx: %p",
+                   componentName, info->index, (unsigned long long)handle, component);
     }
 
     return component;
@@ -866,6 +871,14 @@ int entity_system_init(void *main_binary_base) {
         LOG_ENTITY_DEBUG("Discovered %d component type indices from TypeId globals", discovered);
     } else {
         LOG_ENTITY_DEBUG("WARNING: TypeId discovery init failed");
+    }
+
+    // Initialize component property system (data-driven property layouts)
+    if (component_property_init()) {
+        LOG_ENTITY_DEBUG("Component property system initialized with %d layouts",
+                         component_property_get_layout_count());
+    } else {
+        LOG_ENTITY_DEBUG("WARNING: Component property system init failed");
     }
 
     g_Initialized = true;
@@ -1235,9 +1248,21 @@ static int lua_entity_get_component(lua_State *L) {
             if (strstr(name, "TransformComponent") != NULL) {
                 push_transform_component(L, component);
             } else {
-                // Return raw component pointer as light userdata
-                // Mods can use this with Ext.Entity.DumpComponentRegistry() to understand the layout
-                lua_pushlightuserdata(L, component);
+                // Check if we have a property layout for this component
+                const ComponentLayoutDef *layout = component_property_get_layout(name);
+                if (!layout) {
+                    // Try short name lookup
+                    layout = component_property_get_layout_by_short_name(name);
+                }
+
+                if (layout) {
+                    // Return a property proxy for known components
+                    component_property_push_proxy(L, component, layout);
+                } else {
+                    // Return raw component pointer as light userdata
+                    // Mods can use this with Ext.Entity.DumpComponentRegistry() to understand the layout
+                    lua_pushlightuserdata(L, component);
+                }
             }
             return 1;
         }
@@ -1286,6 +1311,44 @@ static int lua_entity_get_component(lua_State *L) {
         case COMPONENT_TRANSFORM:
             push_transform_component(L, component);
             break;
+
+        // For components with property layouts, return proxy
+        case COMPONENT_HEALTH: {
+            const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Health");
+            if (layout) {
+                component_property_push_proxy(L, component, layout);
+            } else {
+                lua_pushlightuserdata(L, component);
+            }
+            break;
+        }
+        case COMPONENT_BASE_HP: {
+            const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("BaseHp");
+            if (layout) {
+                component_property_push_proxy(L, component, layout);
+            } else {
+                lua_pushlightuserdata(L, component);
+            }
+            break;
+        }
+        case COMPONENT_ARMOR: {
+            const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Armor");
+            if (layout) {
+                component_property_push_proxy(L, component, layout);
+            } else {
+                lua_pushlightuserdata(L, component);
+            }
+            break;
+        }
+        case COMPONENT_STATS: {
+            const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Stats");
+            if (layout) {
+                component_property_push_proxy(L, component, layout);
+            } else {
+                lua_pushlightuserdata(L, component);
+            }
+            break;
+        }
 
         // For components without full struct definitions, return light userdata
         default:
@@ -1466,6 +1529,45 @@ static int lua_entity_index(lua_State *L) {
             case COMPONENT_TRANSFORM:
                 push_transform_component(L, component);
                 break;
+
+            // For components with property layouts, return proxy
+            case COMPONENT_HEALTH: {
+                const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Health");
+                if (layout) {
+                    component_property_push_proxy(L, component, layout);
+                } else {
+                    lua_pushlightuserdata(L, component);
+                }
+                break;
+            }
+            case COMPONENT_BASE_HP: {
+                const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("BaseHp");
+                if (layout) {
+                    component_property_push_proxy(L, component, layout);
+                } else {
+                    lua_pushlightuserdata(L, component);
+                }
+                break;
+            }
+            case COMPONENT_ARMOR: {
+                const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Armor");
+                if (layout) {
+                    component_property_push_proxy(L, component, layout);
+                } else {
+                    lua_pushlightuserdata(L, component);
+                }
+                break;
+            }
+            case COMPONENT_STATS: {
+                const ComponentLayoutDef *layout = component_property_get_layout_by_short_name("Stats");
+                if (layout) {
+                    component_property_push_proxy(L, component, layout);
+                } else {
+                    lua_pushlightuserdata(L, component);
+                }
+                break;
+            }
+
             default:
                 lua_pushlightuserdata(L, component);
                 break;
@@ -1831,6 +1933,9 @@ void entity_register_lua(lua_State *L) {
     lua_setfield(L, -2, "__tostring");
 
     lua_pop(L, 1);  // pop metatable
+
+    // Register component property metatables
+    component_property_register_lua(L);
 
     // Create Ext.Entity table
     lua_getglobal(L, "Ext");

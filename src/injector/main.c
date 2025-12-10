@@ -879,37 +879,7 @@ static int is_player_guid(const char *guid) {
     return 0;
 }
 
-/**
- * Extract just the UUID portion from a full template GUID string.
- * e.g., "S_Player_Astarion_c7c13742-bacd-460a-8f65-f864fe41f255" -> "c7c13742-bacd-460a-8f65-f864fe41f255"
- * Returns pointer to start of UUID within the input string, or the input if no underscore found.
- */
-static const char *extract_uuid_from_guid(const char *guid) {
-    if (!guid) return guid;
-
-    // UUID format: 8-4-4-4-12 = 36 characters
-    // Find the last underscore before the UUID
-    size_t len = strlen(guid);
-    if (len >= 36) {
-        // Check if last 36 chars look like a UUID (has hyphens at right positions)
-        const char *uuid_start = guid + len - 36;
-        if (uuid_start[-1] == '_' || uuid_start == guid) {
-            // Verify it looks like a UUID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
-            if (uuid_start[8] == '-' && uuid_start[13] == '-' &&
-                uuid_start[18] == '-' && uuid_start[23] == '-') {
-                return uuid_start;
-            }
-        }
-    }
-
-    // Fallback: look for last underscore
-    const char *last_underscore = strrchr(guid, '_');
-    if (last_underscore && strlen(last_underscore + 1) == 36) {
-        return last_underscore + 1;
-    }
-
-    return guid;  // Return original if no pattern found
-}
+// extract_uuid_from_guid() is now provided by guid_lookup.c
 
 /**
  * Track a player GUID if we haven't seen it before.
