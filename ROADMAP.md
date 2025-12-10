@@ -393,34 +393,36 @@ end)
 - GameStateChanged fires on initial load and save reloads
 
 ### 2.6 User & Mod Variables
-**Status:** ❌ Not Started - **CRITICAL**
+**Status:** ✅ Complete (v0.27.0) - User variables working, mod variables pending
 
 From API.md: "v10 adds support for attaching custom properties to entities."
 
-**Target API:**
+**Implemented API:**
 ```lua
 -- Registration (in BootstrapServer/Client.lua)
-Ext.Vars.RegisterUserVariable("NRD_MyVar", {
+Ext.Vars.RegisterUserVariable("MyMod_CustomHP", {
     Server = true,
-    Client = true,
-    SyncToClient = true,
-    Persistent = true,       -- Save to savegame
+    Persistent = true,       -- Save to disk
     SyncOnTick = true        -- Batch sync (default)
 })
 
 -- Usage
-entity.Vars.NRD_MyVar = { health = 100, mana = 50 }
-local data = entity.Vars.NRD_MyVar
+entity.Vars.MyMod_CustomHP = { bonus = 50, temp = 10 }
+local data = entity.Vars.MyMod_CustomHP
 
 -- Manual sync
 Ext.Vars.SyncUserVariables()
 
--- Mod-level variables
-Ext.Vars.RegisterModVariable(ModuleUUID, "GlobalState", { ... })
-local vars = Ext.Vars.GetModVariables(ModuleUUID)
+-- Find entities with variable
+local entities = Ext.Vars.GetEntitiesWithVariable("MyMod_CustomHP")
 ```
 
-**Impact:** Without this, mods cannot attach custom data to entities with automatic sync/persistence.
+**Storage:** `~/Library/Application Support/BG3SE/uservars.json`
+
+**Not Yet Implemented:**
+- `Ext.Vars.RegisterModVariable()` - Mod-level variables (global, not entity-attached)
+- `Ext.Vars.GetModVariables()` - Get mod variable storage
+- Client/server sync (requires NetChannel API)
 
 ### 2.7 Client Lua State
 **Status:** ❌ Not Started - **HIGH**
@@ -1050,7 +1052,7 @@ Ext.Mod.GetModInfo(guid)
 | A3 | Stats Property Read/Write | High | ✅ Complete (v0.18.0) |
 | A4 | Component Property Access | High | ✅ Complete (v0.24.0) |
 | A5 | NetChannel API | High | ❌ Not Started |
-| A6 | User Variables | High | ❌ Not Started |
+| A6 | User Variables | High | ✅ Complete |
 
 ### Priority B: High Impact (Breaks Many Mods)
 
@@ -1091,6 +1093,7 @@ Ext.Mod.GetModInfo(guid)
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.27.0 | 2025-12-10 | User Variables - entity.Vars for attaching custom data to entities with persistence (Issue #13) |
 | v0.26.0 | 2025-12-10 | Ext.Enums - Type-safe enum/bitfield userdata with 14 types (DamageType, AbilityId, SkillId, StatusType, SurfaceType, etc.), flexible comparison, bitwise operations (Issue #29) |
 | v0.25.0 | 2025-12-10 | Ext.Stats.Create and Sync (Issue #27) |
 | v0.24.0 | 2025-12-10 | Expanded component property access - 8 component layouts (Health, BaseHp, Armor, Stats, BaseStats, Transform, Level, Data) with data-driven property definitions |

@@ -34,6 +34,9 @@
 #include "../../lib/lua/src/lauxlib.h"
 #include "../../lib/lua/src/lualib.h"
 
+// Include user variables for entity.Vars
+#include "../vars/user_variables.h"
+
 // ============================================================================
 // Global State
 // ============================================================================
@@ -716,6 +719,19 @@ EntityHandle entity_get_by_guid(const char *guid_str) {
     }
 
     return ENTITY_HANDLE_INVALID;
+}
+
+/**
+ * Reverse lookup: Get GUID string for an EntityHandle from cache.
+ * Returns NULL if not found in cache.
+ */
+static const char* entity_get_guid_from_cache(EntityHandle handle) {
+    for (int i = 0; i < g_GuidCacheCount; i++) {
+        if (g_GuidCache[i].handle == handle) {
+            return g_GuidCache[i].guid;
+        }
+    }
+    return NULL;
 }
 
 bool entity_is_alive(EntityHandle handle) {
@@ -1525,6 +1541,20 @@ static int lua_entity_index(lua_State *L) {
     }
     if (strcmp(key, "GetAllComponentNames") == 0) {
         lua_pushcfunction(L, lua_entity_get_all_component_names);
+        return 1;
+    }
+
+    // entity.Vars - Returns user variables proxy for this entity
+    if (strcmp(key, "Vars") == 0) {
+        const char *guid = entity_get_guid_from_cache(*ud);
+        if (guid) {
+            uvar_push_entity_proxy(L, guid, *ud);
+        } else {
+            // Entity not in cache - create empty proxy with handle string as key
+            char handle_str[32];
+            snprintf(handle_str, sizeof(handle_str), "0x%llx", (unsigned long long)*ud);
+            uvar_push_entity_proxy(L, handle_str, *ud);
+        }
         return 1;
     }
 

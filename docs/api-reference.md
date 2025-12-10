@@ -302,7 +302,11 @@ Ext.Events.SessionLoaded:Unsubscribe(handlerId)
 
 ---
 
-## Ext.Vars (PersistentVars)
+## Ext.Vars
+
+Variable persistence system with support for both mod-level storage and entity-attached data.
+
+### PersistentVars (Mod-Level)
 
 File-based persistence for mod data across sessions.
 
@@ -322,6 +326,58 @@ File-based persistence for mod data across sessions.
 Mods.MyMod.PersistentVars = Mods.MyMod.PersistentVars or {}
 Mods.MyMod.PersistentVars.PlayerKills = (Mods.MyMod.PersistentVars.PlayerKills or 0) + 1
 Ext.Vars.MarkDirty()  -- Will auto-save
+```
+
+### User Variables (Entity-Attached)
+
+Attach custom data to game entities with automatic persistence.
+
+| API | Status | Description |
+|-----|--------|-------------|
+| `Ext.Vars.RegisterUserVariable(name, opts)` | ✅ | Register a variable prototype |
+| `Ext.Vars.GetEntitiesWithVariable(name)` | ✅ | Get all entities with a variable |
+| `Ext.Vars.SyncUserVariables()` | ✅ | Force save user variables |
+| `Ext.Vars.DirtyUserVariables([guid], [key])` | ✅ | Mark variables as dirty |
+| `entity.Vars.VarName` | ✅ | Get/set entity variable |
+
+**Registration Options:**
+| Option | Default | Description |
+|--------|---------|-------------|
+| `Server` | true | Available on server |
+| `Client` | false | Available on client |
+| `Persistent` | true | Save to disk |
+| `WriteableOnServer` | true | Can modify on server |
+| `WriteableOnClient` | false | Can modify on client |
+| `SyncToClient` | false | Sync server→client |
+| `SyncToServer` | false | Sync client→server |
+| `SyncOnTick` | true | Batch sync per tick |
+| `SyncOnWrite` | false | Sync immediately on write |
+
+**Storage Location:** `~/Library/Application Support/BG3SE/uservars.json`
+
+**Example:**
+```lua
+-- Register variable (in BootstrapServer.lua)
+Ext.Vars.RegisterUserVariable("MyMod_CustomHP", {
+    Server = true,
+    Persistent = true
+})
+
+-- Set variable on entity
+local entity = Ext.Entity.Get(GetHostCharacter())
+entity.Vars.MyMod_CustomHP = { bonus = 50, temp = 10 }
+
+-- Read variable
+local hp = entity.Vars.MyMod_CustomHP
+if hp then
+    Ext.Print("Bonus HP: " .. hp.bonus)
+end
+
+-- Find all entities with variable
+local entities = Ext.Vars.GetEntitiesWithVariable("MyMod_CustomHP")
+for _, guid in ipairs(entities) do
+    Ext.Print("Entity: " .. guid)
+end
 ```
 
 ---

@@ -38,6 +38,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/stats
     ${CMAKE_SOURCE_DIR}/src/strings
     ${CMAKE_SOURCE_DIR}/src/timer
+    ${CMAKE_SOURCE_DIR}/src/vars
 )
 
 add_library(bg3se SHARED
@@ -79,6 +80,7 @@ add_library(bg3se SHARED
     src/math/math_ext.c
     src/math/lua_math.c
     src/overlay/overlay.m
+    src/vars/user_variables.c
     lib/lz4/lz4.c
 )
 

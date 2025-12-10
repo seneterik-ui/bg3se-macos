@@ -44,7 +44,7 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.26.0 | **Feature Parity:** ~72%
+**Version:** v0.27.0 | **Feature Parity:** ~74%
 
 | Feature | Status |
 |---------|--------|
@@ -56,7 +56,7 @@ SE mods work automatically—just install them like any other mod:
 | Ext.Stats | ✅ 15,774 stats, property read/write, Create/Sync |
 | Ext.Events | ✅ 8 events with GameStateChanged |
 | Ext.Timer | ✅ WaitFor, Cancel, Pause, Resume |
-| Ext.Vars | ✅ PersistentVars |
+| Ext.Vars | ✅ PersistentVars + User Variables (entity.Vars) |
 | Ext.Input | ✅ Hotkeys, key injection |
 | Ext.Math | ✅ Vector/matrix operations |
 | Ext.Enums | ✅ 14 enum/bitfield types |

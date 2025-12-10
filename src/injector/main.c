@@ -79,6 +79,9 @@ extern "C" {
 // PersistentVars
 #include "lua_persistentvars.h"
 
+// User Variables (entity.Vars)
+#include "user_variables.h"
+
 // Event system
 #include "lua_events.h"
 
@@ -660,6 +663,13 @@ static void register_ext_api(lua_State *L) {
 
     // Ext.Vars namespace (persistent variables)
     lua_persistentvars_register(L, -1);
+
+    // Add user variables to Ext.Vars (RegisterUserVariable, GetEntitiesWithVariable, etc.)
+    lua_getfield(L, -1, "Vars");  // Get Ext.Vars table
+    if (lua_istable(L, -1)) {
+        uvar_register_lua(L, -1);
+    }
+    lua_pop(L, 1);  // Pop Ext.Vars
 
     // Ext.Enums namespace (enum and bitfield types)
     enum_register_ext_enums(L);
