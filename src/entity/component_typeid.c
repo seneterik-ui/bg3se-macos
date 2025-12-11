@@ -58,6 +58,21 @@ static const TypeIdEntry g_KnownTypeIds[] = {
     { "ls::VisualComponent",    0x108940110, 0, false },
     { "ls::PhysicsComponent",   0x10893c8e8, 0, false },
 
+    // =====================================================================
+    // Phase 2 Components (Issue #33)
+    // =====================================================================
+    { "eoc::LevelComponent",             0x10890b068, 0, false },  // Character level (different from ls::LevelComponent)
+    { "eoc::exp::ExperienceComponent",   0x1088ef818, 0, false },
+    { "eoc::exp::AvailableLevelComponent", 0x108907918, 0, false },
+    { "eoc::PassiveComponent",           0x1089113f8, 0, false },
+    { "eoc::PassiveContainerComponent",  0x108907158, 0, false },
+    { "eoc::ResistancesComponent",       0x108910010, 0, false },
+    { "eoc::TagComponent",               0x10890b048, 0, false },
+    { "eoc::RaceComponent",              0x1089075f0, 0, false },
+    { "eoc::OriginComponent",            0x108900530, 0, false },
+    { "eoc::ClassesComponent",           0x10890b098, 0, false },
+    { "eoc::MovementComponent",          0x108909240, 0, false },
+
     // Sentinel
     { NULL, 0, 0, false }
 };
