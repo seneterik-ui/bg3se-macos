@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.29.0
+## Current Status: v0.30.0
 
-**Overall Feature Parity: ~50%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~52%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -38,7 +38,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile | **50%** | 1 |
 | `Ext.Entity` | ✅ Full (26) | ⚠️ Get, components, enumeration (15) | **58%** | 2 |
 | `Ext.Stats` | ✅ Full (52) | ⚠️ Get, GetAll, Create, property read/write (15) | **29%** | 3 |
-| `Ext.Events` | ✅ Full (~30) | ⚠️ 7 events + Subscribe/Unsubscribe | **25%** | 2.5 |
+| `Ext.Events` | ✅ Full (~30) | ⚠️ 10 events + Subscribe/Unsubscribe/Prevent | **33%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ⚠️ WaitFor, Cancel, Pause, Resume, IsPaused, MonotonicTime (6) | **46%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
 | `Ext.Vars` | ✅ Full (8) | ✅ User + Mod Variables (12) | **100%** | 2.6 |
@@ -347,11 +347,11 @@ Ext.Vars.ReloadPersistentVars()   -- Force reload from disk
 **Note:** macOS uses file-based persistence instead of savegame hooks (which would require extensive reverse engineering).
 
 ### 2.5 Ext.Events API (Engine Events)
-**Status:** ✅ Complete (v0.14.0) - 7 events including GameStateChanged, advanced subscription system
+**Status:** ✅ Complete (v0.30.0) - 10 events including console interception with Prevent pattern
 
 From API.md: "Subscribing to engine events can be done through the `Ext.Events` table."
 
-**Implemented API (v0.14.0):**
+**Implemented API (v0.30.0):**
 ```lua
 -- Subscribe with options
 local handlerId = Ext.Events.SessionLoaded:Subscribe(function(e)
@@ -379,27 +379,44 @@ Ext.Events.GameStateChanged:Subscribe(function(e)
     _P("State: " .. e.FromState .. " -> " .. e.ToState)
     -- States: 2=Init, 7=LoadSession, 13=Running, etc.
 end)
+
+-- DoConsoleCommand event with Prevent pattern (v0.30.0)
+Ext.Events.DoConsoleCommand:Subscribe(function(e)
+    _P("Command: " .. e.Command)
+    if e.Command:match("^!secret") then
+        e.Prevent = true  -- Block command execution
+    end
+end)
+
+-- LuaConsoleInput event (v0.30.0)
+Ext.Events.LuaConsoleInput:Subscribe(function(e)
+    _P("Lua input: " .. #e.Input .. " chars")
+end)
 ```
 
-**Available Events (from API.md):**
-| Event | When | Status |
-|-------|------|--------|
-| `SessionLoading` | Session setup started | ✅ Implemented |
-| `SessionLoaded` | Session ready | ✅ Implemented |
-| `ResetCompleted` | After `reset` command | ✅ Implemented |
-| `Tick` | Every game loop (~30hz) | ✅ Implemented (v0.13.0) |
-| `StatsLoaded` | After stats entries loaded | ✅ Implemented (v0.13.0) |
-| `ModuleLoadStarted` | Before mod scripts load | ✅ Implemented (v0.13.0) |
-| `GameStateChanged` | State transitions (load, run, etc.) | ✅ Implemented (v0.14.0) |
+**Available Events:**
+| Event | When | Event Data | Status |
+|-------|------|------------|--------|
+| `SessionLoading` | Session setup started | {} | ✅ Implemented |
+| `SessionLoaded` | Session ready | {} | ✅ Implemented |
+| `ResetCompleted` | After `reset` command | {} | ✅ Implemented |
+| `Tick` | Every game loop (~30hz) | {DeltaTime} | ✅ Implemented (v0.13.0) |
+| `StatsLoaded` | After stats entries loaded | {} | ✅ Implemented (v0.13.0) |
+| `ModuleLoadStarted` | Before mod scripts load | {} | ✅ Implemented (v0.13.0) |
+| `GameStateChanged` | State transitions | {FromState, ToState} | ✅ Implemented (v0.14.0) |
+| `KeyInput` | Keyboard input | {Key, Pressed, Modifiers, Character} | ✅ Implemented |
+| `DoConsoleCommand` | Console ! command | {Command, Prevent} | ✅ Implemented (v0.30.0) |
+| `LuaConsoleInput` | Raw Lua console input | {Input, Prevent} | ✅ Implemented (v0.30.0) |
 
-**Advanced Features (v0.14.0):**
+**Advanced Features:**
 - Priority-based handler ordering (lower = called first)
 - Once flag for auto-unsubscription
 - Handler ID return for explicit unsubscription
 - Deferred modifications during dispatch (prevents iterator corruption)
 - Protected calls to prevent cascade failures
 - `!events` console command to inspect handler counts
-- GameStateChanged fires on initial load and save reloads
+- **Prevent pattern** - handlers can set `e.Prevent = true` to block default execution
+- Combat/status events available via `Ext.Osiris.RegisterListener()` (TurnStarted, StatusApplied, etc.)
 
 ### 2.6 User & Mod Variables
 **Status:** ✅ Complete (v0.28.0) - User variables + Mod variables working
@@ -1193,6 +1210,7 @@ Full debugging experience with breakpoints, stepping, and variable inspection.
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.30.0 | 2025-12-11 | Ext.Events Expansion - 10 events (was 8), DoConsoleCommand and LuaConsoleInput with Prevent pattern, combat/status events documented via Osiris (Issue #34) |
 | v0.29.0 | 2025-12-10 | Userdata Lifetime Scoping - Entities, Components, and StatsObjects now validate lifetime on every access, preventing stale object use (Issue #28) |
 | v0.28.0 | 2025-12-10 | Mod Variables - Ext.Vars.GetModVariables() for global per-mod data storage with persistence |
 | v0.27.0 | 2025-12-10 | User Variables - entity.Vars for attaching custom data to entities with persistence (Issue #13) |

@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.29.0 | **Parity:** ~50% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.30.0 | **Parity:** ~52% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 

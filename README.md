@@ -44,7 +44,7 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.29.0 | **Feature Parity:** ~78%
+**Version:** v0.30.0 | **Feature Parity:** ~52%
 
 | Feature | Status |
 |---------|--------|
@@ -54,7 +54,7 @@ SE mods work automatically—just install them like any other mod:
 | Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions) |
 | Ext.Entity | ✅ GUID lookup, Health component properties, GetAllEntitiesWithComponent |
 | Ext.Stats | ✅ 15,774 stats, property read/write, Create/Sync |
-| Ext.Events | ✅ 8 events with GameStateChanged |
+| Ext.Events | ✅ 10 events with Prevent pattern |
 | Ext.Timer | ✅ WaitFor, Cancel, Pause, Resume |
 | Ext.Vars | ✅ PersistentVars + User Variables + Mod Variables |
 | Ext.Input | ✅ Hotkeys, key injection |
