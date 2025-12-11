@@ -181,3 +181,36 @@ Mods loaded from:
 1. `/tmp/<ModName>_extracted/` - Extracted mods for development
 2. `~/Documents/Larian Studios/Baldur's Gate 3/Mods/` - User mods
 3. PAK files - Compressed mods
+
+## End-of-Session Checklist
+
+When completing a feature or ending a session, update these files:
+
+| File | What to Update |
+|------|----------------|
+| `src/core/version.h` | Bump `BG3SE_VERSION` if releasing |
+| `CLAUDE.md` | Version number, API status summary, key offsets |
+| `README.md` | Version number, feature status table |
+| `ROADMAP.md` | Version number, feature details, version history table |
+
+**Version history format** (in ROADMAP.md):
+```
+| v0.X.Y | YYYY-MM-DD | Brief description of changes (Issue #N) |
+```
+
+**Component count locations** (when adding components):
+- `CLAUDE.md`: "X component property layouts" in Ext.Entity line
+- `README.md`: "X component layouts" in status table
+- `ROADMAP.md`: Section 2.2 status, component table, version history
+
+**Parity percentage** (recalculate when adding significant features):
+- `CLAUDE.md`: "Parity: ~XX%" in header line
+- `README.md`: "Feature Parity: ~XX%" in Status section
+- `ROADMAP.md`: "Overall Feature Parity: ~XX%" at top
+- Calculation: Based on Feature Parity Matrix in ROADMAP.md (weighted by namespace importance)
+
+**Technical documentation to update:**
+- `ghidra/offsets/*.md` - New offsets discovered via reverse engineering
+- `agent_docs/architecture.md` - New modules or structural changes
+- `src/entity/component_offsets.h` - Component property layouts (self-documenting)
+- `src/entity/component_typeid.c` - TypeId addresses with game version comments
