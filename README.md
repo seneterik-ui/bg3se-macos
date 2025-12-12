@@ -44,7 +44,7 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.32.0 | **Feature Parity:** ~54%
+**Version:** v0.32.2 | **Feature Parity:** ~55%
 
 | Feature | Status |
 |---------|--------|
@@ -53,7 +53,7 @@ SE mods work automatically—just install them like any other mod:
 | Mod Loading | ✅ PAK file reading, auto-detection |
 | Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions) |
 | Ext.Entity | ✅ GUID lookup, 36 component layouts, GetAllEntitiesWithComponent, GetByHandle |
-| Ext.Stats | ✅ 15,774 stats, property read/write, Create/Sync with prototype managers |
+| Ext.Stats | ✅ 15,774 stats, property read/write, **Sync working for existing spells** |
 | Ext.Events | ✅ 10 events with Prevent pattern |
 | Ext.Timer | ✅ WaitFor, Cancel, Pause, Resume |
 | Ext.Vars | ✅ PersistentVars + User Variables + Mod Variables |

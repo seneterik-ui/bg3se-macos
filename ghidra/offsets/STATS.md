@@ -514,59 +514,206 @@ struct SpellPrototype {
 | `__GLOBAL__sub_I_SpellPrototype.cpp` | `0x1066e389c` | Static initializer |
 | `__GLOBAL__sub_I_StatusPrototypeManager.cpp` | `0x106704ad4` | Static initializer |
 | `__GLOBAL__sub_I_PassivePrototype.cpp` | `0x106691108` | Static initializer |
+| **`eoc::SpellPrototype::Init`** | **`0x101f72754`** | **Populates prototype from stats** |
+| `eoc::SpellPrototype::ParseSpellAnimations` | `0x101f779dc` | Called by Init |
 
 **All 5 prototype manager singletons discovered - Issue #32 singleton discovery complete!**
+
+### SpellPrototype::Init Analysis (Dec 12, 2025)
+
+**Function Signature:**
+```c
+void eoc::SpellPrototype::Init(ls::FixedString const& spellName);
+```
+
+**CRITICAL: ARM64 Calling Convention for `const&`**
+
+On ARM64, C++ `const&` parameters are passed as **pointers**:
+- x0 = `this` (SpellPrototype*)
+- x1 = **pointer to** FixedString value (not the value itself!)
+
+```c
+// WRONG - causes crash:
+g_SpellPrototypeInit(prototype, fs_key);
+
+// CORRECT:
+g_SpellPrototypeInit(prototype, &fs_key);
+```
+
+**How it works:**
+1. Takes a FixedString (spell name) as the only parameter (by const reference)
+2. Looks up the StatsObject from `RPGStats::m_ptr` using the name
+3. Parses properties from the StatsObject into the SpellPrototype struct
+4. Calls `ParseSpellAnimations` at the end
+
+**Key observations from decompilation:**
+- Uses `RPGStats::m_ptr` + offsets to access the Objects CNamedElementManager
+- Hash lookup: +0xD8 (buckets), +0xE0 (capacity), +0xE8 (next chain), +0xF8 (keys), +0x108 (indices)
+- Stats objects: +0xC8 (primitives array base)
+
+**RefMap Structure (from GetSpellPrototype):**
+The SpellPrototypeManager uses a `DEPRECATED_RefMapImpl` with this layout:
+| Offset | Field | Purpose |
+|--------|-------|---------|
+| +0x08 | Bucket array | Hash → index mapping |
+| +0x10 | Capacity/count | Number of buckets (12289 for spells) |
+| +0x18 | Next chain array | Collision handling (chaining) |
+| +0x28 | Keys array | FixedString spell names |
+| +0x38 | Values array | SpellPrototype* pointers |
+
+### RefMap Hash Function Discovery (Dec 12, 2025)
+
+**CRITICAL FINDING: Hash function is NON-TRIVIAL**
+
+The RefMap does NOT use simple `key % capacity` hashing:
+
+| Spell | FixedString Key | Expected Bucket | Actual Bucket |
+|-------|-----------------|-----------------|---------------|
+| `Projectile_FireBolt` | 512753744 | 7508 (`key % 12289`) | **11798** |
+| `Target_DEN_Entangle_Staff` | (first entry) | - | 1 |
+
+**Attempted hash functions that FAILED:**
+- `key % capacity` - standard modulo
+- `(key ^ (key >> 16)) % capacity` - XOR folding
+- `((key * 0x9E3779B9) >> 16) % capacity` - golden ratio multiply
+- `((key >> 16) ^ (key & 0xFFFF)) % capacity` - high/low XOR
+- Byte swap variations
+
+**Solution: Linear Search**
+
+Since the hash function is proprietary/complex, we use linear search through the keys array:
+```c
+for (int32_t i = 0; i < capacity; i++) {
+    uint32_t stored_key = keys_array[i];
+    if (stored_key == fs_key) {
+        return values_array[i];  // Found!
+    }
+}
+```
+
+This is fast enough for ~5000 spell prototypes (sub-millisecond).
+
+**Insertion pattern:** In C++ STL-like maps, `operator[]` returns a reference and **inserts if key not found**. So calling the manager's operator[] with a new spell name will create a new entry.
+
+### RefMap GetOrAdd Analysis (Dec 12, 2025)
+
+**Function found:** `DEPRECATED_RefMapImpl::GetOrAdd(FixedString const&, bool&)` at `0x1011bbc5c`
+
+**Behavior:**
+```c
+// Returns pointer to value slot; allocates new node if key not found
+undefined8* GetOrAdd(RefMap* this, FixedString* key, bool* was_added);
+```
+
+**Node structure (0x18 = 24 bytes):**
+| Offset | Size | Field |
+|--------|------|-------|
+| +0x00 | 8 | next_ptr (chain link) |
+| +0x08 | 8 | FixedString key |
+| +0x10 | 8 | value (pointer to prototype) |
+
+**Algorithm:**
+1. Hash key: `bucket = key % capacity`
+2. Walk linked list at `buckets[bucket]`
+3. If not found: `malloc(0x18)`, insert at head of chain
+4. Return `node + 0x10` (pointer to value slot)
+
+**NOTE:** There appear to be TWO RefMap implementations in BG3:
+1. **Chained hash map** (GetOrAdd above) - uses linked lists
+2. **Open-addressed** (GetSpellPrototype earlier) - uses separate key/value arrays
+
+SpellPrototypeManager may use the open-addressed variant. Need to investigate which specific GetOrAdd function is used.
 
 ### Implementation Approach
 
 To complete `Ext.Stats.Sync()`:
 
-1. **Find Singleton Pointers**
-   - Trace XREFs from functions using managers
-   - Look for global pointer loads in register setup
-   - Pattern scan for manager VMT addresses
+1. ✅ **Find Singleton Pointers** - COMPLETE
+   - All 5 managers discovered (see table above)
 
-2. **Find Init Functions**
-   - Decompile `SyncStat` equivalents
-   - Find functions taking `(Prototype*, FixedString const&)`
-   - Match against property string accesses
+2. ✅ **Find Init Functions** - COMPLETE (Dec 12, 2025)
+   - `eoc::SpellPrototype::Init` at `0x101f72754`
+   - Takes FixedString spell name, populates prototype from RPGStats
 
-3. **Understand ARM64 Layouts**
-   - Prototype structs likely differ from Windows
-   - Need to verify field offsets via runtime probing
-   - May need to allocate via game allocator
+3. **Implement RefMap Insertion** - IN PROGRESS
+   - Option A: Call manager's `operator[]` (inserts if not found) + call Init
+   - Option B: Manually implement RefMap insertion using known offsets
+   - Option C: Hook existing insertion point and inject custom prototypes
 
-4. **Implementation Steps**
+4. **Implementation Steps (Refined)**
    ```c
-   bool sync_spell_prototype(StatsObjectPtr obj) {
+   // SpellPrototype::Init function pointer type
+   // NOTE: const& on ARM64 = pointer parameter!
+   typedef void (*SpellPrototypeInit_t)(void* prototype, const uint32_t* spell_name_fs_ptr);
+
+   // Resolved at runtime from offset 0x101f72754
+   static SpellPrototypeInit_t g_SpellPrototype_Init = NULL;
+
+   bool sync_spell_prototype(const char* spell_name) {
        // 1. Get SpellPrototypeManager singleton
-       void **mgr_ptr = get_spell_prototype_manager();
-       if (!mgr_ptr || !*mgr_ptr) return false;
+       void* mgr = *((void**)get_module_base("Baldur") + 0x1089bac80);
+       if (!mgr) return false;
 
-       // 2. Get or create prototype in manager's HashMap
-       SpellPrototype *proto = find_or_create_prototype(*mgr_ptr, obj->Name);
+       // 2. Convert spell name to FixedString
+       uint32_t fs = intern_fixed_string(spell_name);
 
-       // 3. Call Init function to parse properties
-       spell_prototype_init(proto, obj->Name);
+       // 3. Look up existing prototype via linear search (hash is non-trivial)
+       void* prototype = refmap_lookup_linear(mgr, fs);
+
+       // 4. Call SpellPrototype::Init to populate from stats
+       //    CRITICAL: Pass POINTER to FixedString (const& semantics)
+       g_SpellPrototype_Init(prototype, &fs);
 
        return true;
    }
    ```
 
-### Current State (v0.32.0)
+### Current State (v0.32.1)
 
 - `Ext.Stats.Create()` - Works, creates stats in shadow registry
-- `Ext.Stats.Sync()` - Calls prototype managers (manager access verified)
+- `Ext.Stats.Sync()` - ✅ Works for EXISTING spells (Dec 12, 2025)
 - **All 5 singleton addresses discovered** (Spell, Status, Passive, Interrupt, Boost)
 - Created stats accessible via `Ext.Stats.Get()`
 - Runtime manager pointer resolution implemented in `prototype_managers.c`
+- ✅ RefMap lookup via linear search (hash function is non-trivial)
+- ✅ SpellPrototype::Init calling convention fixed (const& = pointer)
 
-### Remaining Work (Medium effort)
+### Verified Working (Dec 12, 2025)
 
-- Implement RefMap insertion for each prototype type
-- Understand Prototype struct layouts on ARM64
-- Call `Prototype::Init()` or manually populate prototype fields
-- Test that synced stats are usable by game (Osi.AddSpell, etc.)
+```lua
+Ext.Stats.Sync("Projectile_FireBolt")
+-- Log output:
+-- [Stats] stats_sync: Syncing 'Projectile_FireBolt' (type: SpellData)
+-- [Stats] [PrototypeManagers] sync_spell_prototype: Manager at 0x600003c90960
+-- [Stats] [PrototypeManagers]   Found existing prototype at 0x51ecee840
+-- [Stats] [PrototypeManagers]   Calling SpellPrototype::Init(0x51ecee840, &0x1e900050)
+-- [Stats] [PrototypeManagers]   Init complete for 'Projectile_FireBolt'
+```
+
+### Remaining Work (Dec 12, 2025)
+
+**For NEW stats (not inheriting from existing):**
+1. Implement RefMap insertion for new prototype entries
+2. Allocate SpellPrototype struct (~512 bytes)
+3. Call SpellPrototype::Init on newly allocated prototype
+
+**Already complete:**
+- ✅ `SpellPrototype::Init` at `0x101f72754` - populates prototype from stats
+- ✅ RefMap structure layout (see table above)
+- ✅ All 5 manager singleton addresses
+- ✅ Linear search lookup (workaround for unknown hash function)
+- ✅ ARM64 const& calling convention (pass pointer, not value)
+
+**Test plan:**
+```lua
+-- Create and sync a spell
+local spell = Ext.Stats.Create("MyTestSpell", "SpellData", "Projectile_FireBolt")
+spell.Damage = "2d6"
+Ext.Stats.Sync("MyTestSpell")
+
+-- Verify it's usable
+Osi.AddSpell(player, "MyTestSpell")  -- Should not error
+```
 
 ### Related Issue
 

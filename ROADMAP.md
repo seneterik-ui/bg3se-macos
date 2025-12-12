@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.32.0
+## Current Status: v0.32.2
 
-**Overall Feature Parity: ~54%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~55%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -37,7 +37,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Json` | ✅ Full (2) | ✅ Parse, Stringify | **100%** | 1 |
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile | **50%** | 1 |
 | `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, components, enumeration (16) | **62%** | 2 |
-| `Ext.Stats` | ✅ Full (52) | ⚠️ Get, GetAll, Create, property read/write (15) | **29%** | 3 |
+| `Ext.Stats` | ✅ Full (52) | ⚠️ Get, GetAll, Create, Sync (existing), property read/write (16) | **31%** | 3 |
 | `Ext.Events` | ✅ Full (~30) | ⚠️ 10 events + Subscribe/Unsubscribe/Prevent | **33%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ⚠️ WaitFor, Cancel, Pause, Resume, IsPaused, MonotonicTime (6) | **46%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
@@ -1203,7 +1203,7 @@ Full debugging experience with breakpoints, stepping, and variable inspection.
 | B2 | Timer API | Low | ✅ Complete |
 | B3 | Console/REPL | Medium | ✅ Complete (socket + file + in-game overlay) |
 | B4 | GetAllComponents | Low | ✅ Complete |
-| B5 | Stats Create/Sync | Medium | ⚠️ Partial (v0.32.0) - Create works, prototype managers connected (Passive/Boost) |
+| B5 | Stats Create/Sync | Medium | ✅ Working (v0.32.2) - Sync existing spells, Create works, new spells need RefMap insertion |
 | B6 | Userdata Lifetime Scoping | Medium | ✅ Complete (v0.29.0) |
 
 ### Priority C: Medium Impact (Developer Experience)
@@ -1246,7 +1246,9 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.32.0 | 2025-12-12 | Prototype Managers - Passive/Boost singletons found, Sync() integration |
+| v0.32.2 | 2025-12-12 | Stats Sync Complete - ARM64 const& fix, RefMap linear search, Sync working (#32) |
+| v0.32.1 | 2025-12-12 | Stats Sync - SpellPrototype::Init, RefMap lookup, existing spell sync (#32) |
+| v0.32.0 | 2025-12-12 | Prototype Managers - All 5 singletons discovered, Sync() integration |
 | v0.31.0 | 2025-12-11 | Entity Relationships - GetByHandle(), 36 components |
 | v0.30.0 | 2025-12-11 | Events Expansion - 10 events, Prevent pattern |
 | v0.29.0 | 2025-12-10 | Lifetime Scoping - Stale userdata prevention |

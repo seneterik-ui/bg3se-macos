@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.32.0 | **Parity:** ~54% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.32.2 | **Parity:** ~55% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -49,7 +49,7 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Osi.*** - Dynamic metatable (40+ functions)
 - **Ext.Osiris** - RegisterListener, NewCall/NewQuery/NewEvent
 - **Ext.Entity** - GUID lookup, 36 component layouts, GetByHandle
-- **Ext.Stats** - Property read/write, Create/Sync (all 5 prototype managers)
+- **Ext.Stats** - Property read/write, Create/Sync working for existing spells (all 5 prototype managers)
 - **Ext.Events** - 10 events with priority ordering, Once flag, Prevent pattern
 - **Ext.Vars** - PersistentVars, User Variables, Mod Variables
 - **Ext.Debug** - Memory introspection (ReadPtr, ProbeStruct, HexDump)
@@ -75,6 +75,7 @@ You run console commands via `echo 'cmd' | nc -U /tmp/bg3se.sock`. User launches
 | `0x108aeccd8` | PassivePrototypeManager |
 | `0x108aecce0` | InterruptPrototypeManager |
 | `0x108991528` | BoostPrototypeManager |
+| `0x101f72754` | SpellPrototype::Init (populates from stats) |
 
 ## Session Checklist
 

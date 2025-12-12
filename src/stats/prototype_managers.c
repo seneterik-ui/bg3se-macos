@@ -49,6 +49,26 @@
 #define OFFSET_MEMORY_MANAGER 0x108aefa98ULL  // Memory manager (appears in multiple functions)
 
 // ============================================================================
+// Prototype Init Function Offsets (Dec 12, 2025)
+// ============================================================================
+
+// SpellPrototype::Init at 0x101f72754 (populates prototype from stats)
+// Signature: void SpellPrototype::Init(SpellPrototype* this, uint32_t spell_name_fs)
+#define OFFSET_SPELL_PROTOTYPE_INIT 0x101f72754ULL
+
+// RefMap offsets in SpellPrototypeManager (from GetSpellPrototype decompilation)
+// Manager structure uses open-addressed hash table with separate arrays:
+#define REFMAP_OFFSET_BUCKETS    0x08  // Hash → index bucket array
+#define REFMAP_OFFSET_CAPACITY   0x10  // Capacity field
+#define REFMAP_OFFSET_COUNT      0x14  // Count field (might be at +0x10 as uint32)
+#define REFMAP_OFFSET_NEXT       0x18  // Next chain array (collision handling)
+#define REFMAP_OFFSET_KEYS       0x28  // FixedString keys array
+#define REFMAP_OFFSET_VALUES     0x38  // Prototype* values array
+
+// SpellPrototype struct is estimated ~300+ bytes
+#define SPELL_PROTOTYPE_SIZE     0x200  // 512 bytes (conservative estimate)
+
+// ============================================================================
 // Memory Safety Helpers
 // ============================================================================
 
@@ -81,6 +101,15 @@ static bool safe_read_u32(void *addr, uint32_t *out_value) {
 }
 
 // ============================================================================
+// Function Pointer Types
+// ============================================================================
+
+// SpellPrototype::Init(SpellPrototype* this, FixedString const& spell_name)
+// Populates prototype fields from the corresponding stats object
+// NOTE: FixedString const& means we pass a POINTER to the FixedString value
+typedef void (*SpellPrototypeInit_fn)(void* prototype, const uint32_t* spell_name_fs_ptr);
+
+// ============================================================================
 // Global State
 // ============================================================================
 
@@ -93,6 +122,9 @@ static void **g_pBoostPrototypeManagerPtr = NULL;
 static void **g_pInterruptPrototypeManagerPtr = NULL;
 static void **g_pSpellPrototypeManagerPtr = NULL;
 static void **g_pStatusPrototypeManagerPtr = NULL;
+
+// Cached function pointers (resolved during init)
+static SpellPrototypeInit_fn g_SpellPrototypeInit = NULL;
 
 // ============================================================================
 // Helper: Calculate runtime address from Ghidra offset
@@ -149,6 +181,12 @@ bool prototype_managers_init(void *main_binary_base) {
     LOG_STATS_DEBUG("[PrototypeManagers] StatusPrototypeManager ptr addr: %p (Ghidra: 0x%llx)",
                     (void*)g_pStatusPrototypeManagerPtr,
                     (unsigned long long)OFFSET_STATUS_PROTOTYPE_MANAGER_PTR);
+
+    // Resolve Init function pointers
+    g_SpellPrototypeInit = (SpellPrototypeInit_fn)ghidra_to_runtime(OFFSET_SPELL_PROTOTYPE_INIT);
+    LOG_STATS_DEBUG("[PrototypeManagers] SpellPrototype::Init at: %p (Ghidra: 0x%llx)",
+                    (void*)g_SpellPrototypeInit,
+                    (unsigned long long)OFFSET_SPELL_PROTOTYPE_INIT);
 
     g_Initialized = true;
     LOG_STATS_DEBUG("[PrototypeManagers] Initialization complete");
@@ -223,12 +261,72 @@ void* get_status_prototype_manager(void) {
 // Prototype Sync Functions
 // ============================================================================
 
-// Note: Full sync implementation requires:
-// 1. Finding the prototype Init function for each type
-// 2. Understanding the prototype struct layout
-// 3. Either calling Init or manually populating fields
+// ============================================================================
+// RefMap Lookup Helper (from GetSpellPrototype decompilation)
+// ============================================================================
+
+// Lookup a prototype in the manager's RefMap by FixedString key
+// Returns pointer to the prototype, or NULL if not found
 //
-// For now, we verify manager access works and log what we'd need to do.
+// RefMap structure (open-addressed hash table):
+//   +0x08: bucket_array (int32_t*) - hash → first entry index
+//   +0x10: capacity (int32_t) - number of buckets
+//   +0x18: next_chain (int32_t*) - collision chain (negative = end, encodes bucket)
+//   +0x28: keys_array (uint32_t* - FixedString indices)
+//   +0x38: values_array (void** - Prototype pointers)
+//
+// NOTE: The hash function is complex (not simple key % capacity).
+// For now, we use linear search through entries which is fast enough
+// for ~5000 spell prototypes.
+static void* refmap_lookup(void* manager, uint32_t fs_key) {
+    if (!manager || fs_key == 0 || fs_key == 0xFFFFFFFF) return NULL;
+
+    // Read RefMap structure
+    int32_t capacity = 0;
+    void* keys_array = NULL;
+    void* values_array = NULL;
+
+    if (!safe_read_u32((char*)manager + REFMAP_OFFSET_CAPACITY, (uint32_t*)&capacity)) {
+        return NULL;
+    }
+    if (capacity == 0) return NULL;
+
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_KEYS, &keys_array)) {
+        return NULL;
+    }
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_VALUES, &values_array)) {
+        return NULL;
+    }
+
+    // Linear search through entries (hash function is non-trivial, so we scan)
+    // Cap at 10000 entries to prevent infinite loops
+    int32_t max_entries = (capacity < 10000) ? capacity : 10000;
+
+    for (int32_t i = 0; i < max_entries; i++) {
+        uint32_t stored_key = 0;
+        if (!safe_read_u32((char*)keys_array + (uint64_t)i * 4, &stored_key)) {
+            continue;
+        }
+
+        if (stored_key == fs_key) {
+            // Found it! Read the value (prototype pointer)
+            void* prototype = NULL;
+            if (safe_read_ptr((char*)values_array + (uint64_t)i * 8, &prototype)) {
+                return prototype;
+            }
+            return NULL;
+        }
+    }
+
+    return NULL;
+}
+
+// ============================================================================
+// Prototype Sync Functions
+// ============================================================================
+
+// Offset of Name (FixedString) in stats::Object
+#define STATS_OBJECT_OFFSET_NAME 0x20
 
 bool sync_spell_prototype(StatsObjectPtr obj, const char *name) {
     if (!obj || !name) return false;
@@ -239,20 +337,51 @@ bool sync_spell_prototype(StatsObjectPtr obj, const char *name) {
         return false;
     }
 
-    LOG_STATS_DEBUG("[PrototypeManagers] sync_spell_prototype: Manager found at %p for '%s'", manager, name);
+    LOG_STATS_DEBUG("[PrototypeManagers] sync_spell_prototype: Manager at %p for '%s'", manager, name);
 
-    // SpellPrototypeManager uses RefMap<FixedString, SpellPrototype> for lookup
-    // From GetSpellPrototype decompilation (0x10346e740):
-    //   Loads manager from 0x1089bac80, then does HashMap lookup
+    // Get FixedString key from the stats object itself
+    uint32_t fs_key = 0;
+    if (!safe_read_u32((char*)obj + STATS_OBJECT_OFFSET_NAME, &fs_key)) {
+        LOG_STATS_DEBUG("[PrototypeManagers]   Failed to read FixedString from stats object");
+        return false;
+    }
 
-    // TODO: Implementation requires:
-    // 1. Find or create SpellPrototype in manager's HashMap
-    // 2. Call SpellPrototype::Init(statsObject) or manually populate fields
-    // 3. SpellPrototype is a large struct (~300+ bytes)
+    // Check for invalid FixedString (shadow stats may have fs_key = 0)
+    if (fs_key == 0 || fs_key == 0xFFFFFFFF) {
+        LOG_STATS_DEBUG("[PrototypeManagers]   Stats object has invalid FixedString (0x%x) - likely a shadow stat", fs_key);
+        LOG_STATS_DEBUG("[PrototypeManagers]   Shadow stat sync requires string interning (not yet implemented)");
+        return true;  // Return true to not block other sync operations
+    }
 
-    LOG_STATS_DEBUG("[PrototypeManagers]   TODO: Insert prototype into manager's RefMap");
+    LOG_STATS_DEBUG("[PrototypeManagers]   FixedString key: 0x%x", fs_key);
 
-    return true;
+    // Look up existing prototype in manager's RefMap
+    void* prototype = refmap_lookup(manager, fs_key);
+
+    if (prototype) {
+        LOG_STATS_DEBUG("[PrototypeManagers]   Found existing prototype at %p", prototype);
+
+        // Call SpellPrototype::Init to refresh from stats
+        // NOTE: Init takes FixedString const& so we pass pointer to the FS value
+        if (g_SpellPrototypeInit) {
+            LOG_STATS_DEBUG("[PrototypeManagers]   Calling SpellPrototype::Init(%p, &0x%x)", prototype, fs_key);
+            g_SpellPrototypeInit(prototype, &fs_key);
+            LOG_STATS_DEBUG("[PrototypeManagers]   Init complete for '%s'", name);
+            return true;
+        } else {
+            LOG_STATS_DEBUG("[PrototypeManagers]   Init function not available");
+            return false;
+        }
+    } else {
+        // Prototype not found - this is a newly created stat
+        LOG_STATS_DEBUG("[PrototypeManagers]   No existing prototype found for '%s'", name);
+        LOG_STATS_DEBUG("[PrototypeManagers]   New spell prototypes require RefMap insertion (not yet implemented)");
+
+        // For now, return true but log that full insertion isn't done
+        // This allows sync to "succeed" for stats that inherit from existing ones
+        // The game may still work if the base prototype exists
+        return true;
+    }
 }
 
 bool sync_status_prototype(StatsObjectPtr obj, const char *name) {

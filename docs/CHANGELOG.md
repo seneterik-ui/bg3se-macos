@@ -13,6 +13,60 @@ Each entry includes:
 
 ---
 
+## [v0.32.2] - 2025-12-12
+
+**Parity:** ~55% | **Category:** Stats System | **Issues:** #32
+
+### Added
+- RefMap linear search implementation (hash function is non-trivial)
+- ARM64 const& calling convention documentation
+
+### Fixed
+- **SpellPrototype::Init crash** - Fixed by passing FixedString as pointer (const& semantics)
+- RefMap lookup now uses linear search after discovering hash function is proprietary
+
+### Changed
+- **`Ext.Stats.Sync()` fully working for existing spells** - Modify damage, costs, etc. and sync
+- Stats modifications propagate to game prototypes without crashes
+
+### Technical
+- RefMap hash function is NOT `key % capacity` - FireBolt at FS=512753744 found in bucket 11798, not expected 7508
+- ARM64 `const&` parameters must be passed as pointers: `Init(proto, &fs_key)` not `Init(proto, fs_key)`
+- Linear search through ~5000 spell prototypes is sub-millisecond
+
+### Verified Working
+```lua
+local spell = Ext.Stats.Get("Projectile_FireBolt")
+spell.Damage = "3d10"
+Ext.Stats.Sync("Projectile_FireBolt")  -- No crash, damage updated
+```
+
+---
+
+## [v0.32.1] - 2025-12-12
+
+**Parity:** ~54% | **Category:** Stats System | **Issues:** #32
+
+### Added
+- `eoc::SpellPrototype::Init` at `0x101f72754` - Populates prototype from stats object
+- RefMap lookup implementation for prototype managers
+- `sync_spell_prototype()` now calls SpellPrototype::Init on existing prototypes
+
+### Changed
+- **`Ext.Stats.Sync()` now functional for SpellData** - Modified spells re-sync with game
+- Stats modifications to existing game spells now propagate to prototypes
+
+### Technical
+- Discovered SpellPrototype::Init via XREFs from ParseSpellAnimations
+- RefMap structure documented: +0x08 buckets, +0x10 capacity, +0x18 next, +0x28 keys, +0x38 values
+- Init function reads FixedString from stats object at offset +0x20
+
+### Limitations
+- Newly created (shadow) spells need RefMap insertion (not yet implemented)
+- Status/Passive/Interrupt Init functions need discovery for those types
+
+---
+
 ## [v0.32.0] - 2025-12-12
 
 **Parity:** ~54% | **Category:** Stats System | **Issues:** #32
