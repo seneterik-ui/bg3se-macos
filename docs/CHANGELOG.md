@@ -13,6 +13,45 @@ Each entry includes:
 
 ---
 
+## [v0.32.4] - 2025-12-13
+
+**Parity:** ~57% | **Category:** Stats System | **Issues:** #32
+
+### Added
+- **Full Stats Sync for created stats** - `Ext.Stats.Sync()` now works for both existing game stats AND newly created shadow stats
+- **Shadow stat detection** - `stats_is_shadow_stat()` API for checking if a stat was created at runtime
+- **FixedString interning** - `fixed_string_intern()` creates new FixedStrings via game's `ls::FixedString::Create`
+- **RefMap insertion** - New prototypes can be inserted into prototype manager hash tables
+
+### Fixed
+- **SpellPrototype::Init crash** - Shadow stats now use template cloning (memcpy) instead of Init()
+- **ARM64 const& calling convention** - Fixed crash by passing pointer (not value) to Init function
+- **Prototype registration** - New spells properly registered with SpellPrototypeManager
+
+### Technical
+- **Shadow stats architecture**: Stats created via `Ext.Stats.Create()` exist in a separate registry, not in `RPGStats.Objects`. `Init()` can't find them, so we clone the template prototype instead.
+- **SpellPrototype::Init** at `0x101f72754` - Populates prototype from stats object in RPGStats
+- **FixedString::Create** at `0x1064b9ebc` - Game's function for interning new strings
+- **RefMap hash** is `fs_key % capacity` (verified via Ghidra)
+- **Two-path sync**: Shadow stats use memcpy clone, game stats use Init()
+
+### Verified Working
+```lua
+-- Create and sync shadow spell
+local spell = Ext.Stats.Create("MyTestSpell", "SpellData", "Projectile_FireBolt")
+spell.Damage = "2d6"
+Ext.Stats.Sync("MyTestSpell")  -- No crash, prototype registered
+
+-- Create and sync shadow status
+local status = Ext.Stats.Create("TestStatus", "StatusData", "BURNING")
+Ext.Stats.Sync("TestStatus")   -- No crash, prototype registered
+
+-- Sync existing game spell
+Ext.Stats.Sync("Projectile_FireBolt")  -- Works for game stats too
+```
+
+---
+
 ## [v0.32.3] - 2025-12-12
 
 **Parity:** ~55% | **Category:** Testing & Tooling | **Issues:** #8

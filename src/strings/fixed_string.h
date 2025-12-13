@@ -96,6 +96,35 @@ bool fixed_string_is_valid(uint32_t index);
  */
 bool fixed_string_is_ready(void);
 
+/**
+ * Intern a string into the GlobalStringTable and return its FixedString index.
+ * This calls the game's ls::FixedString::Create() function.
+ *
+ * @param str     The string to intern (null-terminated)
+ * @param len     Length of the string, or -1 to use strlen()
+ * @return FixedString index, or FS_NULL_INDEX on failure
+ *
+ * Example:
+ *   uint32_t fs = fixed_string_intern("MyCustomSpell", -1);
+ *   // fs is now a valid FixedString index usable in RefMaps
+ */
+uint32_t fixed_string_intern(const char *str, int len);
+
+/**
+ * Check if FixedString interning is available.
+ * Returns true if fixed_string_intern() can be called.
+ */
+bool fixed_string_intern_ready(void);
+
+/**
+ * Get the pre-computed hash value for a FixedString.
+ * This retrieves the murmur3a32 hash stored in the GlobalStringTable entry.
+ *
+ * @param index  The FixedString index
+ * @return Hash value, or 0 if invalid index
+ */
+uint32_t fixed_string_get_hash(uint32_t index);
+
 // ============================================================================
 // Debug API
 // ============================================================================

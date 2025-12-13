@@ -237,6 +237,15 @@ const char* stats_get_name_at(const char *type, int index);
  */
 StatsObjectPtr stats_create(const char *name, const char *type, const char *template_name);
 
+/**
+ * Check if a stat object is a shadow stat (created via stats_create).
+ * Shadow stats are stored in a local registry, not in the game's RPGStats.Objects.
+ *
+ * @param obj Stat object pointer
+ * @return true if shadow stat, false if game stat
+ */
+bool stats_is_shadow_stat(StatsObjectPtr obj);
+
 // ============================================================================
 // Debugging
 // ============================================================================

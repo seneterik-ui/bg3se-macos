@@ -100,6 +100,44 @@ static bool safe_read_u32(void *addr, uint32_t *out_value) {
     return true;
 }
 
+static bool safe_read_i32(void *addr, int32_t *out_value) {
+    return safe_read_u32(addr, (uint32_t*)out_value);
+}
+
+static bool safe_write_ptr(void *addr, void *value) {
+    if (!addr) return false;
+
+    // Make memory writable
+    kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)addr & ~0xFFF,
+                                  0x1000, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+    if (kr != KERN_SUCCESS) {
+        LOG_STATS_DEBUG("[PrototypeManagers] vm_protect failed: %d", kr);
+        return false;
+    }
+
+    *(void**)addr = value;
+    return true;
+}
+
+static bool safe_write_u32(void *addr, uint32_t value) {
+    if (!addr) return false;
+
+    // Make memory writable
+    kern_return_t kr = vm_protect(mach_task_self(), (vm_address_t)addr & ~0xFFF,
+                                  0x1000, FALSE, VM_PROT_READ | VM_PROT_WRITE);
+    if (kr != KERN_SUCCESS) {
+        LOG_STATS_DEBUG("[PrototypeManagers] vm_protect failed: %d", kr);
+        return false;
+    }
+
+    *(uint32_t*)addr = value;
+    return true;
+}
+
+static bool safe_write_i32(void *addr, int32_t value) {
+    return safe_write_u32(addr, (uint32_t)value);
+}
+
 // ============================================================================
 // Function Pointer Types
 // ============================================================================
@@ -322,6 +360,121 @@ static void* refmap_lookup(void* manager, uint32_t fs_key) {
 }
 
 // ============================================================================
+// RefMap Insertion Helper
+// ============================================================================
+
+// Insert a key/value pair into the manager's RefMap
+// Uses open-addressed hash table with chain linking via indices
+//
+// Algorithm:
+// 1. Calculate bucket: hash = fs_key % capacity
+// 2. Find an empty slot in keys_array (where key == 0 or 0xFFFFFFFF)
+// 3. Insert key and value at that slot
+// 4. Link the slot into the hash chain
+//
+// Returns: slot index on success, -1 on failure
+static int32_t refmap_insert(void* manager, uint32_t fs_key, void* value) {
+    if (!manager || fs_key == 0 || fs_key == 0xFFFFFFFF) return -1;
+
+    // Read RefMap structure
+    int32_t capacity = 0;
+    void* bucket_array = NULL;
+    void* next_chain = NULL;
+    void* keys_array = NULL;
+    void* values_array = NULL;
+
+    if (!safe_read_i32((char*)manager + REFMAP_OFFSET_CAPACITY, &capacity) || capacity <= 0) {
+        LOG_STATS_DEBUG("[RefMap] Failed to read capacity");
+        return -1;
+    }
+
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_BUCKETS, &bucket_array) || !bucket_array) {
+        LOG_STATS_DEBUG("[RefMap] Failed to read bucket_array");
+        return -1;
+    }
+
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_NEXT, &next_chain) || !next_chain) {
+        LOG_STATS_DEBUG("[RefMap] Failed to read next_chain");
+        return -1;
+    }
+
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_KEYS, &keys_array) || !keys_array) {
+        LOG_STATS_DEBUG("[RefMap] Failed to read keys_array");
+        return -1;
+    }
+
+    if (!safe_read_ptr((char*)manager + REFMAP_OFFSET_VALUES, &values_array) || !values_array) {
+        LOG_STATS_DEBUG("[RefMap] Failed to read values_array");
+        return -1;
+    }
+
+    LOG_STATS_DEBUG("[RefMap] Structure: capacity=%d, buckets=%p, keys=%p, values=%p",
+                    capacity, bucket_array, keys_array, values_array);
+
+    // Calculate bucket using simple modulo (from GetSpellPrototype decompilation)
+    int32_t bucket = (int32_t)(fs_key % (uint32_t)capacity);
+    LOG_STATS_DEBUG("[RefMap] Key 0x%x -> bucket %d", fs_key, bucket);
+
+    // Find an empty slot (linear scan for empty key)
+    // Empty slots have key == 0 or 0xFFFFFFFF
+    int32_t empty_slot = -1;
+    int32_t max_scan = (capacity < 15000) ? capacity : 15000;
+
+    for (int32_t i = 0; i < max_scan; i++) {
+        uint32_t stored_key = 0;
+        if (!safe_read_u32((char*)keys_array + (uint64_t)i * 4, &stored_key)) {
+            continue;
+        }
+
+        // Check for empty slot (key == 0 or null FS index)
+        if (stored_key == 0 || stored_key == 0xFFFFFFFF) {
+            empty_slot = i;
+            break;
+        }
+    }
+
+    if (empty_slot < 0) {
+        LOG_STATS_DEBUG("[RefMap] No empty slot found (capacity exhausted?)");
+        return -1;
+    }
+
+    LOG_STATS_DEBUG("[RefMap] Found empty slot at index %d", empty_slot);
+
+    // Read current bucket head
+    int32_t bucket_head = -1;
+    safe_read_i32((char*)bucket_array + (uint64_t)bucket * 4, &bucket_head);
+    LOG_STATS_DEBUG("[RefMap] Current bucket head: %d", bucket_head);
+
+    // Insert: set key and value at empty slot
+    if (!safe_write_u32((char*)keys_array + (uint64_t)empty_slot * 4, fs_key)) {
+        LOG_STATS_DEBUG("[RefMap] Failed to write key");
+        return -1;
+    }
+
+    if (!safe_write_ptr((char*)values_array + (uint64_t)empty_slot * 8, value)) {
+        LOG_STATS_DEBUG("[RefMap] Failed to write value");
+        return -1;
+    }
+
+    // Link into chain: set next[empty_slot] = old bucket_head
+    if (!safe_write_i32((char*)next_chain + (uint64_t)empty_slot * 4, bucket_head)) {
+        LOG_STATS_DEBUG("[RefMap] Failed to write next chain");
+        return -1;
+    }
+
+    // Update bucket head to point to new slot
+    if (!safe_write_i32((char*)bucket_array + (uint64_t)bucket * 4, empty_slot)) {
+        LOG_STATS_DEBUG("[RefMap] Failed to update bucket head");
+        return -1;
+    }
+
+    LOG_STATS_DEBUG("[RefMap] Inserted at slot %d, bucket %d (old head: %d)",
+                    empty_slot, bucket, bucket_head);
+
+    return empty_slot;
+}
+
+// ============================================================================
 // Prototype Sync Functions
 // ============================================================================
 
@@ -374,13 +527,103 @@ bool sync_spell_prototype(StatsObjectPtr obj, const char *name) {
         }
     } else {
         // Prototype not found - this is a newly created stat
-        LOG_STATS_DEBUG("[PrototypeManagers]   No existing prototype found for '%s'", name);
-        LOG_STATS_DEBUG("[PrototypeManagers]   New spell prototypes require RefMap insertion (not yet implemented)");
+        LOG_STATS_DEBUG("[PrototypeManagers]   No existing prototype found for '%s' - creating new", name);
 
-        // For now, return true but log that full insertion isn't done
-        // This allows sync to "succeed" for stats that inherit from existing ones
-        // The game may still work if the base prototype exists
-        return true;
+        // Get template prototype (Projectile_FireBolt) to clone
+        uint32_t template_fs = fixed_string_intern("Projectile_FireBolt", -1);
+        if (template_fs == FS_NULL_INDEX) {
+            LOG_STATS_DEBUG("[PrototypeManagers]   Failed to intern template spell name");
+            return false;
+        }
+
+        void* template_prototype = refmap_lookup(manager, template_fs);
+        if (!template_prototype) {
+            LOG_STATS_DEBUG("[PrototypeManagers]   Failed to find template spell (Projectile_FireBolt)");
+            return false;
+        }
+        LOG_STATS_DEBUG("[PrototypeManagers]   Using template prototype at %p", template_prototype);
+
+        // Check if this is a shadow stat (created via Ext.Stats.Create)
+        bool is_shadow = stats_is_shadow_stat(obj);
+        LOG_STATS_DEBUG("[PrototypeManagers]   Is shadow stat: %s", is_shadow ? "yes" : "no");
+
+        if (is_shadow) {
+            // For shadow stats: Clone the entire template prototype
+            // This is safe because Init() would crash trying to look up the stat in RPGStats.Objects
+            // (shadow stats are stored separately and not in the game's stats registry)
+            void* new_prototype = malloc(SPELL_PROTOTYPE_SIZE);
+            if (!new_prototype) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Failed to allocate SpellPrototype (%d bytes)", SPELL_PROTOTYPE_SIZE);
+                return false;
+            }
+
+            // Clone entire prototype structure
+            memcpy(new_prototype, template_prototype, SPELL_PROTOTYPE_SIZE);
+            LOG_STATS_DEBUG("[PrototypeManagers]   Cloned template prototype to %p (%d bytes)", new_prototype, SPELL_PROTOTYPE_SIZE);
+
+            // Update the SpellId field (offset 0x08 based on Windows struct)
+            // SpellPrototype: VMT(8) + StatsObjectIndex(4) + SpellTypeId(4) + SpellId(4) @ offset 0x10
+            // Actually SpellId is FixedString at +0x10 on ARM64 (8-byte alignment)
+            #define SPELL_PROTOTYPE_OFFSET_SPELLID 0x10
+            safe_write_u32((char*)new_prototype + SPELL_PROTOTYPE_OFFSET_SPELLID, fs_key);
+            LOG_STATS_DEBUG("[PrototypeManagers]   Set SpellId to 0x%x", fs_key);
+
+            // Insert into manager's RefMap
+            int32_t slot = refmap_insert(manager, fs_key, new_prototype);
+            if (slot < 0) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Failed to insert into RefMap");
+                free(new_prototype);
+                return false;
+            }
+            LOG_STATS_DEBUG("[PrototypeManagers]   Inserted shadow spell '%s' into RefMap at slot %d", name, slot);
+
+            // Note: For shadow stats, we rely on the template's values being reasonable defaults
+            // Properties like Damage are stored in the stats object, not the prototype
+            // The prototype mainly determines spell behavior/type
+
+            return true;
+        } else {
+            // For game stats (not in prototype manager but in RPGStats.Objects):
+            // Use Init() which will look up the stat by name and populate the prototype
+
+            if (!g_SpellPrototypeInit) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Init function not available - cannot create prototype");
+                return false;
+            }
+
+            // Allocate and set up prototype
+            void* new_prototype = calloc(1, SPELL_PROTOTYPE_SIZE);
+            if (!new_prototype) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Failed to allocate SpellPrototype (%d bytes)", SPELL_PROTOTYPE_SIZE);
+                return false;
+            }
+
+            // Copy VMT pointer from template
+            void* vmt_ptr = NULL;
+            if (!safe_read_ptr(template_prototype, &vmt_ptr)) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Failed to read VMT from template");
+                free(new_prototype);
+                return false;
+            }
+            safe_write_ptr(new_prototype, vmt_ptr);
+            LOG_STATS_DEBUG("[PrototypeManagers]   Set VMT to %p", vmt_ptr);
+
+            // Insert into manager's RefMap
+            int32_t slot = refmap_insert(manager, fs_key, new_prototype);
+            if (slot < 0) {
+                LOG_STATS_DEBUG("[PrototypeManagers]   Failed to insert into RefMap");
+                free(new_prototype);
+                return false;
+            }
+            LOG_STATS_DEBUG("[PrototypeManagers]   Inserted into RefMap at slot %d", slot);
+
+            // Call SpellPrototype::Init to populate from RPGStats
+            LOG_STATS_DEBUG("[PrototypeManagers]   Calling SpellPrototype::Init(%p, &0x%x)", new_prototype, fs_key);
+            g_SpellPrototypeInit(new_prototype, &fs_key);
+            LOG_STATS_DEBUG("[PrototypeManagers]   Init complete for game spell '%s'", name);
+
+            return true;
+        }
     }
 }
 

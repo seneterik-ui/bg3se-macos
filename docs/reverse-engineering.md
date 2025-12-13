@@ -38,14 +38,85 @@ With the GhidraMCP plugin enabled, an HTTP server starts on port 8080 when you o
    }
    ```
 
-**Note:** Claude Code MCP servers are configured per-project in `~/.claude.json`, NOT in `~/.claude/settings.json`.
+**Note:** Claude Code MCP servers are configured per-project in `.mcp.json`, NOT in `~/.claude/settings.json`.
 
 Verify server is running:
 ```bash
 curl http://127.0.0.1:8080/methods | head -5
 ```
 
-Full setup: See [plans/unexplored-re-techniques.md](../plans/unexplored-re-techniques.md)
+**Connection Stability Tips:**
+- Keep Ghidra window visible (not minimized) to catch any error dialogs
+- If Ghidra shows ANY dialog, the HTTP server hangs waiting for user response
+- Don't switch to other Ghidra tools while querying (stay in CodeBrowser)
+- For large queries on 500MB+ binaries, consider pyghidra-mcp (headless) instead
+
+### pyghidra-mcp (Headless - Recommended for Large Binaries)
+
+For more stable operation with the 500MB+ BG3 binary, use [pyghidra-mcp](https://github.com/clearbluejar/pyghidra-mcp):
+
+**Prerequisites:**
+- Ghidra **11.3+** (PyGhidra module not included in earlier versions)
+- Java 17+ (OpenJDK via Homebrew)
+- Python 3.10+ with uv package manager
+
+**Step 1: Verify Ghidra 11.3+ and PyGhidra exists**
+```bash
+cat ~/ghidra/Ghidra/application.properties | grep version
+ls ~/ghidra/Ghidra/Features/PyGhidra/lib/PyGhidra.jar
+```
+
+**Step 2: Create thinned ARM64 binary (CRITICAL)**
+
+BG3 from Steam is a **universal binary** (x86_64 + arm64). Ghidra cannot import universal binaries. You must extract the ARM64 slice:
+
+```bash
+# Check if binary is universal
+file "/Users/$USER/Library/Application Support/Steam/steamapps/common/Baldurs Gate 3/Baldur's Gate 3.app/Contents/MacOS/Baldur's Gate 3"
+# Output will show "2 architectures" if universal
+
+# Extract ARM64 slice
+lipo -thin arm64 \
+  "/Users/$USER/Library/Application Support/Steam/steamapps/common/Baldurs Gate 3/Baldur's Gate 3.app/Contents/MacOS/Baldur's Gate 3" \
+  -output ~/ghidra_projects/BG3_arm64_current.thin
+
+# Verify single-architecture
+file ~/ghidra_projects/BG3_arm64_current.thin
+# Should show: "Mach-O 64-bit executable arm64" (NOT "universal binary")
+```
+
+**Step 3: Configure Claude Code MCP** (`.mcp.json` in project root)
+
+```json
+{
+  "mcpServers": {
+    "pyghidra-mcp": {
+      "type": "stdio",
+      "command": "uvx",
+      "args": [
+        "pyghidra-mcp",
+        "-t", "stdio",
+        "/Users/YOUR_USER/ghidra_projects/BG3_arm64_current.thin"
+      ],
+      "env": {
+        "GHIDRA_INSTALL_DIR": "/Users/YOUR_USER/ghidra",
+        "JAVA_HOME": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
+      }
+    }
+  }
+}
+```
+
+**Common Issues:**
+
+| Error | Solution |
+|-------|----------|
+| `PyGhidra.jar does not exist` | Upgrade Ghidra to 11.3+ |
+| `Unable to locate a Java Runtime` | Set `JAVA_HOME` in .mcp.json env |
+| `No load spec found` | Binary is universal - must thin first! |
+| `Path does not exist` | Check Steam path vs /Applications |
+
+**Note:** First analysis of the 500MB BG3 binary takes 30-60+ minutes. Results are cached.
 
 ## Headless Analysis
 
@@ -192,6 +263,60 @@ Ext.Debug.HexDump(addr, size)
 echo '!probe 0x12345678 256' > ~/Library/Application\ Support/BG3SE/commands.txt
 echo '!hexdump 0x12345678 64' > ~/Library/Application\ Support/BG3SE/commands.txt
 ```
+
+## Frida Dynamic Instrumentation
+
+Frida enables runtime function hooking for offset discovery and behavior analysis.
+
+### Interceptor vs Stalker
+
+**CRITICAL:** Use `Interceptor.attach()` only. `Stalker.follow()` crashes BG3.
+
+| API | Use Case | BG3 Compatibility |
+|-----|----------|-------------------|
+| `Interceptor.attach()` | Hook specific functions | ✅ Works well |
+| `Stalker.follow()` | Trace every instruction | ❌ Crashes BG3 |
+
+**Why Stalker crashes:**
+- Stalker recompiles every instruction the traced thread executes
+- For a 1GB game binary, this causes massive JIT buffer exhaustion
+- Thread timing violations lead to crash
+
+### Safe Frida Pattern
+
+```javascript
+// tools/frida/trace_function.js
+const BASE = Module.getBaseAddress("Baldur's Gate 3");
+const TARGET_FUNC = BASE.add(0x1011bbc5c - 0x100000000);
+
+Interceptor.attach(TARGET_FUNC, {
+    onEnter: function(args) {
+        console.log(`Called with arg0: ${args[0]}`);
+        console.log(`Register x1: ${this.context.x1}`);
+    },
+    onLeave: function(retval) {
+        console.log(`Returned: ${retval}`);
+    }
+});
+```
+
+### Running Frida
+
+```bash
+# Attach to running BG3
+frida -U -n "Baldur's Gate 3" -l tools/frida/trace_function.js
+
+# List processes
+frida-ps -U | grep -i baldur
+```
+
+### Available Scripts
+
+| Script | Purpose |
+|--------|---------|
+| `tools/frida/capture_singletons.js` | Multi-target singleton capture |
+| `tools/frida/capture_physics.js` | PhysicsScene discovery |
+| `tools/frida/trace_refmap_light.js` | RefMap function hooks (Interceptor-only) |
 
 ## ARM64 Patterns to Watch For
 

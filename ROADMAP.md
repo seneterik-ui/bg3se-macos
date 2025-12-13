@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.32.3
+## Current Status: v0.32.4
 
-**Overall Feature Parity: ~55%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~57%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -37,7 +37,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Json` | ✅ Full (2) | ✅ Parse, Stringify | **100%** | 1 |
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile | **50%** | 1 |
 | `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, components, enumeration (16) | **62%** | 2 |
-| `Ext.Stats` | ✅ Full (52) | ⚠️ Get, GetAll, Create, Sync (existing), property read/write (16) | **31%** | 3 |
+| `Ext.Stats` | ✅ Full (52) | ✅ Get, GetAll, Create, Sync (all), property read/write (18) | **35%** | 3 |
 | `Ext.Events` | ✅ Full (~30) | ⚠️ 10 events + Subscribe/Unsubscribe/Prevent | **33%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ⚠️ WaitFor, Cancel, Pause, Resume, IsPaused, MonotonicTime (6) | **46%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
@@ -1203,7 +1203,7 @@ Full debugging experience with breakpoints, stepping, and variable inspection.
 | B2 | Timer API | Low | ✅ Complete |
 | B3 | Console/REPL | Medium | ✅ Complete (socket + file + in-game overlay) |
 | B4 | GetAllComponents | Low | ✅ Complete |
-| B5 | Stats Create/Sync | Medium | ✅ Working (v0.32.2) - Sync existing spells, Create works, new spells need RefMap insertion |
+| B5 | Stats Create/Sync | Medium | ✅ Complete (v0.32.4) - Full sync for created + existing stats |
 | B6 | Userdata Lifetime Scoping | Medium | ✅ Complete (v0.29.0) |
 
 ### Priority C: Medium Impact (Developer Experience)
@@ -1246,6 +1246,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.32.4 | 2025-12-13 | **Stats Sync Complete** - Shadow stats + game stats, RefMap insertion, prototype managers (#32) |
 | v0.32.3 | 2025-12-12 | Testing Infrastructure - !test suite, Debug.* helpers, Frida scripts (#8) |
 | v0.32.2 | 2025-12-12 | Stats Sync Complete - ARM64 const& fix, RefMap linear search, Sync working (#32) |
 | v0.32.1 | 2025-12-12 | Stats Sync - SpellPrototype::Init, RefMap lookup, existing spell sync (#32) |
@@ -1297,7 +1298,7 @@ We've built automation tools to accelerate reaching Windows BG3SE component pari
 | **#15 Client State** | Client Lua State | **50%** | Mirror server pattern, hook game state |
 | **#37 Level** | Ext.Level (Physics) | **50%** | Find physics engine, port LevelLib.inl |
 | **#38 Audio** | Ext.Audio | **45%** | Wwise SDK has documented API |
-| **#32 Stats Sync** | Prototype Managers | **40%** | Frida for singleton discovery, Ghidra findings exist |
+| ~~#32 Stats Sync~~ | ~~Prototype Managers~~ | ✅ DONE | Shadow stats + game stats sync complete |
 | **#6 NetChannel** | NetChannel API | **30%** | Network stack analysis needed, but Lua wrappers portable |
 | **#35 Ext.UI** | Noesis UI | **25%** | Deep game UI integration required |
 

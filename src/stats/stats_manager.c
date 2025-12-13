@@ -1138,8 +1138,8 @@ static CreatedStatEntry* find_shadow_stat_entry(const char *name) {
     return NULL;
 }
 
-// Check if an object pointer is a shadow stat
-static bool is_shadow_stat(StatsObjectPtr obj) {
+// Check if an object pointer is a shadow stat (public API)
+bool stats_is_shadow_stat(StatsObjectPtr obj) {
     if (!obj) return false;
     for (CreatedStatEntry *e = g_CreatedStats; e; e = e->next) {
         if ((StatsObjectPtr)e->object == obj) {
@@ -1147,6 +1147,11 @@ static bool is_shadow_stat(StatsObjectPtr obj) {
         }
     }
     return false;
+}
+
+// Internal wrapper for compatibility
+static bool is_shadow_stat(StatsObjectPtr obj) {
+    return stats_is_shadow_stat(obj);
 }
 
 // Find ModifierList index by type name (e.g., "Weapon" -> 0)
@@ -1452,7 +1457,18 @@ StatsObjectPtr stats_create(const char *name, const char *type, const char *temp
     shadow->indexed_props_begin = entry->indexed_properties;
     shadow->indexed_props_end = entry->indexed_properties + attr_count;
     shadow->indexed_props_cap = entry->indexed_properties + attr_count;
-    shadow->name_fs_index = 0;  // We don't have a FixedString index for the name
+
+    // Intern the stat name to get a valid FixedString index
+    // This is required for RefMap lookup/insertion during Ext.Stats.Sync()
+    uint32_t fs_name = fixed_string_intern(name, -1);
+    if (fs_name == FS_NULL_INDEX) {
+        LOG_STATS_DEBUG("stats_create: Warning - could not intern name '%s', using 0", name);
+        fs_name = 0;
+    } else {
+        LOG_STATS_DEBUG("stats_create: Interned '%s' -> FixedString 0x%08x", name, fs_name);
+    }
+    shadow->name_fs_index = fs_name;
+
     shadow->using_index = -1;   // No parent
     shadow->modifier_list_index = (uint32_t)ml_index;
     shadow->level = 0;

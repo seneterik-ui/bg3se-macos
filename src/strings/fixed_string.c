@@ -1384,3 +1384,148 @@ void fixed_string_dump_subtable_info(int subtable_idx) {
         }
     }
 }
+
+// ============================================================================
+// FixedString Interning (Create new FixedStrings)
+// ============================================================================
+
+// Function signature for ls::FixedString::Create(char const*, int)
+// Discovered at 0x1064b9ebc via pyghidra-mcp
+// void Create(uint32_t* out_fs_index, const char* str, int len)
+// - out_fs_index: pointer to store result (output parameter)
+// - str: string to intern
+// - len: string length (-1 to compute via strlen)
+typedef void (*FixedStringCreate_t)(uint32_t *out_fs_index, const char *str, int len);
+
+// Ghidra address for ls::FixedString::Create
+#define GHIDRA_FIXEDSTRING_CREATE 0x1064b9ebcULL
+
+static FixedStringCreate_t g_FixedStringCreate = NULL;
+static bool g_InternInitialized = false;
+
+static bool init_intern_function(void) {
+    if (g_InternInitialized) {
+        return g_FixedStringCreate != NULL;
+    }
+    g_InternInitialized = true;
+
+    if (!g_MainBinaryBase) {
+        LOG_CORE_WARN("Cannot init FixedString::Create - binary base not set");
+        return false;
+    }
+
+    // Calculate runtime address from Ghidra offset
+    uintptr_t runtime_addr = (uintptr_t)g_MainBinaryBase +
+                              (GHIDRA_FIXEDSTRING_CREATE - GHIDRA_BASE_ADDRESS);
+
+    g_FixedStringCreate = (FixedStringCreate_t)runtime_addr;
+
+    LOG_CORE_DEBUG("Resolved FixedString::Create at %p (Ghidra 0x%llx)",
+               (void *)g_FixedStringCreate,
+               (unsigned long long)GHIDRA_FIXEDSTRING_CREATE);
+
+    return true;
+}
+
+bool fixed_string_intern_ready(void) {
+    if (!g_InternInitialized) {
+        init_intern_function();
+    }
+    return g_FixedStringCreate != NULL;
+}
+
+uint32_t fixed_string_intern(const char *str, int len) {
+    if (!str) {
+        return FS_NULL_INDEX;
+    }
+
+    // Initialize if needed
+    if (!g_InternInitialized) {
+        if (!init_intern_function()) {
+            LOG_CORE_WARN("FixedString::Create not available");
+            return FS_NULL_INDEX;
+        }
+    }
+
+    if (!g_FixedStringCreate) {
+        LOG_CORE_WARN("FixedString::Create function not resolved");
+        return FS_NULL_INDEX;
+    }
+
+    // Call the game's FixedString::Create
+    // The function writes the result to the first parameter
+    uint32_t result = FS_NULL_INDEX;
+    g_FixedStringCreate(&result, str, len);
+
+    if (result == FS_NULL_INDEX) {
+        LOG_CORE_WARN("FixedString::Create returned null for '%s'", str);
+        return FS_NULL_INDEX;
+    }
+
+    LOG_CORE_DEBUG("Interned '%s' -> FixedString 0x%08x", str, result);
+    return result;
+}
+
+uint32_t fixed_string_get_hash(uint32_t index) {
+    if (index == FS_NULL_INDEX) {
+        return 0;
+    }
+
+    // Try lazy discovery if GST not found yet
+    if (!g_pGlobalStringTable) {
+        if (!try_lazy_discovery()) {
+            return 0;
+        }
+    }
+
+    void *gst = NULL;
+    if (!safe_read_ptr(g_pGlobalStringTable, &gst) || !gst) {
+        return 0;
+    }
+
+    // Decode index (same as fixed_string_resolve)
+    uint32_t subTableIdx = index & FS_SUBTABLE_MASK;
+    uint32_t bucketIdx = (index >> FS_BUCKET_SHIFT) & FS_BUCKET_MASK;
+    uint32_t entryIdx = index >> FS_ENTRY_SHIFT;
+
+    if (subTableIdx >= GST_NUM_SUBTABLES) {
+        return 0;
+    }
+
+    // Calculate SubTable address
+    void *subTable = (char *)gst + (subTableIdx * g_SubTableSize);
+
+    // Read SubTable fields
+    uint32_t numBuckets = 0;
+    uint32_t entriesPerBucket = 0;
+    uint64_t entrySize = 0;
+    void *buckets = NULL;
+
+    if (!safe_read_u32((char *)subTable + g_OffsetNumBuckets, &numBuckets) ||
+        !safe_read_u32((char *)subTable + g_OffsetEntriesPerBucket, &entriesPerBucket) ||
+        !safe_read_u64((char *)subTable + g_OffsetEntrySize, &entrySize) ||
+        !safe_read_ptr((char *)subTable + g_OffsetBuckets, &buckets)) {
+        return 0;
+    }
+
+    if (bucketIdx >= numBuckets || entryIdx >= entriesPerBucket || !buckets) {
+        return 0;
+    }
+
+    // Get bucket pointer
+    void *bucket = NULL;
+    if (!safe_read_ptr((char *)buckets + bucketIdx * sizeof(void *), &bucket) || !bucket) {
+        return 0;
+    }
+
+    // Calculate entry address
+    void *entry = (char *)bucket + (entryIdx * entrySize);
+
+    // Hash is at offset 0x00 of StringEntry header
+    uint32_t hash = 0;
+    if (!safe_read_u32(entry, &hash)) {
+        return 0;
+    }
+
+    return hash;
+}
