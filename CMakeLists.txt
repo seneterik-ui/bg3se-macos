@@ -36,6 +36,7 @@ include_directories(
     ${CMAKE_SOURCE_DIR}/src/overlay
     ${CMAKE_SOURCE_DIR}/src/pak
     ${CMAKE_SOURCE_DIR}/src/stats
+    ${CMAKE_SOURCE_DIR}/src/staticdata
     ${CMAKE_SOURCE_DIR}/src/strings
     ${CMAKE_SOURCE_DIR}/src/timer
     ${CMAKE_SOURCE_DIR}/src/vars
@@ -87,6 +88,8 @@ add_library(bg3se SHARED
     src/lifetime/lifetime.c
     src/localization/localization.c
     src/lua/lua_localization.c
+    src/staticdata/staticdata_manager.c
+    src/lua/lua_staticdata.c
     lib/lz4/lz4.c
 )
 

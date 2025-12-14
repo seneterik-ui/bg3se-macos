@@ -52,7 +52,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Level` | ✅ Full (21) | ❌ Not impl | **0%** | 9 |
 | `Ext.Audio` | ✅ Full (17) | ❌ Not impl | **0%** | 10 |
 | `Ext.Localization` | ✅ Full (2) | ❌ Not impl | **0%** | 10 |
-| `Ext.StaticData` | ✅ Full (5) | ❌ Not impl | **0%** | 10 |
+| `Ext.StaticData` | ✅ Full (5) | 🔶 Feat type | **20%** | 10 |
 | `Ext.Resource` | ✅ Full (2) | ❌ Not impl | **0%** | 10 |
 | `Ext.Template` | ✅ Full (9) | ❌ Not impl | **0%** | 10 |
 | Console/REPL | ✅ Full | ✅ Socket + file + in-game overlay | **95%** | 5 |
@@ -1102,16 +1102,35 @@ Ext.Mod.GetModInfo(guid)
 ## Phase 10: Data Access & Audio
 
 ### 10.1 Ext.StaticData API
-**Status:** ❌ Not Started - [Issue #40](https://github.com/tdimino/bg3se-macos/issues/40)
+**Status:** 🔶 In Progress - [Issue #40](https://github.com/tdimino/bg3se-macos/issues/40)
 
-Access to 200+ static game resource types.
+Access to static game resource types (Feats, Races, Backgrounds, Origins, Gods, Classes).
 
 ```lua
-local resource = Ext.StaticData.Get(guid, resourceType)
-local resources = Ext.StaticData.GetAll(resourceType)
+-- Get all entries of a type
+local feats = Ext.StaticData.GetAll("Feat")
+
+-- Get by GUID
+local feat = Ext.StaticData.Get("Feat", "e7ab823e-32b2-49f8-b7b3-7f9c2d4c1f5e")
+
+-- Get count
+local count = Ext.StaticData.GetCount("Feat")
+
+-- Check if ready
+local ready = Ext.StaticData.IsReady("Feat")
+
+-- Debug helpers
+Ext.StaticData.DumpStatus()
+Ext.StaticData.DumpEntries("Feat", 10)
 ```
 
-Resource types: Background, Feat, Spell, Origin, Progression, Race, ClassDescription, etc.
+**Implementation Notes:**
+- Uses hook-based capture (FeatManager::GetFeats at 0x101b752b4)
+- Managers captured lazily when game accesses them
+- Current types: Feat (others pending discovery via Ghidra)
+- FeatManager structure: +0x7C count, +0x80 array, 0x128 bytes per feat
+
+Resource types: Feat (✅), Race (🔶), Background (🔶), Origin (🔶), God (🔶), ClassDescription (🔶)
 
 ### 10.2 Ext.Resource & Ext.Template API
 **Status:** ❌ Not Started - [Issue #41](https://github.com/tdimino/bg3se-macos/issues/41)
@@ -1226,7 +1245,7 @@ Full debugging experience with breakpoints, stepping, and variable inspection.
 | D3 | Physics/Raycasting (Ext.Level) | High | ❌ Not Started | [#37](https://github.com/tdimino/bg3se-macos/issues/37) |
 | D4 | Audio (Ext.Audio) | Medium | ❌ Not Started | [#38](https://github.com/tdimino/bg3se-macos/issues/38) |
 | D5 | Localization (Ext.Localization) | Low | ❌ Not Started | [#39](https://github.com/tdimino/bg3se-macos/issues/39) |
-| D6 | Static Data (Ext.StaticData) | Medium | ❌ Not Started | [#40](https://github.com/tdimino/bg3se-macos/issues/40) |
+| D6 | Static Data (Ext.StaticData) | Medium | 🔶 In Progress (Feat type) | [#40](https://github.com/tdimino/bg3se-macos/issues/40) |
 | D7 | Resource/Template Management | Medium | ❌ Not Started | [#41](https://github.com/tdimino/bg3se-macos/issues/41) |
 | D8 | VS Code Debugger | High | ❌ Not Started | [#42](https://github.com/tdimino/bg3se-macos/issues/42) |
 | D9 | Input Injection | Medium | ❌ Not Started | - |

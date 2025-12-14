@@ -13,7 +13,7 @@ Techniques discovered via Exa MCP research (2025-12-12) that we haven't yet empl
 | GhidraMCP integration | MCP server | All issues | 2h setup | ✅ COMPLETE |
 | Frida Stalker | Frida | #32 (hash function) | 1h | ⚠️ CRASHES BG3 |
 | frida-itrace | Frida | Complex flows | 2h | NOT STARTED |
-| Parallel Ghidra | Bash/Scripts | Init discovery | 1h | NOT STARTED |
+| Parallel Ghidra | Bash/Scripts | Init discovery | 1h | ✅ COMPLETE |
 | pyghidra-mcp | MCP server | Multi-binary | 3h | ✅ VERIFIED WORKING |
 
 ---
@@ -330,31 +330,34 @@ Stalker.follow({
 
 ---
 
-## 4. Parallel Ghidra Analysis
+## 4. Parallel Ghidra Analysis ✅ COMPLETE
 
 **What it is:** Running multiple headless Ghidra scripts simultaneously for faster offset discovery.
 
-**Implementation:**
+**Script:** `ghidra/scripts/parallel_ghidra.sh`
+
+**Usage:**
 ```bash
-#!/bin/bash
-# scripts/parallel_ghidra.sh
+# Run multiple scripts in parallel (default: 2 concurrent jobs)
+./ghidra/scripts/parallel_ghidra.sh find_status_manager.py find_prototype_managers.py find_localization.py
 
-SCRIPTS=(
-    "find_status_init.py"
-    "find_passive_init.py"
-    "find_interrupt_init.py"
-    "find_boost_init.py"
-)
+# Increase concurrency (requires more RAM - ~4GB per job)
+./ghidra/scripts/parallel_ghidra.sh --max-jobs 4 script1.py script2.py script3.py script4.py
 
-for script in "${SCRIPTS[@]}"; do
-    ./ghidra/scripts/run_analysis.sh "$script" &
-done
-
-wait
-echo "All analyses complete"
+# Show help and available scripts
+./ghidra/scripts/parallel_ghidra.sh --help
 ```
 
+**Features:**
+- Job limiting to prevent OOM (default: 2 concurrent, configurable via `--max-jobs`)
+- Per-script logging to `/tmp/ghidra_parallel/<script>.log`
+- Summary report at `/tmp/ghidra_parallel/summary.txt`
+- Real-time progress output with timestamps
+- Exit code reflects success/failure
+
 **Use case:** Finding Init functions for Status, Passive, Interrupt, Boost prototype managers (needed for full Stats.Sync).
+
+**RAM Warning:** Each Ghidra instance loads the full BG3 binary (~500MB). With 4 concurrent jobs, expect ~8GB RAM usage.
 
 ---
 

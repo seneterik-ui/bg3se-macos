@@ -60,6 +60,7 @@ SE mods work automatically—just install them like any other mod:
 | Ext.Input | ✅ Hotkeys, key injection |
 | Ext.Math | ✅ Vector/matrix operations |
 | Ext.Enums | ✅ 14 enum/bitfield types |
+| Ext.StaticData | 🔶 Feat type (hook-based capture) |
 | Lifetime Scoping | ✅ Prevents stale object access |
 | Debug Console | ✅ Socket + file + in-game overlay |
 | Testing | ✅ `!test` suite, Debug.* helpers, Frida scripts |

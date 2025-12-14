@@ -13,6 +13,40 @@ Each entry includes:
 
 ---
 
+## [v0.32.5] - 2025-12-14
+
+**Parity:** ~57% | **Category:** Static Data | **Issues:** #40
+
+### Added
+- **Ext.StaticData API** - New Lua namespace for accessing immutable game data
+- `Ext.StaticData.GetAll(type)` - Get all entries of a type as array of tables
+- `Ext.StaticData.Get(type, guid)` - Get single entry by GUID string
+- `Ext.StaticData.GetCount(type)` - Get count of entries
+- `Ext.StaticData.GetTypes()` - List all supported type names
+- `Ext.StaticData.IsReady(type)` - Check if manager is captured
+- `Ext.StaticData.TryTypeContext()` - Debug: traverse ImmutableDataHeadmaster TypeInfo list
+- Debug helpers: `DumpStatus()`, `DumpEntries()`, `Probe()`
+
+### Technical
+- **TypeContext traversal working**: Successfully traversed 100+ TypeInfo entries at runtime
+- **m_State discovered**: ImmutableDataHeadmaster m_State at offset `0x083c4a68`
+- **Dual hook strategy**: Hooks on both `FeatManager::GetFeats` (`0x01b752b4`) and `GetAllFeats` (`0x0120b3e8`)
+- **FeatManager structure**: `+0x7C` count, `+0x80` array pointer, `0x128` bytes per feat
+- **ImmutableDataHeadmaster pattern**: TypeContext-based manager registration (differs from Windows)
+- **GUID at offset 0**: Each Feat entry starts with 16-byte GUID
+- Managers captured lazily when game code accesses them
+
+### In Progress
+- FeatManager capture via hooks (hooks installed, awaiting trigger verification)
+- TypeInfo name matching (name_ptr values are FixedStrings, need resolution)
+
+### Documentation
+- New `ghidra/offsets/STATICDATA.md` with discovery notes
+- Runtime verification section with TypeContext traversal results
+- Updated ROADMAP.md and README.md
+
+---
+
 ## [v0.32.4] - 2025-12-13
 
 **Parity:** ~57% | **Category:** Stats System | **Issues:** #32
