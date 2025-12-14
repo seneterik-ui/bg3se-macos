@@ -18,10 +18,8 @@ Each entry includes:
 **Parity:** ~57% | **Category:** Static Data, Debug API | **Issues:** #40
 
 ### Added
-- **Ext.StaticData API** - New Lua namespace for accessing immutable game data
-- `Ext.StaticData.GetAll(type)` - Get all entries of a type as array of tables
-- `Ext.StaticData.Get(type, guid)` - Get single entry by GUID string
-- `Ext.StaticData.GetCount(type)` - Get count of entries
+- **Ext.StaticData API (Foundation)** - New Lua namespace for immutable game data
+- `Ext.StaticData.GetCount(type)` - Get count of entries (works for Feat: returns 37)
 - `Ext.StaticData.GetTypes()` - List all supported type names
 - `Ext.StaticData.IsReady(type)` - Check if manager is captured
 - `Ext.StaticData.TryTypeContext()` - Debug: traverse ImmutableDataHeadmaster TypeInfo list
@@ -36,27 +34,23 @@ Each entry includes:
   - `Ext.Debug.PrintTime(msg)` - Print with timestamp prefix
 - **Pointer validation** - Safer memory probing for offset discovery
   - `Ext.Debug.IsValidPointer(addr)` - Check if address is readable
-  - `Ext.Debug.ClassifyPointer(addr)` - Classify pointer type (null, small_int, invalid, string, vtable, heap, data, stack)
+  - `Ext.Debug.ClassifyPointer(addr)` - Classify pointer type
 
-### Fixed
-- **FeatManager offsets corrected** - Now uses +0x7C for count (from GetFeats decompilation at `0x101b752b4`)
-- **TypeContext vs hook capture** - TypeContext gives metadata structures, hook captures real manager with correct offsets
-- **FeatManager capture** - Now exclusively via GetFeats hook (TypeContext capture disabled for Feat)
+### Known Limitations
+- **GetAll() returns invalid GUIDs** - TypeContext gives registration metadata, not real manager data
+- **GetFeats hooks disabled** - Hooks broke feat selection UI; root cause under investigation
+- **Feat data access incomplete** - Count works (37), but individual feat entries need hook-based capture
 
-### Technical
-- **FeatManager::GetFeats decompilation** - Verified offsets: count at +0x7C, array at +0x80
-- **TypeContext name-based capture**: Other managers captured by matching C string names
-- **7 managers captured**: FeatDescription, Race, Origin, God, Background, Progression (Feat via hook)
+### Technical Discoveries
+- **TypeContext is metadata, not managers** - ImmutableDataHeadmaster TypeContext provides registration entries, not actual GuidResourceBank data
+- **Real FeatManager structure** - count at +0x7C, array at +0x80 (from GetFeats @ `0x101b752b4`)
+- **TypeContext structure** - count at +0x00, linked list pointer at +0x80 (NOT feat array)
 - **m_State discovered**: ImmutableDataHeadmaster m_State at offset `0x083c4a68`
-- **Two capture methods**: TypeContext for most managers, hook-based for FeatManager
-
-### In Progress
-- **GetAll testing**: Need game restart with Withers respec to trigger GetFeats hook
-- Missing managers: Class, ActionResource (may have different TypeContext names)
+- **121 TypeInfo entries** scanned via linked list traversal
 
 ### Documentation
 - Updated `agent_docs/development.md` with Debug API reference
-- Updated `ghidra/offsets/STATICDATA.md` with FeatManager offset discoveries
+- Updated `ghidra/offsets/STATICDATA.md` with structure findings
 
 ---
 
