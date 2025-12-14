@@ -46,6 +46,19 @@ static const char* s_type_names[STATICDATA_COUNT] = {
     "FeatDescription"
 };
 
+// Manager type names as they appear in TypeContext (for name-based capture)
+static const char* s_manager_type_names[STATICDATA_COUNT] = {
+    "eoc::FeatManager",
+    "eoc::RaceManager",
+    "eoc::BackgroundManager",
+    "eoc::OriginManager",
+    "eoc::GodManager",
+    "eoc::ClassManager",
+    "eoc::ProgressionManager",
+    "eoc::ActionResourceManager",
+    "eoc::FeatDescriptionManager"
+};
+
 // ============================================================================
 // Module State
 // ============================================================================
@@ -77,8 +90,58 @@ typedef struct TypeInfo {
 } TypeInfo;
 
 /**
- * Try to find a manager by traversing the ImmutableDataHeadmaster TypeContext.
- * Returns the manager pointer if found, NULL otherwise.
+ * Capture all known managers by traversing the ImmutableDataHeadmaster TypeContext.
+ * The type_name field is a raw C string pointer (verified at runtime).
+ * Returns number of managers captured.
+ */
+static int capture_managers_via_typecontext(void) {
+    if (!g_staticdata.main_binary_base) {
+        return 0;
+    }
+
+    // Get pointer to m_State
+    void** ptr_mstate = (void**)((uint8_t*)g_staticdata.main_binary_base + OFFSET_MSTATE_PTR);
+    void* m_state = *ptr_mstate;
+    if (!m_state) {
+        log_message("[StaticData] m_State is NULL - TypeContext not available yet");
+        return 0;
+    }
+
+    log_message("[StaticData] TypeContext traversal: m_State at %p", m_state);
+
+    // TypeInfo head is at m_State + 8
+    TypeInfo* typeinfo = *(TypeInfo**)((uint8_t*)m_state + 8);
+
+    int captured = 0;
+    int count = 0;
+    while (typeinfo && count < 200) {  // Safety limit (100+ managers exist)
+        // Check if this TypeInfo has a valid manager and name
+        if (typeinfo->manager_ptr && typeinfo->type_name) {
+            // type_name is a raw C string (verified via runtime probing)
+            const char* name = (const char*)typeinfo->type_name;
+
+            // Try to match against known manager names
+            for (int i = 0; i < STATICDATA_COUNT; i++) {
+                // Only capture if not already captured
+                if (!g_staticdata.managers[i] && strcmp(name, s_manager_type_names[i]) == 0) {
+                    g_staticdata.managers[i] = typeinfo->manager_ptr;
+                    log_message("[StaticData] Captured %s: %p", s_type_names[i], typeinfo->manager_ptr);
+                    captured++;
+                    break;
+                }
+            }
+        }
+
+        typeinfo = typeinfo->next;
+        count++;
+    }
+
+    log_message("[StaticData] TypeContext traversal: scanned %d entries, captured %d managers", count, captured);
+    return captured;
+}
+
+/**
+ * Legacy function for debugging - traverses and logs all TypeInfo entries.
  */
 static void* find_manager_via_typecontext(const char* type_name) {
     if (!g_staticdata.main_binary_base || !type_name) {
@@ -99,13 +162,13 @@ static void* find_manager_via_typecontext(const char* type_name) {
     TypeInfo* typeinfo = *(TypeInfo**)((uint8_t*)m_state + 8);
 
     int count = 0;
-    while (typeinfo && count < 100) {  // Safety limit
+    while (typeinfo && count < 200) {  // Safety limit
         // Check if this TypeInfo has a valid manager
         if (typeinfo->manager_ptr && typeinfo->type_name) {
-            // Try to read as a C string (may crash if it's actually a FixedString index)
-            // For safety, just log the pointer for now
-            log_message("[StaticData] TypeInfo[%d]: mgr=%p, name_ptr=%p",
-                        count, typeinfo->manager_ptr, typeinfo->type_name);
+            // type_name is a raw C string (verified at runtime)
+            const char* name = (const char*)typeinfo->type_name;
+            log_message("[StaticData] TypeInfo[%d]: mgr=%p, name=%s",
+                        count, typeinfo->manager_ptr, name);
         }
 
         typeinfo = typeinfo->next;
@@ -113,7 +176,7 @@ static void* find_manager_via_typecontext(const char* type_name) {
     }
 
     log_message("[StaticData] Traversed %d TypeInfo entries", count);
-    return NULL;  // For now, just traverse and log
+    return NULL;
 }
 
 // ============================================================================
@@ -257,6 +320,12 @@ bool staticdata_has_manager(StaticDataType type) {
     if (type < 0 || type >= STATICDATA_COUNT) {
         return false;
     }
+
+    // If not captured yet, try TypeContext capture (lazy initialization)
+    if (!g_staticdata.managers[type] && g_staticdata.initialized) {
+        capture_managers_via_typecontext();
+    }
+
     return g_staticdata.managers[type] != NULL;
 }
 
@@ -437,8 +506,9 @@ const char* staticdata_get_display_name(StaticDataType type, StaticDataPtr entry
 // ============================================================================
 
 void staticdata_try_typecontext_capture(void) {
-    log_message("[StaticData] Attempting TypeContext traversal...");
-    find_manager_via_typecontext("FeatManager");
+    log_message("[StaticData] Attempting TypeContext capture...");
+    int captured = capture_managers_via_typecontext();
+    log_message("[StaticData] Captured %d managers via TypeContext", captured);
 }
 
 void staticdata_dump_status(void) {
