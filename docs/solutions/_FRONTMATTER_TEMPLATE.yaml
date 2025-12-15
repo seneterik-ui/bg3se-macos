@@ -1,0 +1,259 @@
+# YAML Frontmatter Template for Solution Documentation
+# Use this structure when documenting reverse engineering solutions and problem/solution pairs
+
+---
+# Document Metadata
+title: "Problem Title: Short Description of What Was Solved"
+date: 2025-12-15                           # YYYY-MM-DD when solution was finalized
+category: reverse-engineering              # or: architecture, feature, bug-fix, investigation
+component: Ext.StaticData                  # Primary BG3SE component affected
+issue: "#40"                               # GitHub issue number(s), comma-separated if multiple
+severity: architecture                     # or: blocker, high, medium, low, documentation
+
+# Tagging Strategy
+tags:
+  - arm64                                  # Platform-specific tags
+  - staticdata                             # Feature/domain tags
+  - frida                                  # Tool/technique tags
+  - file-based-capture                     # Architecture pattern tags
+  - featmanager                            # Component-specific tags
+  - hooking                                # Technical approach tags
+
+# Optional fields for complex solutions
+parent_issue: "#33"                        # Related tracking issue (if different from issue)
+blocked_by: null                           # Issues or blockers preventing solution
+blocks: ["#41"]                            # Issues this solution unblocks
+related_offsets:                           # Key discovered offsets
+  - "0x01b752b4: GetFeats function"
+  - "0x7C: FeatManager count offset"
+  - "0x80: FeatManager array offset"
+---
+
+# Guidelines for Each Field
+
+## title
+- Format: "Problem: [What Was Wrong] | Solution: [How It Was Fixed]"
+- Alternative: "[Component] [Issue Type]: [Description]"
+- Examples:
+  - "TypeContext Returns Metadata, Not Real Data | Solved via Frida File Capture"
+  - "Ext.StaticData FeatManager Discovery: Non-Invasive Runtime Capture"
+  - "ARM64 PC-Relative Corruption: Why Dobby Hooks Failed"
+
+## date
+- When the solution was finalized/working
+- Not when investigation started
+- Format: ISO 8601 (YYYY-MM-DD)
+
+## category
+- **reverse-engineering**: Discovery of offsets, structures, or functions
+- **architecture**: Design patterns, system integration approaches
+- **feature**: New API or capability implementation
+- **bug-fix**: Fixing broken functionality
+- **investigation**: Deep analysis without immediate actionable solution
+
+## component
+- Primary BG3SE API namespace affected (Ext.StaticData, Ext.Entity, etc.)
+- If multiple: list most important first
+- Examples: "Ext.Stats", "Ext.Entity, Ext.Events", "Core/Hooking"
+
+## issue
+- GitHub issue number: "#40"
+- Multiple issues: "#40, #41, #35"
+- If no issue: leave as null or omit
+
+## severity
+- **blocker**: Prevents core functionality
+- **high**: Breaks major features
+- **medium**: Affects multiple systems
+- **low**: Minor workaround needed
+- **documentation**: Informational only
+- **architecture**: Affects multiple systems or future work
+
+## tags
+- **Platform**: arm64, x86_64, macos, windows
+- **Technique**: frida, dobby, ghidra, hooking, pattern-scanning, symbol-resolution
+- **Architecture**: file-based-capture, hook-based, singleton-discovery, type-context
+- **Domain**: featmanager, entity-system, stats-system, component-system
+- **Status**: working, partial, blocked, alternative-approach
+
+## Optional Fields
+
+### parent_issue
+- If this solution relates to a larger tracking issue
+- Example: "#33" for component discovery (while fixing "#40" feat-specific issue)
+
+### blocked_by
+- Issues that must be resolved before this solution works
+- Array format: ["#44", "#15"]
+
+### blocks
+- Issues that this solution enables
+- Array format: ["#41", "#35"]
+
+### related_offsets
+- Key memory offsets discovered
+- Format: "0xADDR: Description"
+- One per line
+
+---
+
+# Document Structure Guidelines
+
+## Front Matter Summary Section
+Start with a paragraph after the YAML block:
+```markdown
+# Document Title
+
+## Summary
+
+Successfully [implemented/discovered/fixed] by:
+1. [Key step 1]
+2. [Key step 2]
+3. [Key step 3]
+
+**Result:** [Quantifiable outcome]
+```
+
+## Root Cause Analysis Section
+```markdown
+## Problem
+
+[What was broken]
+
+### Root Cause
+
+[Technical reason why it failed]
+```
+
+## Technical Investigation Section
+```markdown
+## Technical Investigation
+
+### Discovery Path
+
+1. [Approach 1 - Result]
+2. [Approach 2 - Result]
+3. [Successful approach - Result]
+```
+
+## Solution Architecture Section
+```markdown
+## Solution Architecture
+
+[ASCII diagram showing how components interact]
+
+### Key Decisions
+
+- Decision 1: Why this instead of alternative
+- Decision 2: Why this instead of alternative
+```
+
+## Implementation Details Section
+```markdown
+## Implementation Details
+
+### 1. Component/Layer Name
+
+**File:** path to file
+**Function:** function_name at line X
+
+[Code description and snippets]
+
+### 2. Next Component
+
+...
+```
+
+## Key Offsets Table
+```markdown
+## Key Offsets
+
+| Offset | Purpose |
+|--------|---------|
+| `0x01b752b4` | FeatManager::GetFeats function |
+| `0x7C` | FeatManager count field |
+```
+
+## Results Section
+```markdown
+## Results
+
+### Status
+
+| Feature | Status | Notes |
+|---------|--------|-------|
+| GetAll | Working | Returns N items |
+| GetByGuid | Working | Binary search |
+```
+
+## Debugging Section
+```markdown
+## Debugging
+
+### Verify Capture
+
+[Commands to verify it's working]
+
+### Common Issues
+
+[Issues and solutions]
+```
+
+## References Section
+```markdown
+## References
+
+- **Issue:** #40 - Feature description
+- **Related:** #41, #35
+- **Files:**
+  - `/path/to/file.c` - Description
+  - `/path/to/script.js` - Description
+- **Windows Reference:** Path in bg3se repo
+```
+
+---
+
+# Tag Selection Matrix
+
+Use this to choose appropriate tags:
+
+## Technique Tags
+- **frida**: Used Frida for runtime interception/hooking
+- **dobby**: Used Dobby for inline hooking
+- **ghidra**: Used Ghidra for decompilation/analysis
+- **pattern-scanning**: Scanned binary for instruction/data patterns
+- **symbol-resolution**: Used dlsym or symbol table lookup
+- **file-based**: Solution involves file I/O between components
+
+## Architecture Tags
+- **hook-based**: Solution uses function hooking
+- **singleton-discovery**: Solution finds/accesses singleton instances
+- **type-context**: Solution uses TypeContext/reflection system
+- **environment-capture**: Solution captures Environment parameter
+- **registry-pattern**: Solution uses registration/lookup registry
+
+## Domain Tags
+- **arm64-abi**: Solution addresses ARM64 calling convention specifics
+- **memory-layout**: Solution involves struct offset discovery
+- **calling-convention**: Solution addresses parameter passing
+- **pc-relative**: Solution addresses PC-relative instruction issues
+
+---
+
+# Quality Checklist
+
+Before publishing a solution document:
+
+- [ ] title clearly states problem and solution
+- [ ] date is when solution was finalized
+- [ ] All key file paths are absolute paths
+- [ ] Code snippets show relevant sections (not full files)
+- [ ] Key offsets documented in table
+- [ ] Alternative approaches explained (why they failed)
+- [ ] Results/outcome section quantifiable
+- [ ] Debugging section helps future developers
+- [ ] Related issues cross-linked
+- [ ] Tags would help someone search for this solution
+- [ ] Architecture diagrams or workflows included
+- [ ] References to Windows BG3SE patterns included
+

@@ -235,6 +235,11 @@ static const TypeIdEntry g_KnownTypeIds[] = {
     { "esv::trigger::LoadedHandledComponent",         0x1088ea2a8, 0, false },
     { "esv::trigger::TriggerWorldAutoTriggeredComponent", 0x10890bea8, 0, false },
 
+    // =====================================================================
+    // Template Components (Issue #41 - Ext.Template support)
+    // =====================================================================
+    { "eoc::templates::OriginalTemplateComponent",    0x108902230, 0, false },
+
     // ls:: tag components
     { "ls::AlwaysUpdateEffectComponent",              0x1089363d8, 0, false },
     { "ls::AnimationUpdateComponent",                 0x108935e68, 0, false },

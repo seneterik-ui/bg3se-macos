@@ -1605,6 +1605,26 @@ static const ComponentLayoutDef g_IsMarkedForDeletionComponent_Layout = {
     .propertyCount = 0,
 };
 
+// ============================================================================
+// OriginalTemplateComponent (eoc::templates::OriginalTemplateComponent)
+// From: BG3Extender/GameDefinitions/Components/Components.h:222-228
+// Stores the template ID and type for an entity
+// ============================================================================
+
+static const ComponentPropertyDef g_OriginalTemplateComponent_Properties[] = {
+    { "OriginalTemplate", 0x00, FIELD_TYPE_FIXEDSTRING, 0, true },  // Template ID
+    { "TemplateType",     0x04, FIELD_TYPE_UINT8,       0, true },  // Template type enum
+};
+
+static const ComponentLayoutDef g_OriginalTemplateComponent_Layout = {
+    .componentName = "eoc::templates::OriginalTemplateComponent",
+    .shortName = "OriginalTemplate",
+    .componentTypeIndex = 0,
+    .componentSize = 0x08,
+    .properties = g_OriginalTemplateComponent_Properties,
+    .propertyCount = sizeof(g_OriginalTemplateComponent_Properties) / sizeof(g_OriginalTemplateComponent_Properties[0]),
+};
+
 // Net (esv::NetComponent)
 static const ComponentLayoutDef g_NetComponent_Layout = {
     .componentName = "esv::NetComponent",
@@ -2227,6 +2247,8 @@ static const ComponentLayoutDef* g_AllComponentLayouts[] = {
     &g_PauseExcludedComponent_Layout,
     &g_LevelInstanceUnloadingComponent_Layout,
     &g_NetComponent_Layout,
+    // Template components (Issue #41 - Ext.Template support)
+    &g_OriginalTemplateComponent_Layout,
     NULL  // Sentinel
 };
 
