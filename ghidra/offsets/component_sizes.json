@@ -1,0 +1,163 @@
+{
+  "metadata": {
+    "extracted_via": "Ghidra MCP decompilation",
+    "date": "2025-12-22",
+    "method": "AddComponent<T> -> ComponentFrameStorageAllocRaw size extraction",
+    "total_components": 30,
+    "notes": "These sizes are Ghidra-verified ARM64 struct sizes"
+  },
+  "components": {
+    "ecl::EquipmentVisualsComponent": {
+      "size": 72,
+      "size_hex": "0x48",
+      "address": "0x100eb282c"
+    },
+    "eoc::AbilityBoostComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101d9ea34"
+    },
+    "eoc::ActionResourcesComponent": {
+      "size": 64,
+      "size_hex": "0x40",
+      "address": "0x101f0f6cc"
+    },
+    "eoc::ArmorComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101f08728"
+    },
+    "eoc::BackgroundComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101f01d10"
+    },
+    "eoc::BoostConditionComponent": {
+      "size": 8,
+      "size_hex": "0x08",
+      "address": "0x101efb91c"
+    },
+    "eoc::BoostInfoComponent": {
+      "size": 88,
+      "size_hex": "0x58",
+      "address": "0x101efabd8"
+    },
+    "eoc::BoostsContainerComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101ef9f3c"
+    },
+    "eoc::ClassesComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101ec9068"
+    },
+    "eoc::DataComponent": {
+      "size": 12,
+      "size_hex": "0x0c",
+      "address": "0x101ec3908"
+    },
+    "eoc::HealthComponent": {
+      "size": 40,
+      "size_hex": "0x28",
+      "address": "0x101ea46c4"
+    },
+    "eoc::LevelComponent": {
+      "size": 4,
+      "size_hex": "0x04",
+      "address": "0x101e7a4c4"
+    },
+    "eoc::MovementComponent": {
+      "size": 24,
+      "size_hex": "0x18",
+      "address": "0x101e73fe0"
+    },
+    "eoc::OriginComponent": {
+      "size": 24,
+      "size_hex": "0x18",
+      "address": "0x101e70ef0"
+    },
+    "eoc::PassiveComponent": {
+      "size": 32,
+      "size_hex": "0x20",
+      "address": "0x101e6cd14"
+    },
+    "eoc::PassiveContainerComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101e6c018"
+    },
+    "eoc::ProgressionContainerComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101e662a0"
+    },
+    "eoc::RaceComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101e649b8"
+    },
+    "eoc::StatsComponent": {
+      "size": 160,
+      "size_hex": "0xa0",
+      "address": "0x101e551a8"
+    },
+    "eoc::StatusImmunitiesComponent": {
+      "size": 64,
+      "size_hex": "0x40",
+      "address": "0x101e544d0"
+    },
+    "eoc::TagComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x101e38918"
+    },
+    "eoc::ValueComponent": {
+      "size": 8,
+      "size_hex": "0x08",
+      "address": "0x101e290fc"
+    },
+    "eoc::combat::DelayedFanfareComponent": {
+      "size": 1,
+      "size_hex": "0x01",
+      "address": "0x10125c240",
+      "notes": "Marker component (1 byte)"
+    },
+    "eoc::god::GodComponent": {
+      "size": 40,
+      "size_hex": "0x28",
+      "address": "0x101ea5cb4"
+    },
+    "eoc::inventory::CanBeInComponent": {
+      "size": 1,
+      "size_hex": "0x01",
+      "address": "0x101db9bb8",
+      "notes": "Marker component (1 byte)"
+    },
+    "eoc::spell::BookComponent": {
+      "size": 24,
+      "size_hex": "0x18",
+      "address": "0x101f8b294"
+    },
+    "eoc::status::CauseComponent": {
+      "size": 8,
+      "size_hex": "0x08",
+      "address": "0x101e538a8"
+    },
+    "eoc::status::ContainerComponent": {
+      "size": 64,
+      "size_hex": "0x40",
+      "address": "0x101e52ba8"
+    },
+    "eoc::status::IDComponent": {
+      "size": 4,
+      "size_hex": "0x04",
+      "address": "0x101e516d8"
+    },
+    "esv::ActivationGroupContainerComponent": {
+      "size": 16,
+      "size_hex": "0x10",
+      "address": "0x103bbf9ec"
+    }
+  }
+}

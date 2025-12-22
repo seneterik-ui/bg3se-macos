@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.5
+## Current Status: v0.36.6
 
 **Overall Feature Parity: ~77%** (based on comprehensive API function count analysis)
 
@@ -180,7 +180,7 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access & Property System
-**Status:** ✅ Complete (v0.32.8) - 157 component property layouts working (109 tag components)
+**Status:** ✅ Complete (v0.36.6) - **1,999 components registered** (55 with property access, 109 tag components)
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -301,6 +301,25 @@ Features:
 | ls::LevelComponent | 1923 |
 | ls::VisualComponent | 1999 |
 | ls::PhysicsComponent | 1947 |
+
+**Generated Component Registration (v0.36.6):**
+
+All 1,999 components are now auto-registered from the BG3 binary:
+
+| Namespace | Components | Description |
+|-----------|------------|-------------|
+| `eoc::` | 701 | Engine of Combat - BG3 gameplay |
+| `esv::` | 596 | Server-side components |
+| `ecl::` | 429 | Client-side components |
+| `ls::` | 233 | Larian Studios base |
+| `gui::` | 26 | GUI components |
+| `navcloud::` | 13 | Navigation/pathfinding |
+| `ecs::` | 1 | ECS internals |
+
+Tools:
+- `tools/extract_typeids.py` - Generates TypeId addresses header
+- `tools/extract_typeids.py --registry` - Generates registration C file
+- `docs/components/` - Modular component documentation by namespace
 
 ### 2.3 Timer API
 **Status:** ✅ Complete (v0.36.5)
@@ -1364,6 +1383,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.6 | 2025-12-22 | **Component Expansion Infrastructure** - 1,999 TypeIds extracted, 504 property defs parsed, 30 ARM64 sizes verified, batch workflow documented (#52) |
 | v0.36.5 | 2025-12-22 | **Math/Timer/IO APIs Complete** - 16 quaternion ops, **20 timer functions** (persistent timers + GameTime), path overrides (#47, #49, #50 all complete) |
 | v0.36.4 | 2025-12-22 | **Context System** - Server/Client context awareness, two-phase bootstrap, API guards (#15) |
 | v0.36.3 | 2025-12-22 | **StaticData All 9 Types** - ForceCapture + HashLookup for Race, God, FeatDescription (#45) |
@@ -1395,28 +1415,37 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 ### Component Parity Tools
 
-We've built automation tools to accelerate reaching Windows BG3SE component parity:
+We've built a **complete automation pipeline** for batch component expansion:
 
-| Tool | Purpose | Location |
-|------|---------|----------|
-| `tools/extract_typeids.py` | Extract all 1,999 component TypeId addresses from macOS binary | Generates C headers |
-| `tools/generate_component_stubs.py` | Parse Windows headers → generate C stubs | Field names + types |
+| Tool | Purpose | Output |
+|------|---------|--------|
+| `tools/extract_typeids.py` | Extract 1,999 TypeId addresses from binary symbols | `generated_typeids.h` |
+| `tools/parse_component_headers.py` | Parse 504 property definitions from Windows headers | `generated_property_defs.h` |
+| `tools/generate_component_entries.py` | Generate skeleton entries from Ghidra sizes | C struct stubs |
+| `ghidra/scripts/batch_extract_component_sizes.py` | Batch ARM64 size extraction via Ghidra | `component_sizes.json` |
+
+**Extraction Pipeline (v0.36.6):**
+```
+TypeId Extraction → Property Parsing → ARM64 Size Verification → Implementation
+     1,999              504                  30+                    55+
+```
 
 **Coverage Statistics:**
 
-| Namespace | Available | Implemented | Priority |
-|-----------|-----------|-------------|----------|
-| `eoc::` | 701 | ~94 | High (mod-relevant) |
-| `esv::` | 596 | ~28 | Medium (server) |
-| `ecl::` | 429 | ~4 | Low (client) |
-| `ls::` | 233 | ~31 | Medium (base) |
-| **Total** | **1,999** | **157** | ~7.9% |
+| Namespace | Available | With Properties | With Sizes | Implemented |
+|-----------|-----------|-----------------|------------|-------------|
+| `eoc::` | 701 | ~400 | 25 | ~94 |
+| `esv::` | 596 | ~50 | 1 | ~28 |
+| `ecl::` | 429 | ~30 | 1 | ~4 |
+| `ls::` | 233 | ~24 | 3 | ~31 |
+| **Total** | **1,999** | **504** | **30** | **157** (~7.9%) |
 
-**Workflow for Adding Components:**
-1. `python3 tools/extract_typeids.py | grep ComponentName` → Get TypeId address
-2. `python3 tools/generate_component_stubs.py --list | grep ComponentName` → Get field list
-3. Verify ARM64 offsets via Ghidra or `Ext.Debug.ProbeStruct()`
-4. Add to `component_typeid.c` and `component_offsets.h`
+**Batch Expansion Workflow:**
+1. **Tag components** (100+ at once): Just need TypeId, no fields
+2. **Simple components**: TypeId + Properties from headers, trust Windows sizes
+3. **Complex components**: Full Ghidra verification + runtime probing
+
+**Documentation:** See `ghidra/offsets/EXTRACTION_METHODOLOGY.md` for complete workflow
 
 ### Issue Acceleration Matrix (Dec 2025 Comprehensive Audit)
 

@@ -16,6 +16,7 @@
 // ============================================================================
 // HealthComponent (eoc::HealthComponent)
 // From: BG3Extender/GameDefinitions/Components/Data.h:57-67
+// ARM64 Verified: Size 0x28 (via Ghidra AddComponent<eoc::HealthComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_HealthComponent_Properties[] = {
@@ -25,13 +26,14 @@ static const ComponentPropertyDef g_HealthComponent_Properties[] = {
     { "MaxTemporaryHp", 0x0C, FIELD_TYPE_INT32, 0, false },
     // field_10 is Guid (16 bytes) at 0x10
     { "IsInvulnerable", 0x20, FIELD_TYPE_BOOL,  0, false },
+    // Padding/alignment to 0x28
 };
 
 static const ComponentLayoutDef g_HealthComponent_Layout = {
     .componentName = "eoc::HealthComponent",
     .shortName = "Health",
     .componentTypeIndex = 0,  // Set dynamically from TypeId discovery
-    .componentSize = 0x24,
+    .componentSize = 0x28,    // ARM64 verified via Ghidra
     .properties = g_HealthComponent_Properties,
     .propertyCount = sizeof(g_HealthComponent_Properties) / sizeof(g_HealthComponent_Properties[0]),
 };
@@ -58,6 +60,7 @@ static const ComponentLayoutDef g_BaseHpComponent_Layout = {
 // ============================================================================
 // ArmorComponent (eoc::ArmorComponent)
 // From: BG3Extender/GameDefinitions/Components/Stats.h:8-17
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::ArmorComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_ArmorComponent_Properties[] = {
@@ -72,7 +75,7 @@ static const ComponentLayoutDef g_ArmorComponent_Layout = {
     .componentName = "eoc::ArmorComponent",
     .shortName = "Armor",
     .componentTypeIndex = 0,
-    .componentSize = 0x10,
+    .componentSize = 0x10,    // ARM64 verified via Ghidra
     .properties = g_ArmorComponent_Properties,
     .propertyCount = sizeof(g_ArmorComponent_Properties) / sizeof(g_ArmorComponent_Properties[0]),
 };
@@ -80,12 +83,15 @@ static const ComponentLayoutDef g_ArmorComponent_Layout = {
 // ============================================================================
 // StatsComponent (eoc::StatsComponent)
 // From: BG3Extender/GameDefinitions/Components/Stats.h:113-129
+// ARM64 Verified: Size 0xa0 (via Ghidra AddComponent<eoc::StatsComponent>)
+// Runtime Verified: All properties working (Dec 2025)
+// Note: Abilities/AbilityModifiers arrays use index [1]=None, [2-7]=STR/DEX/CON/INT/WIS/CHA
 // ============================================================================
 
 static const ComponentPropertyDef g_StatsComponent_Properties[] = {
     { "InitiativeBonus",     0x00, FIELD_TYPE_INT32,       0, true },
-    { "Abilities",           0x04, FIELD_TYPE_INT32_ARRAY, 7, true },
-    { "AbilityModifiers",    0x20, FIELD_TYPE_INT32_ARRAY, 7, true },
+    { "Abilities",           0x04, FIELD_TYPE_INT32_ARRAY, 7, true },  // [1]=None, [2]=STR...[7]=CHA
+    { "AbilityModifiers",    0x20, FIELD_TYPE_INT32_ARRAY, 7, true },  // Matches Abilities indexing
     { "Skills",              0x3C, FIELD_TYPE_INT32_ARRAY, 18, true },
     { "ProficiencyBonus",    0x84, FIELD_TYPE_INT32,       0, true },
     { "SpellCastingAbility", 0x88, FIELD_TYPE_UINT8,       0, true },
@@ -99,7 +105,7 @@ static const ComponentLayoutDef g_StatsComponent_Layout = {
     .componentName = "eoc::StatsComponent",
     .shortName = "Stats",
     .componentTypeIndex = 0,
-    .componentSize = 0xA0,
+    .componentSize = 0xa0,    // ARM64 verified via Ghidra
     .properties = g_StatsComponent_Properties,
     .propertyCount = sizeof(g_StatsComponent_Properties) / sizeof(g_StatsComponent_Properties[0]),
 };
@@ -165,6 +171,7 @@ static const ComponentLayoutDef g_LevelComponent_Layout = {
 // ============================================================================
 // DataComponent (eoc::DataComponent)
 // From: BG3Extender/GameDefinitions/Components/Stats.h:55-62
+// ARM64 Verified: Size 0x0c (via Ghidra AddComponent<eoc::DataComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_DataComponent_Properties[] = {
@@ -177,7 +184,7 @@ static const ComponentLayoutDef g_DataComponent_Layout = {
     .componentName = "eoc::DataComponent",
     .shortName = "Data",
     .componentTypeIndex = 0,
-    .componentSize = 0x10,
+    .componentSize = 0x0c,    // ARM64 verified via Ghidra
     .properties = g_DataComponent_Properties,
     .propertyCount = sizeof(g_DataComponent_Properties) / sizeof(g_DataComponent_Properties[0]),
 };
@@ -185,20 +192,21 @@ static const ComponentLayoutDef g_DataComponent_Layout = {
 // ============================================================================
 // ExperienceComponent (eoc::exp::ExperienceComponent)
 // From: BG3Extender/GameDefinitions/Components/Data.h:625-633
+// ARM64 Verified: Size 0x18 (via Ghidra AddComponent<eoc::exp::ExperienceComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_ExperienceComponent_Properties[] = {
     { "CurrentLevelExperience", 0x00, FIELD_TYPE_INT32, 0, true },
     { "NextLevelExperience",    0x04, FIELD_TYPE_INT32, 0, true },
     { "TotalExperience",        0x08, FIELD_TYPE_INT32, 0, true },
-    // field_28 is uint8_t at 0x0C (padding suggests 0x0C, not 0x28)
+    // Additional fields at 0x0C-0x17 (total size 0x18)
 };
 
 static const ComponentLayoutDef g_ExperienceComponent_Layout = {
     .componentName = "eoc::exp::ExperienceComponent",
     .shortName = "Experience",
     .componentTypeIndex = 0,
-    .componentSize = 0x10,
+    .componentSize = 0x18,    // ARM64 verified via Ghidra
     .properties = g_ExperienceComponent_Properties,
     .propertyCount = sizeof(g_ExperienceComponent_Properties) / sizeof(g_ExperienceComponent_Properties[0]),
 };
@@ -266,6 +274,7 @@ static const ComponentLayoutDef g_PassiveComponent_Layout = {
 // ============================================================================
 // ResistancesComponent (eoc::ResistancesComponent)
 // From: BG3Extender/GameDefinitions/Components/Stats.h:102-111
+// ARM64 Verified: Size 0x68 (via Ghidra AddComponent<eoc::ResistancesComponent>)
 // Note: Complex arrays - exposing AC and simple fields only for now
 // ============================================================================
 
@@ -279,7 +288,7 @@ static const ComponentLayoutDef g_ResistancesComponent_Layout = {
     .componentName = "eoc::ResistancesComponent",
     .shortName = "Resistances",
     .componentTypeIndex = 0,
-    .componentSize = 0x70,  // Estimated based on arrays
+    .componentSize = 0x68,    // ARM64 verified via Ghidra
     .properties = g_ResistancesComponent_Properties,
     .propertyCount = sizeof(g_ResistancesComponent_Properties) / sizeof(g_ResistancesComponent_Properties[0]),
 };
@@ -287,6 +296,7 @@ static const ComponentLayoutDef g_ResistancesComponent_Layout = {
 // ============================================================================
 // PassiveContainerComponent (eoc::PassiveContainerComponent)
 // From: BG3Extender/GameDefinitions/Components/Passives.h:8-13
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::PassiveContainerComponent>)
 // Note: Contains Array<EntityHandle>, exposed as count only for now
 // ============================================================================
 
@@ -308,6 +318,7 @@ static const ComponentLayoutDef g_PassiveContainerComponent_Layout = {
 // ============================================================================
 // TagComponent (eoc::TagComponent)
 // From: BG3Extender/GameDefinitions/Components/Components.h:40-45
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::TagComponent>)
 // Note: Contains Array<Guid>, exposed as count only for now
 // ============================================================================
 
@@ -329,6 +340,7 @@ static const ComponentLayoutDef g_TagComponent_Layout = {
 // ============================================================================
 // RaceComponent (eoc::RaceComponent)
 // From: BG3Extender/GameDefinitions/Components/Data.h:492-497
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::RaceComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_RaceComponent_Properties[] = {
@@ -347,6 +359,7 @@ static const ComponentLayoutDef g_RaceComponent_Layout = {
 // ============================================================================
 // OriginComponent (eoc::OriginComponent)
 // From: BG3Extender/GameDefinitions/Components/Components.h:111-116
+// ARM64 Verified: Size 0x18 (via Ghidra AddComponent<eoc::OriginComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_OriginComponent_Properties[] = {
@@ -408,6 +421,7 @@ static const ComponentLayoutDef g_MovementComponent_Layout = {
 // ============================================================================
 // BackgroundComponent (eoc::BackgroundComponent)
 // From: BG3Extender/GameDefinitions/Components/Data.h:118-123
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::BackgroundComponent>)
 // ============================================================================
 
 static const ComponentPropertyDef g_BackgroundComponent_Properties[] = {
@@ -426,6 +440,7 @@ static const ComponentLayoutDef g_BackgroundComponent_Layout = {
 // ============================================================================
 // GodComponent (eoc::god::GodComponent)
 // From: BG3Extender/GameDefinitions/Components/Data.h:125-131
+// ARM64 Verified: Size 0x28 (via Ghidra AddComponent<eoc::god::GodComponent>)
 // Note: std::optional<Guid> = 1 byte has_value + 16 bytes Guid = 17 bytes
 // ============================================================================
 
@@ -469,6 +484,7 @@ static const ComponentLayoutDef g_ValueComponent_Layout = {
 // ============================================================================
 // TurnBasedComponent (eoc::TurnBasedComponent)
 // From: BG3Extender/GameDefinitions/Components/Combat.h:54-69
+// ARM64 Verified: Size 0x30 (via Ghidra AddComponent<eoc::TurnBasedComponent>)
 // Note: Multiple bool fields, optional floats (8 bytes each), then Guid
 // ============================================================================
 
@@ -593,6 +609,7 @@ static const ComponentLayoutDef g_InventoryContainerComponent_Layout = {
 // ============================================================================
 // ActionResourcesComponent (eoc::ActionResourcesComponent)
 // From: BG3Extender/GameDefinitions/Components/ActionResources.h:63-68
+// ARM64 Verified: Size 0x40 (via Ghidra AddComponent<eoc::ActionResourcesComponent>)
 // Note: Contains HashMap<Guid, Array<ActionResourceEntry>>, exposed as count
 // ============================================================================
 
@@ -605,7 +622,7 @@ static const ComponentLayoutDef g_ActionResourcesComponent_Layout = {
     .componentName = "eoc::ActionResourcesComponent",
     .shortName = "ActionResources",
     .componentTypeIndex = 0,
-    .componentSize = 0x48,
+    .componentSize = 0x40,    // ARM64 verified via Ghidra
     .properties = g_ActionResourcesComponent_Properties,
     .propertyCount = sizeof(g_ActionResourcesComponent_Properties) / sizeof(g_ActionResourcesComponent_Properties[0]),
 };
@@ -737,6 +754,7 @@ static const ComponentLayoutDef g_ConcentrationComponent_Layout = {
 // ============================================================================
 // BoostsContainerComponent (eoc::BoostsContainerComponent)
 // From: BG3Extender/GameDefinitions/Components/Boosts.h:24-29
+// ARM64 Verified: Size 0x10 (via Ghidra AddComponent<eoc::BoostsContainerComponent>)
 // Note: Contains Array<BoostEntry>, exposed as count
 // ============================================================================
 
@@ -758,21 +776,22 @@ static const ComponentLayoutDef g_BoostsContainerComponent_Layout = {
 // ============================================================================
 // DisplayNameComponent (eoc::DisplayNameComponent)
 // From: BG3Extender/GameDefinitions/Components/Visual.h:64-70
-// Note: Contains two TranslatedStrings (complex - handle + version = ~16 bytes each)
+// ARM64 Verified: Size 0x40 (via Ghidra AddComponent<eoc::DisplayNameComponent>)
+// Note: Contains two TranslatedStrings (complex - handle + version = ~32 bytes each)
 // ============================================================================
 
 static const ComponentPropertyDef g_DisplayNameComponent_Properties[] = {
-    // TranslatedString Name at 0x00 (Handle + Version = ~16 bytes)
+    // TranslatedString Name at 0x00 (Handle + Version = ~32 bytes on ARM64)
     { "NameHandle",   0x00, FIELD_TYPE_FIXEDSTRING, 0, true },  // TranslatedString.Handle
-    // TranslatedString Title at 0x10
-    { "TitleHandle",  0x10, FIELD_TYPE_FIXEDSTRING, 0, true },  // TranslatedString.Handle
+    // TranslatedString Title at 0x20
+    { "TitleHandle",  0x20, FIELD_TYPE_FIXEDSTRING, 0, true },  // TranslatedString.Handle
 };
 
 static const ComponentLayoutDef g_DisplayNameComponent_Layout = {
     .componentName = "eoc::DisplayNameComponent",
     .shortName = "DisplayName",
     .componentTypeIndex = 0,
-    .componentSize = 0x20,
+    .componentSize = 0x40,    // ARM64 verified via Ghidra
     .properties = g_DisplayNameComponent_Properties,
     .propertyCount = sizeof(g_DisplayNameComponent_Properties) / sizeof(g_DisplayNameComponent_Properties[0]),
 };

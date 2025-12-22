@@ -63,7 +63,8 @@ typedef struct {
 // ============================================================================
 
 // Maximum number of components the registry can track
-#define COMPONENT_REGISTRY_MAX_COMPONENTS 2048
+// Must be > 1999 (total components in BG3 binary) + headroom for sub-namespaces
+#define COMPONENT_REGISTRY_MAX_COMPONENTS 2500
 
 // Maximum component name length
 #define COMPONENT_MAX_NAME_LEN 128
@@ -200,6 +201,25 @@ void component_set_get_raw_component_addr(void *addr);
  */
 void component_add_frida_discovery(const char *name, ComponentTypeIndex index,
                                     uint16_t size);
+
+// ============================================================================
+// Generated Component Registration
+// ============================================================================
+
+/**
+ * Register all 1,999 generated components.
+ * Enables component detection (HasComponent) for all components.
+ * Property access requires additional offset verification.
+ *
+ * Called automatically during component_registry_init().
+ */
+void component_registry_register_all_generated(void);
+
+/**
+ * Get count of generated (auto-discovered) components.
+ * @return Number of components extracted from binary (1,999)
+ */
+int component_registry_generated_count(void);
 
 #ifdef __cplusplus
 }

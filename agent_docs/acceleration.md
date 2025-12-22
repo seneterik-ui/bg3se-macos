@@ -371,39 +371,98 @@ osgrep "debug adapter protocol DAP"
 osgrep "Lua breakpoint implementation"
 ```
 
-## Issue Acceleration Matrix (Dec 2025 Deep Audit)
+## Issue Acceleration Matrix (Dec 2025 Comprehensive Audit)
+
+**Total Open Issues: 17** | **Parity: 76%** (feature-weighted) | **Target: 100%**
+
+### Tier 1: Quick Wins (90%+ acceleration, 1-2 days each)
 
 | Issue | Feature | Acceleration | Key Technique |
 |-------|---------|--------------|---------------|
-| #33 Components | Component Layouts | **80%** | ✅ 158 components (43 with properties, 115 tag). Verified working Dec 2025 |
-| #39 Localization | Ext.Localization | **75%** | Simple string table lookup, minimal API surface |
-| #36 IMGUI | Ext.IMGUI | **70%** | Official ImGui Metal backend exists |
-| #40 StaticData | Ext.StaticData | **70%** | ✅ CLOSED - Hook-based capture working (Dec 2025) |
-| #41 Resource | Ext.Resource/Template | **65%** | Same pattern as StaticData |
-| #42 Debugger | VS Code Debugger | **60%** | DAP protocol has reference implementations |
-| #15 Client State | Client Lua State | **50%** | Mirror server pattern, hook game state |
-| #37 Level | Ext.Level (Physics) | **50%** | Find physics engine, port LevelLib.inl |
-| #38 Audio | Ext.Audio | **45%** | Wwise SDK has documented API |
-| #32 Stats Sync | Prototype Managers | **40%** | ✅ CLOSED - All 5 managers working (Dec 2025) |
-| #6 NetChannel | NetChannel API | **30%** | Network stack analysis needed, but Lua wrappers portable |
-| #35 Ext.UI | Noesis UI | **25%** | Deep game UI integration required |
+| **#49 Ext.IO** | Path Overrides | **90%** | 2 functions, pure C implementation |
+| **#47 Ext.Math** | Full Math Library | **85%** | 47 functions, pure math, no RE needed |
+| **#50 Ext.Timer** | Persistent/Realtime | **80%** | Extend existing timer system |
+| **#46 Context Docs** | API Annotations | **95%** | Documentation only |
 
-## Prioritized Implementation Order
+### Tier 2: Core Expansion (60-80% acceleration, 1-2 weeks each)
 
-### Tier 1: High Acceleration (70-80%) - Do First
-1. ~~**#33 Components**~~ - ✅ 158 components verified working
-2. **#39 Localization** - Quick win, small API (~2 hours)
-3. **#36 IMGUI** - Official Metal backend, standalone implementation
-4. ~~**#40 StaticData**~~ - ✅ CLOSED (Issue #40 fixed Dec 2025)
+| Issue | Feature | Acceleration | Key Technique |
+|-------|---------|--------------|---------------|
+| **#52 Components** | Coverage Expansion | **80%** | Tools ready: `extract_typeids.py` + stubs |
+| **#48 Ext.Types** | Full Reflection | **70%** | Port from Windows Types.inl |
+| **#51 Ext.Events** | Engine Events | **60%** | Hook game event dispatch |
+| **#53 Stats Functors** | ExecuteFunctors | **50%** | Windows code portable |
 
-### Tier 2: Medium Acceleration (40-60%) - Second Priority
-5. **#42 Debugger** - DAP reference implementations available
-6. **#15 Client State** - Mirror existing server state pattern
-7. ~~**#32 Stats Sync**~~ - ✅ CLOSED (all 5 prototype managers working)
+### Tier 3: Client Features (45-70% acceleration, 2-4 weeks each)
 
-### Tier 3: Lower Acceleration (25-30%) - Complex
-8. **#6 NetChannel** - Complex, but Lua wrappers (`NetChannel.lua`, `NetworkManager.lua`) portable
-9. **#35 Ext.UI** - Deep Noesis integration required
+| Issue | Feature | Acceleration | Key Technique |
+|-------|---------|--------------|---------------|
+| **#36 IMGUI** | Debug Overlay | **70%** | Official ImGui Metal backend |
+| **#42 Debugger** | VS Code DAP | **60%** | DAP reference implementations |
+| **#7 IDE Types** | LuaLS Annotations | **50%** | Build on #48 |
+| **#38 Audio** | WWise Audio | **45%** | WWise SDK documented |
+
+### Tier 4: Complex Integrations (25-50% acceleration, 4+ weeks each)
+
+| Issue | Feature | Acceleration | Key Technique |
+|-------|---------|--------------|---------------|
+| **#37 Ext.Level** | Physics/Raycast | **50%** | Find physics engine, port LevelLib.inl |
+| **#6 NetChannel** | Networking | **30%** | Lua wrappers portable, C bridge complex |
+| **#35 Ext.UI** | Noesis UI | **25%** | Deep game UI hooks required |
+
+### Completed Issues
+
+| Issue | Feature | Status |
+|-------|---------|--------|
+| ~~#15~~ | Client Lua State | ✅ DONE (v0.36.4) |
+| ~~#32~~ | Stats Sync | ✅ DONE |
+| ~~#33~~ | Components | ✅ 158 components (43 properties, 115 tag) |
+| ~~#40~~ | StaticData | ✅ DONE (auto-capture) |
+| ~~#41~~ | Resource/Template | ✅ DONE |
+| ~~#39~~ | Localization | ✅ DONE |
+
+### Issue Dependencies
+
+```
+#51 Ext.Events ──────► #53 Stats Functors (events needed for BeforeDamage hooks)
+#48 Ext.Types ───────► #42 Debugger (benefits from type introspection)
+#48 Ext.Types ───────► #7 IDE Types (type definitions share introspection)
+#36 Ext.IMGUI ───────► #35 Ext.UI (IMGUI experience helps UI patterns)
+#47 Ext.Math ────────► #37 Ext.Level (math needed for physics)
+```
+
+## Prioritized Implementation Order (Dec 2025 Audit)
+
+### Phase 1: Quick Wins (1-2 days each)
+1. **#49 Ext.IO** (90%) - Just 2 functions: AddPathOverride, GetPathOverride
+2. **#47 Ext.Math** (85%) - 47 functions, pure math, no RE needed
+3. **#50 Ext.Timer** (80%) - 7 functions, extend existing system
+4. **#46 Context Docs** (95%) - Documentation only
+
+### Phase 2: Core Expansion (1-2 weeks each)
+5. **#48 Ext.Types** (70%) - Unlocks debugger/IDE features
+6. **#51 Ext.Events** (60%) - Unlocks stat functors
+7. **#52 Components** (80%) - Accelerated workflow exists
+8. **#53 Stats Functors** (50%) - Needs #51 events
+
+### Phase 3: Client Features (1-3 weeks each)
+9. **#36 Ext.IMGUI** (70%) - Official Metal backend
+10. **#38 Ext.Audio** (45%) - WWise documented
+11. **#42 Debugger** (60%) - DAP reference exists
+12. **#7 IDE Types** (50%) - Builds on #48
+
+### Phase 4: Complex Integrations (2-4 weeks each)
+13. **#37 Ext.Level** (50%) - Physics RE needed
+14. **#35 Ext.UI** (25%) - Deep Noesis hooks
+15. **#6 Ext.Net** (30%) - Network stack RE
+
+### Completed
+- ~~**#15 Client State**~~ - ✅ DONE (v0.36.4)
+- ~~**#32 Stats Sync**~~ - ✅ DONE (all 5 prototype managers working)
+- ~~**#33 Components**~~ - ✅ 158 components verified working
+- ~~**#39 Localization**~~ - ✅ DONE
+- ~~**#40 StaticData**~~ - ✅ DONE (auto-capture)
+- ~~**#41 Resource/Template**~~ - ✅ DONE
 
 ## osgrep Key Findings (Dec 2025)
 
@@ -455,18 +514,42 @@ ImGui_ImplMetal_RenderDrawData(ImGui::GetDrawData(), commandBuffer, renderEncode
 | #32 Stats Sync | `BG3Extender/GameDefinitions/Stats/Stats.cpp` - `SyncWithPrototypeManager()` |
 | #42 Debugger | `LuaDebugger/DAPProtocol.cs` - DAP implementation |
 
-## Recommended Next Steps
+## Recommended Next Steps (Dec 2025 Audit)
 
-1. **#39 Localization** - Quick win (~2 hours), high acceleration
-2. **#36 IMGUI** - Include ImGui + Metal backend, hook render loop
-3. **#41 Ext.Resource/Template** - Same pattern as #40 StaticData
-4. **#15 Client State** - Mirror server pattern, unlock ecl:: components
-5. **Document NetChannel message format** - Long-term research task
+**Immediate Actions (Phase 1 Quick Wins):**
+1. **#49 Ext.IO** - 2 functions, pure C, 1 day max
+2. **#47 Ext.Math** - 47 pure math functions, 3-5 days
+3. **#50 Ext.Timer** - Extend existing timer system, 1-2 days
+4. **#46 Context Docs** - Documentation only, 1 day
+
+**Next Priority (Phase 2 Core):**
+5. **#48 Ext.Types** - Port from Windows Types.inl
+6. **#51 Ext.Events** - Hook game event dispatch
+7. **#52 Components** - Use existing tools for batch expansion
+8. **#53 Stats Functors** - Needs #51 events first
+
+**Long-term Research:**
+- **#6 NetChannel** - Document message format, analyze network stack
+- **#35 Ext.UI** - Deep Noesis integration investigation
 
 ### Recently Completed
-- ✅ **#40 StaticData** - Hook-based capture working (Dec 2025)
+- ✅ **#15 Client State** - Context awareness, two-phase bootstrap (v0.36.4)
+- ✅ **#39 Localization** - Complete
+- ✅ **#40 StaticData** - Auto-capture working (Dec 2025)
+- ✅ **#41 Resource/Template** - Complete (Dec 2025)
 - ✅ **#32 Stats Sync** - All 5 prototype managers working (Dec 2025)
 - ✅ **#33 Components** - 158 components verified (Dec 2025)
+
+### Parity Impact Summary
+
+If all open issues completed:
+| Priority | Issues | Combined Parity Impact |
+|----------|--------|------------------------|
+| Quick Wins | #49, #50, #46, #47 | +5.5% |
+| Core | #48, #51, #52, #53 | +13% |
+| Client | #36, #38, #42, #7 | +11.8% |
+| Complex | #37, #35, #6 | +15.2% |
+| **Total** | **17 issues** | **76% → ~100%** |
 
 ---
 

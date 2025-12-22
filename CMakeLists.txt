@@ -67,6 +67,7 @@ add_library(bg3se SHARED
     src/entity/guid_lookup.c
     src/entity/arm64_call.c
     src/entity/component_registry.c
+    src/entity/generated_component_registry.c
     src/entity/component_lookup.c
     src/entity/component_typeid.c
     src/entity/component_property.c

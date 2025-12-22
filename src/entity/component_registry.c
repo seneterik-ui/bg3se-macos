@@ -95,8 +95,12 @@ bool component_registry_init(void *entityWorld) {
     // These will be updated when discovered at runtime via Frida or pattern scanning
     component_registry_register_known_components();
 
+    // Register all 1,999 generated components (TypeId-only)
+    component_registry_register_all_generated();
+
     g_Initialized = true;
-    LOG_ENTITY_DEBUG("Initialized with %d pre-registered components", g_ComponentCount);
+    LOG_ENTITY_DEBUG("Initialized with %d components (%d generated)",
+                     g_ComponentCount, component_registry_generated_count());
 
     return true;
 }

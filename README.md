@@ -44,7 +44,7 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.36.5 | **Feature Parity:** ~77%
+**Version:** v0.36.6 | **Feature Parity:** ~77%
 
 | Feature | Status |
 |---------|--------|
@@ -52,7 +52,7 @@ SE mods work automatically—just install them like any other mod:
 | Lua Runtime | ✅ Lua 5.4 with Ext API |
 | Mod Loading | ✅ PAK file reading, auto-detection |
 | Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions), **server context guards** |
-| Ext.Entity | ✅ GUID lookup, 158 components, **6 array-enabled** (Tags, Classes, Spells, Passives, Boosts) |
+| Ext.Entity | ✅ GUID lookup, **1,999 components registered** (55 with property access, 6 array-enabled) |
 | Ext.Stats | ✅ 15,774 stats, property read/write, **Sync complete (created + existing stats)** |
 | Ext.Events | ✅ 10 events with Prevent pattern |
 | Ext.IO | ✅ LoadFile, SaveFile, **AddPathOverride, GetPathOverride** |
@@ -129,6 +129,8 @@ bg3se-macos/
 │   │   ├── guid_lookup.c/h     # GUID parsing, HashMap ops
 │   │   ├── arm64_call.c/h      # ARM64 ABI wrappers (x8 indirect return)
 │   │   ├── component_*.c/h     # Component registry, lookup, TypeId
+│   │   ├── generated_typeids.h # Auto-generated 1,999 TypeId addresses
+│   │   ├── generated_component_registry.c  # Auto-registration code
 │   │   └── entity_storage.h    # Storage structures, Ghidra base addr
 │   ├── stats/
 │   │   └── stats_manager.c/h   # RPGStats access, property resolution
@@ -178,10 +180,19 @@ bg3se-macos/
 │       ├── TEMPLATE.md         # Template managers
 │       └── ...
 │
-├── docs/                       # User-facing documentation
+├── docs/
+│   ├── components/             # Component documentation by namespace
+│   │   ├── README.md           # Component reference overview
+│   │   ├── eoc-components.md   # 701 eoc:: components
+│   │   ├── esv-components.md   # 596 esv:: components
+│   │   ├── ecl-components.md   # 429 ecl:: components
+│   │   └── ls-components.md    # 233 ls:: components
+│   └── ...                     # Other user-facing documentation
+│
 ├── tools/
 │   ├── bg3se-console.c         # Standalone readline console client
 │   ├── extract_pak.py          # PAK file extractor
+│   ├── extract_typeids.py      # Generate TypeId header from binary
 │   └── frida/                  # Frida instrumentation scripts
 │
 ├── scripts/

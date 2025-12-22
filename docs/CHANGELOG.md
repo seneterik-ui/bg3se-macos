@@ -13,6 +13,64 @@ Each entry includes:
 
 ---
 
+## [v0.36.6] - 2025-12-22
+
+**Parity:** ~77% | **Category:** Component System | **Issues:** #52
+
+### Added
+- **1,999 Component Registration** - All BG3 ECS components now auto-registered from binary
+  - `src/entity/generated_typeids.h` - TypeId addresses for all 1,999 components
+  - Extracted via `tools/extract_typeids.py` from macOS binary symbols
+  - Namespace breakdown: eoc (701), esv (596), ecl (429), ls (233), gui (26), navcloud (13), ecs (1)
+
+- **504 Property Definitions** - Parsed from Windows BG3SE headers
+  - `src/entity/generated_property_defs.h` - Property layouts with field types/offsets
+  - `tools/parse_component_headers.py` - Header parser generating C structs
+  - 21 components with full layout definitions ready for ARM64 verification
+
+- **Modular Component Documentation** - New `docs/components/` directory
+  - `README.md` - Component system overview and property coverage
+  - `eoc-components.md` - 701 eoc:: components (gameplay)
+  - `esv-components.md` - 596 esv:: server components
+  - `ecl-components.md` - 429 ecl:: client components
+  - `ls-components.md` - 233 ls:: engine base components
+  - `misc-components.md` - gui, navcloud, ecs namespaces
+
+- **Ghidra-Based Component Size Extraction** - 30 ARM64 sizes verified
+  - `ghidra/offsets/component_sizes.json` - Central database
+  - `ghidra/offsets/EXTRACTION_METHODOLOGY.md` - Extraction workflow
+  - Pattern: `AddComponent<T>` → `ComponentFrameStorageAllocRaw(..., SIZE, ...)`
+
+- **Component Sizes Extracted (Sample):**
+  | Component | Size | Notes |
+  |-----------|------|-------|
+  | `eoc::StatsComponent` | 160 bytes | Largest core component |
+  | `eoc::StatusImmunitiesComponent` | 64 bytes | HashMap container |
+  | `eoc::BoostInfoComponent` | 88 bytes | Complex boost data |
+  | `eoc::HealthComponent` | 40 bytes | HP/MaxHP/Temp |
+  | `eoc::LevelComponent` | 4 bytes | Single int32 |
+  | `eoc::combat::DelayedFanfareComponent` | 1 byte | Marker component |
+
+### Technical
+- **Component Categories Discovered**:
+  - Marker components (1 byte): Presence IS the data (boolean tags)
+  - Container components (16-64 bytes): Hash tables, dynamic arrays
+  - Data components (4-160 bytes): Game state storage
+- **ARM64 vs Windows**: Sizes may differ due to alignment/packing differences
+- **Automated workflow**: TypeId extraction → Header parsing → Size verification
+
+### Files Added
+- `src/entity/generated_typeids.h` - 1,999 TypeId address macros
+- `src/entity/generated_property_defs.h` - 504 property definitions
+- `tools/parse_component_headers.py` - Windows header parser
+- `tools/generate_component_entries.py` - Skeleton generator from Ghidra sizes
+- `ghidra/scripts/batch_extract_component_sizes.py` - Batch size extraction
+- `ghidra/offsets/EXTRACTION_METHODOLOGY.md` - Extraction documentation
+- `ghidra/offsets/component_sizes.json` - 30 verified ARM64 sizes
+- `docs/components/` - Modular component documentation (6 files)
+
+---
+
 ## [v0.36.5] - 2025-12-22
 
 **Parity:** ~77% | **Category:** Math/Timer/IO APIs | **Issues:** #47, #49, #50
