@@ -23,10 +23,12 @@ Each entry includes:
   - Extracted via `tools/extract_typeids.py` from macOS binary symbols
   - Namespace breakdown: eoc (701), esv (596), ecl (429), ls (233), gui (26), navcloud (13), ecs (1)
 
-- **504 Property Definitions** - Parsed from Windows BG3SE headers
-  - `src/entity/generated_property_defs.h` - Property layouts with field types/offsets
-  - `tools/parse_component_headers.py` - Header parser generating C structs
-  - 21 components with full layout definitions ready for ARM64 verification
+- **620 Component Property Layouts** - Two-tier registration system
+  - **158 verified layouts** - Hand-verified ARM64 offsets, trusted property access
+  - **462 generated layouts** - Windows offsets (estimated), runtime-safe defaults
+  - `src/entity/generated_property_defs.h` - 504 property definitions with `Gen_` prefix
+  - `tools/parse_component_headers.py` - Header parser with symbol prefix to avoid conflicts
+  - MAX_COMPONENT_LAYOUTS increased from 128 to 1024
 
 - **Modular Component Documentation** - New `docs/components/` directory
   - `README.md` - Component system overview and property coverage
@@ -52,17 +54,20 @@ Each entry includes:
   | `eoc::combat::DelayedFanfareComponent` | 1 byte | Marker component |
 
 ### Technical
+- **Two-Tier Registration**: Verified layouts register first (from `g_AllComponentLayouts`), then generated layouts (from `g_GeneratedComponentLayouts`) fill gaps - verified layouts take precedence
+- **Gen_ Prefix Strategy**: All auto-generated symbols use `Gen_` prefix to avoid redefinition conflicts with 42 overlapping hand-verified layouts
 - **Component Categories Discovered**:
   - Marker components (1 byte): Presence IS the data (boolean tags)
   - Container components (16-64 bytes): Hash tables, dynamic arrays
   - Data components (4-160 bytes): Game state storage
 - **ARM64 vs Windows**: Sizes may differ due to alignment/packing differences
-- **Automated workflow**: TypeId extraction → Header parsing → Size verification
+- **Automated workflow**: TypeId extraction → Header parsing → Size verification → Integration
 
-### Files Added
+### Files Added/Modified
 - `src/entity/generated_typeids.h` - 1,999 TypeId address macros
-- `src/entity/generated_property_defs.h` - 504 property definitions
-- `tools/parse_component_headers.py` - Windows header parser
+- `src/entity/generated_property_defs.h` - 504 property definitions with `Gen_` prefix
+- `src/entity/component_property.c` - Two-tier registration, MAX_COMPONENT_LAYOUTS=1024
+- `tools/parse_component_headers.py` - Windows header parser with `Gen_` prefix
 - `tools/generate_component_entries.py` - Skeleton generator from Ghidra sizes
 - `ghidra/scripts/batch_extract_component_sizes.py` - Batch size extraction
 - `ghidra/offsets/EXTRACTION_METHODOLOGY.md` - Extraction documentation

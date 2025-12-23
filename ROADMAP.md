@@ -180,7 +180,7 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access & Property System
-**Status:** ✅ Complete (v0.36.6) - **1,999 components registered** (55 with property access, 109 tag components)
+**Status:** ✅ Complete (v0.36.6) - **1,999 components registered** (620 layouts: 158 verified + 462 generated)
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -1383,7 +1383,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
-| v0.36.6 | 2025-12-22 | **Component Expansion Infrastructure** - 1,999 TypeIds extracted, 504 property defs parsed, 30 ARM64 sizes verified, batch workflow documented (#52) |
+| v0.36.6 | 2025-12-22 | **620 Component Layouts** - Two-tier registration (158 verified + 462 generated), Gen_ prefix strategy, 1,999 TypeIds, 504 property defs (#52) |
 | v0.36.5 | 2025-12-22 | **Math/Timer/IO APIs Complete** - 16 quaternion ops, **20 timer functions** (persistent timers + GameTime), path overrides (#47, #49, #50 all complete) |
 | v0.36.4 | 2025-12-22 | **Context System** - Server/Client context awareness, two-phase bootstrap, API guards (#15) |
 | v0.36.3 | 2025-12-22 | **StaticData All 9 Types** - ForceCapture + HashLookup for Race, God, FeatDescription (#45) |
@@ -1426,19 +1426,19 @@ We've built a **complete automation pipeline** for batch component expansion:
 
 **Extraction Pipeline (v0.36.6):**
 ```
-TypeId Extraction → Property Parsing → ARM64 Size Verification → Implementation
-     1,999              504                  30+                    55+
+TypeId Extraction → Property Parsing → ARM64 Size Verification → Runtime Registration
+     1,999              504                  30+                    620 layouts
 ```
 
-**Coverage Statistics:**
+**Coverage Statistics (v0.36.6):**
 
-| Namespace | Available | With Properties | With Sizes | Implemented |
-|-----------|-----------|-----------------|------------|-------------|
-| `eoc::` | 701 | ~400 | 25 | ~94 |
-| `esv::` | 596 | ~50 | 1 | ~28 |
-| `ecl::` | 429 | ~30 | 1 | ~4 |
-| `ls::` | 233 | ~24 | 3 | ~31 |
-| **Total** | **1,999** | **504** | **30** | **157** (~7.9%) |
+| Namespace | Available | Generated Layouts | Verified Layouts | Total Layouts |
+|-----------|-----------|-------------------|------------------|---------------|
+| `eoc::` | 701 | ~350 | ~94 | ~444 |
+| `esv::` | 596 | ~50 | ~28 | ~78 |
+| `ecl::` | 429 | ~30 | ~4 | ~34 |
+| `ls::` | 233 | ~32 | ~32 | ~64 |
+| **Total** | **1,999** | **462** | **158** | **620** (~31%) |
 
 **Batch Expansion Workflow:**
 1. **Tag components** (100+ at once): Just need TypeId, no fields

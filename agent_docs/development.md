@@ -294,14 +294,22 @@ python3 tools/generate_component_stubs.py --namespace eoc > eoc_stubs.c
    local e = Ext.Entity.Get("GUID"); _D(e.YourComponent)
    ```
 
-### Component Coverage Statistics
+### Component Coverage Statistics (v0.36.6)
 
-| Namespace | Available | Implemented | Coverage |
-|-----------|-----------|-------------|----------|
-| eoc::     | 701       | ~30         | ~4%      |
-| esv::     | 596       | 0           | 0%       |
-| ecl::     | 429       | 2           | <1%      |
-| ls::      | 233       | 4           | ~2%      |
-| **Total** | **1,999** | **36**      | **~1.8%**|
+**Two-Tier Registration System:**
+- **158 verified layouts** - Hand-verified ARM64 offsets, trusted property access
+- **462 generated layouts** - Windows offsets (estimated), runtime-safe defaults
+- **620 total layouts** (~31% coverage)
 
-**High-priority target:** 100-150 eoc:: components (~5-7% coverage) to support most mods.
+| Namespace | Available | Verified | Generated | Total Layouts |
+|-----------|-----------|----------|-----------|---------------|
+| eoc::     | 701       | ~94      | ~350      | ~444          |
+| esv::     | 596       | ~28      | ~50       | ~78           |
+| ecl::     | 429       | ~4       | ~30       | ~34           |
+| ls::      | 233       | ~32      | ~32       | ~64           |
+| **Total** | **1,999** | **158**  | **462**   | **620**       |
+
+**Implementation notes:**
+- Verified layouts from `g_AllComponentLayouts` take precedence over generated
+- Generated layouts use `Gen_` prefix to avoid symbol conflicts
+- MAX_COMPONENT_LAYOUTS = 1024 (increased from 128)
