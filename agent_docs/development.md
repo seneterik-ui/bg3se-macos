@@ -301,14 +301,17 @@ python3 tools/generate_component_stubs.py --namespace eoc > eoc_stubs.c
 - **702 Windows estimates** - Parsed from C++ headers
 - **1,730 total with size info** (87% of 1,999 TypeIds)
 
-| Namespace | TypeIds | Ghidra | Windows | Missing |
-|-----------|---------|--------|---------|---------|
-| eoc::     | 913     | 758    | 367     | 126     |
-| esv::     | 889     | 512    | 222     | 298     |
-| ecl::     | 542     | 155    | 56      | 351     |
-| ls::      | 263     | 130    | 57      | 118     |
-| navcloud::| 18      | 16     | 0       | 2       |
-| **Total** | **2,652** | **1,577** | **702** | **922** |
+| Namespace | TypeIds | Ghidra | Windows | Missing | % Gap |
+|-----------|---------|--------|---------|---------|-------|
+| eoc::     | 913     | 758    | 367     | 126     | 14%   |
+| esv::     | 889     | 512    | 222     | 298     | 34%   |
+| ecl::     | 542     | 155    | 56      | 351     | 65%   |
+| ls::      | 263     | 130    | 57      | 118     | 45%   |
+| gui::     | 26      | 0      | 0       | 26      | 100%  |
+| navcloud::| 18      | 16     | 0       | 2       | 11%   |
+| **Total** | **2,652** | **1,577** | **702** | **922** | **35%** |
+
+**Phase 3 Priority:** ecl:: (351 gaps, 65%) > esv:: (298) > ls:: (118) > eoc:: (126)
 
 **Note:** Total exceeds 1,999 TypeIds due to sub-namespace variants discovered in Ghidra.
 

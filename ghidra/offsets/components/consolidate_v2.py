@@ -30,6 +30,48 @@ def parse_table_line(line):
         "raw_line": line.strip()
     }
 
+def validate_component(comp):
+    """Validate a component entry. Returns (is_valid, reason)."""
+    name = comp.get("name", "")
+    size_str = comp.get("bytes", "").strip()
+    hex_str = comp.get("hex", "").strip()
+
+    # Skip placeholders
+    if "(pending)" in size_str.lower() or size_str == "-":
+        return False, "placeholder"
+    if "(pending)" in hex_str.lower() or hex_str == "-":
+        return False, "placeholder"
+
+    # Skip empty sizes
+    if not size_str and not hex_str:
+        return False, "empty_size"
+
+    # Parse numeric size
+    size = None
+    if size_str:
+        # Handle various formats: "32", "0x20", "32 | 0x20"
+        match = re.search(r'(\d+)', size_str.replace(',', ''))
+        if match:
+            size = int(match.group(1))
+    elif hex_str:
+        # Try hex format
+        match = re.search(r'0x([0-9a-fA-F]+)', hex_str)
+        if match:
+            size = int(match.group(1), 16)
+
+    if size is None:
+        return False, "unparseable_size"
+
+    # Flag suspiciously large sizes (> 16KB for a single component)
+    if size > 16384:
+        return False, f"suspicious_size_{size}"
+
+    # Flag zero size
+    if size == 0:
+        return False, "zero_size"
+
+    return True, None
+
 def get_namespace_file(name):
     """Determine which file a component belongs to."""
     parts = name.split("::")
@@ -88,18 +130,25 @@ def read_all_components(directory, pattern="COMPONENT_SIZES_*.md"):
     return components
 
 def read_staging_files():
-    """Read all components from staging files."""
+    """Read all components from staging files with validation."""
     components = {}
+    rejected = defaultdict(list)  # reason -> [component_names]
+
     if not STAGING_DIR.exists():
-        return components
+        return components, rejected
+
     for filepath in STAGING_DIR.glob("*.md"):
         with open(filepath) as f:
             for line in f:
                 comp = parse_table_line(line)
                 if comp:
-                    # Prefer newer staging data
-                    components[comp["name"]] = comp
-    return components
+                    is_valid, reason = validate_component(comp)
+                    if is_valid:
+                        components[comp["name"]] = comp
+                    else:
+                        rejected[reason].append(comp["name"])
+
+    return components, rejected
 
 def format_component_line(comp):
     """Format a component as a markdown table line."""
@@ -128,16 +177,30 @@ def update_file(filepath, components_to_add, existing_names):
     return len(new_comps)
 
 def main():
-    print("Component Consolidation v2")
+    print("Component Consolidation v2 (with validation)")
     print("=" * 50)
 
     # Read existing components
     existing = read_all_components(COMPONENTS_DIR)
     print(f"Existing components in main docs: {len(existing)}")
 
-    # Read staging
-    staging = read_staging_files()
-    print(f"Components in staging: {len(staging)}")
+    # Read staging with validation
+    staging, rejected = read_staging_files()
+    print(f"Valid components in staging: {len(staging)}")
+
+    # Report rejected entries
+    if rejected:
+        print("\n⚠️  Rejected entries (not merged):")
+        for reason, names in sorted(rejected.items()):
+            print(f"  [{reason}]: {len(names)} entries")
+            if len(names) <= 5:
+                for name in names:
+                    print(f"    - {name}")
+            else:
+                for name in names[:3]:
+                    print(f"    - {name}")
+                print(f"    ... and {len(names) - 3} more")
+        print()
 
     # Find new components
     new_components = {k: v for k, v in staging.items() if k not in existing}

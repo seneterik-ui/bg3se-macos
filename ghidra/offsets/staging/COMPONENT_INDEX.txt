@@ -1,0 +1,143 @@
+ECL COMPONENT LAYOUT GENERATION - QUICK REFERENCE INDEX
+Generated: December 24, 2024 | Total: 71 components
+
+FORMAT: Component Name (Size) - Source Header
+
+================================================================================
+TAG COMPONENTS (1 byte)
+================================================================================
+ecl::DisabledEquipmentComponent (0x1) - Equipment.h
+ecl::IgnoredComponent (0x1) - Components.h
+ecl::InSelectComponent (0x1) - Components.h
+ecl::InvisibilityAttachmentComponent (0x1) - Visual.h
+ecl::IsHoveredOverComponent (0x1) - Components.h
+ecl::PickingStateComponent (0x1) - Components.h
+ecl::PlayerComponent (0x1) - Components.h
+ecl::SelectedComponent (0x1) - Components.h
+ecl::TurnActionsDoneOneFrameComponent (0x1) - Timeline.h
+
+================================================================================
+SIMPLE STORAGE (2-12 bytes)
+================================================================================
+ecl::GroundMaterialComponent (0x2) - Visual.h
+ecl::DetachedComponent (0x4) - Components.h
+ecl::ActiveTurnComponent (0xc) - Combat.h
+ecl::InvisibilityFadingComponent (0xc) - Visual.h
+ecl::InvisibilityVisualComponent (0xc) - Visual.h
+
+================================================================================
+POINTER/HANDLE COMPONENTS (8 bytes)
+================================================================================
+ecl::DeathEffectComponent (0x8) - Death.h
+ecl::PointSoundTriggerDummy (0x8) - Trigger.h
+ecl::PointTrigger (0x8) - Trigger.h
+ecl::PortalTrigger (0x8) - Trigger.h
+ecl::RegionTrigger (0x8) - Trigger.h
+ecl::RoomTrigger (0x8) - Trigger.h
+ecl::SoundVolumeTrigger (0x8) - Trigger.h
+ecl::SpectatorTrigger (0x8) - Trigger.h
+ecl::TimelineAnimationStateComponent (0x8) - Timeline.h
+ecl::TimelineSceneTrigger (0x8) - Timeline.h
+ecl::TimelineSpringsComponent (0x8) - Timeline.h
+ecl::TimelineSteppingFadeComponent (0x8) - Timeline.h
+ecl::effect::HandlerComponent (0x8) - Effect.h
+ecl::relation::RelationChangedEventOneFrameComponent (0x8) - Events.h
+ecl::projectile::AttachmentComponent (0x8) - Projectile.h
+
+================================================================================
+SMALL STRUCTS (16-32 bytes)
+================================================================================
+ecl::ObjectInteractionComponent (0x10) - Components.h
+ecl::SoundAttachmentComponent (0x10) - Sound.h
+ecl::WalkableSurfaceComponent (0x10) - Visual.h
+ecl::death::StateComponent (0x10) - Death.h
+ecl::spell_cast::PlaySoundRequestOneFrameComponent (0x10) - SpellCast.h
+ecl::spell_cast::SetSoundSwitchesRequestOneFrameComponent (0x10) - SpellCast.h
+ecl::camera::CombatTargetRequestsComponent (0x10) - Camera.h
+ecl::DisarmableComponent (0x18) - Combat.h
+ecl::CharacterLightComponent (0x18) - Visual.h
+ecl::MovementComponent (0x18) - Movement.h
+ecl::VoiceComponent (0x18) - Sound.h
+ecl::death::DeathImpactComponent (0x18) - Death.h
+ecl::effect::SharedTimerComponent (0x18) - Effect.h
+ecl::effect::SpawnedComponent (0x18) - Effect.h
+ecl::multiplayer::UsersComponent (0x18) - Multiplayer.h
+ecl::TimelineQuestionHoldAutomationComponent (0x1c) - Timeline.h
+ecl::DisplayNameComponent (0x20) - Components.h
+ecl::TimelineAutomatedLookatComponent (0x20) - Timeline.h
+ecl::TimelineCameraRequestComponent (0x20) - Timeline.h
+
+================================================================================
+MEDIUM STRUCTS (36-64 bytes)
+================================================================================
+ecl::TimelineSplatterComponent (0x24) - Timeline.h
+ecl::effect::InteractionEventOneFrameComponent (0x28) - Effect.h
+ecl::sound::SoundCacheComponent (0x28) - Sound.h
+ecl::ClientTimelineActorControlComponent (0x28) - Timeline.h
+ecl::TimelineEyeLookAtOverrideComponent (0x30) - Timeline.h
+ecl::TurnBasedComponent (0x30) - Combat.h
+ecl::sound::DecoratorSwitchDataComponent (0x30) - Sound.h
+ecl::camera::CombatTargetComponent (0x30) - Camera.h
+ecl::crowds::SoundVolumeComponent (0x38) - Sound.h
+ecl::EocCameraBehavior (0x40) - Camera.h
+ecl::TimelinePlayerTransitionEventOneFrameComponent (0x40) - Timeline.h
+ecl::sound::ItemSwitchDataComponent (0x40) - Sound.h
+
+================================================================================
+LARGE STRUCTS (72-120 bytes)
+================================================================================
+ecl::DifficultyCheckComponent (0x48) - Combat.h
+ecl::UseComponent (0x50) - Components.h
+ecl::WeaponComponent (0x50) - Item.h
+ecl::PathingComponent (0x50) - Movement.h
+ecl::TerrainWalkableAreaComponent (0x50) - Visual.h
+ecl::spell_cast::SoundImpactEventOneFrameComponent (0x50) - SpellCast.h
+ecl::MeshPreviewComponent (0x58) - Visual.h
+ecl::CharacterIconResultComponent (0x58) - Visual.h
+ecl::effect::InfluenceTrackerComponent (0x60) - Effect.h
+ecl::TimelineCameraShotComponent (0x68) - Timeline.h
+ecl::sound::CharacterSwitchDataComponent (0x78) - Sound.h
+
+================================================================================
+NAMESPACE SUMMARY
+================================================================================
+ecl:: (core): 30 components
+ecl::camera:: 4 components
+ecl::death:: 3 components
+ecl::effect:: 5 components
+ecl::sound:: 5 components
+ecl::spell_cast:: 4 components
+ecl::timeline:: 11 components
+ecl::multiplayer:: 1 component
+ecl::crowds:: 1 component
+ecl::projectile:: 1 component
+ecl::relation:: 1 component
+
+TOTAL: 71 components (43% of 167 known ecl:: components)
+
+================================================================================
+COVERAGE BY SOURCE FILE
+================================================================================
+COMPONENT_SIZES_ECL_CORE.md: 30/86 (35%)
+COMPONENT_SIZES_ECL_MISC.md: 25/69 (36%)
+COMPONENT_SIZES_ECL_SPELL_CAST.md: 4/12 (33%)
+
+================================================================================
+FILES GENERATED
+================================================================================
+1. generated_ecl_layouts.c (1480 lines) - Component property definitions
+2. GENERATION_REPORT.md - Detailed generation report and methodology
+3. COMPONENT_INDEX.txt - This quick reference file
+
+================================================================================
+USAGE
+================================================================================
+To integrate these layouts into the BG3SE-macOS project:
+
+1. Review generated_ecl_layouts.c for correctness
+2. Add component layout pointers to g_AllComponentLayouts[] in component_offsets.h
+3. Build project: cd build && cmake --build .
+4. Test in game: player = Ext.Entity.Get(Ext.GetHostCharacter()); _D(player.ecl_PlayerComponent)
+5. Verify field offsets via Ext.Debug.ProbeStruct() for high-priority components
+
+See GENERATION_REPORT.md for detailed verification methodology.

@@ -89,5 +89,21 @@
 | Metric | Value |
 |--------|-------|
 | Total BG3 components | 1,999 |
-| Sizes extracted | 1709 |
-| Coverage | 85.5% |
+| Ghidra ARM64 sizes | 1,577 |
+| Windows-only estimates | 153 |
+| **Total with size info** | **1,730 (87%)** |
+| Missing sizes | 922 |
+
+### Coverage Gaps by Namespace
+
+| Namespace | Total | Have Size | Missing | % Missing |
+|-----------|-------|-----------|---------|-----------|
+| ecl::     | 542   | 191       | 351     | 65%       |
+| esv::     | 889   | 591       | 298     | 34%       |
+| ls::      | 263   | 145       | 118     | 45%       |
+| eoc::     | 913   | 787       | 126     | 14%       |
+| gui::     | 26    | 0         | 26      | 100%      |
+| navcloud::| 18    | 16        | 2       | 11%       |
+| ecs::     | 1     | 0         | 1       | 100%      |
+
+**Priority for Phase 3:** ecl:: (351 missing) > esv:: (298) > ls:: (118) > eoc:: (126)

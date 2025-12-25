@@ -4,8 +4,8 @@ Extracted via Ghidra MCP decompilation of `AddComponent<T>` functions.
 
 | Component | Hex | Bytes | Notes |
 |-----------|-----|-------|-------|
-| ecl::camera::CombatTargetComponent | 0x18 | 24 | Combat target |
-| ecl::camera::CombatTargetRequestsComponent | 0x30 | 48 | Combat target requests |
+| ecl::camera::CombatTargetComponent | 0x30 | 48 | Combat target (verified Dec 2025) |
+| ecl::camera::CombatTargetRequestsComponent | 0x10 | 16 | Combat target requests (verified Dec 2025) |
 | ecl::character::CharacterUpdateConfigComponent | 0xc | 12 |  |
 | ecl::character_creation::ChangesPreviewComponent | 8 (ptr) |  |  |
 | ecl::character_creation::CommandQueueComponent | 32 |  |  |

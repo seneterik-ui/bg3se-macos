@@ -67,7 +67,7 @@ Extracted via Ghidra MCP decompilation of `AddComponent<T>` functions.
 | ecl::SpectatorTrigger | 0x8 | 8 | Pointer storage |
 | ecl::SurfaceLightComponent | 64 (0x40) | GetComponent<ecl::SurfaceLightComponent,false> @ 0x1031f6550 |  |
 | ecl::SyncedTimelineControlComponent | 0xf8 | 248 | Synced timeline control (large!) |
-| ecl::TLPreviewDummy | 0x08 | 8 | Timeline preview dummy ptr |
+| ecl::TLPreviewDummy | 0xC0 | 192 | Timeline preview dummy (malloc alloc) |
 | ecl::TerrainWalkableAreaComponent | 0x50 | 80 | Terrain walkable area |
 | ecl::TimelineAnimationStateComponent | 0x08 | 8 | Animation state |
 | ecl::TimelineAutomatedLookatComponent | 0x20 | 32 | Automated lookat |
