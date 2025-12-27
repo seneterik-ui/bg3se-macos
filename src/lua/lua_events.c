@@ -87,7 +87,13 @@ static const char *g_event_names[EVENT_MAX] = {
     // Lifecycle events (Issue #51 expansion)
     "StatsStructureLoaded",
     "ModuleResume",
-    "Shutdown"
+    "Shutdown",
+    // Functor events (Issue #53)
+    "ExecuteFunctor",
+    "AfterExecuteFunctor",
+    "DealDamage",
+    "DealtDamage",
+    "BeforeDealDamage"
 };
 
 // ============================================================================
@@ -1015,6 +1021,117 @@ void events_fire_status_applied(lua_State *L, uint64_t entity, const char *statu
 
     if (g_dispatch_depth[EVENT_STATUS_APPLIED] == 0) {
         process_deferred_unsubscribes(L, EVENT_STATUS_APPLIED);
+    }
+}
+
+// ============================================================================
+// Functor Events (Issue #53)
+// ============================================================================
+
+void events_fire_execute_functor(lua_State *L, int ctxType, void *functors, void *context) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_EXECUTE_FUNCTOR];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing ExecuteFunctor (ctx=%d, functors=%p, context=%p, %d handlers)",
+                ctxType, functors, context, count);
+
+    g_dispatch_depth[EVENT_EXECUTE_FUNCTOR]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_EXECUTE_FUNCTOR]; i++) {
+        EventHandler *h = &g_handlers[EVENT_EXECUTE_FUNCTOR][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table
+        lua_newtable(L);
+        lua_pushinteger(L, ctxType);
+        lua_setfield(L, -2, "ContextType");
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)functors);
+        lua_setfield(L, -2, "FunctorListPtr");
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)context);
+        lua_setfield(L, -2, "ContextPtr");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("ExecuteFunctor handler error (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_EXECUTE_FUNCTOR, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_EXECUTE_FUNCTOR]--;
+
+    if (g_dispatch_depth[EVENT_EXECUTE_FUNCTOR] == 0) {
+        process_deferred_unsubscribes(L, EVENT_EXECUTE_FUNCTOR);
+    }
+}
+
+void events_fire_after_execute_functor(lua_State *L, int ctxType, void *functors, void *context) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_AFTER_EXECUTE_FUNCTOR];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing AfterExecuteFunctor (ctx=%d, %d handlers)", ctxType, count);
+
+    g_dispatch_depth[EVENT_AFTER_EXECUTE_FUNCTOR]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_AFTER_EXECUTE_FUNCTOR]; i++) {
+        EventHandler *h = &g_handlers[EVENT_AFTER_EXECUTE_FUNCTOR][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table
+        lua_newtable(L);
+        lua_pushinteger(L, ctxType);
+        lua_setfield(L, -2, "ContextType");
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)functors);
+        lua_setfield(L, -2, "FunctorListPtr");
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)context);
+        lua_setfield(L, -2, "ContextPtr");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("AfterExecuteFunctor handler error (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_AFTER_EXECUTE_FUNCTOR, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_AFTER_EXECUTE_FUNCTOR]--;
+
+    if (g_dispatch_depth[EVENT_AFTER_EXECUTE_FUNCTOR] == 0) {
+        process_deferred_unsubscribes(L, EVENT_AFTER_EXECUTE_FUNCTOR);
     }
 }
 

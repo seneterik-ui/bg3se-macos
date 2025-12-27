@@ -50,6 +50,12 @@ typedef enum {
     EVENT_STATS_STRUCTURE_LOADED, // Stats structure loaded (before StatsLoaded)
     EVENT_MODULE_RESUME,       // Module resumed from save
     EVENT_SHUTDOWN,            // Game shutdown
+    // Functor events (Issue #53)
+    EVENT_EXECUTE_FUNCTOR,     // Before functor execution
+    EVENT_AFTER_EXECUTE_FUNCTOR, // After functor execution
+    EVENT_DEAL_DAMAGE,         // During damage application
+    EVENT_DEALT_DAMAGE,        // After damage applied
+    EVENT_BEFORE_DEAL_DAMAGE,  // Before damage calculation
     EVENT_MAX
 } BG3SEEventType;
 
@@ -189,6 +195,23 @@ void events_fire_turn_started(lua_State *L, uint64_t entity, int round);
  * @param source   The source entity
  */
 void events_fire_status_applied(lua_State *L, uint64_t entity, const char *statusId, uint64_t source);
+
+/**
+ * Fire ExecuteFunctor event before functor execution.
+ * Handlers receive {ContextType = int, FunctorListPtr = int, ContextPtr = int} table.
+ *
+ * @param L           Lua state
+ * @param ctxType     The functor context type (0-8)
+ * @param functors    Pointer to functor list
+ * @param context     Pointer to context data
+ */
+void events_fire_execute_functor(lua_State *L, int ctxType, void *functors, void *context);
+
+/**
+ * Fire AfterExecuteFunctor event after functor execution.
+ * Same parameters as events_fire_execute_functor.
+ */
+void events_fire_after_execute_functor(lua_State *L, int ctxType, void *functors, void *context);
 
 /**
  * Fire the TurnStarted event from Osiris callback with character GUID.

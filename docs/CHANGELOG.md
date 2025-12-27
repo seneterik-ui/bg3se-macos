@@ -13,6 +13,24 @@ Each entry includes:
 
 ---
 
+## [v0.36.15] - 2025-12-27
+
+**Parity:** ~80% | **Category:** Stats/Events | **Issues:** #53
+
+### Added
+- **Stats Functor System** - Hook into game's damage/healing/status effect execution
+  - `Ext.Events.ExecuteFunctor` - Fires before each functor executes (9 context types)
+  - `Ext.Events.AfterExecuteFunctor` - Fires after functor execution completes
+  - All 9 context types hooked: AttackTarget, AttackPosition, Move, Target, NearbyAttacked, NearbyAttacking, Equip, Source, Interrupt
+
+### Technical
+- Created `src/stats/functor_types.h` with data structures
+- Created `src/stats/functor_hooks.c` with Dobby hooks on 9 game functions
+- Added `events_fire_execute_functor()` and `events_fire_after_execute_functor()` to lua_events.c
+- Documented all Ghidra offsets in `ghidra/offsets/FUNCTORS.md`
+
+---
+
 ## [v0.36.14] - 2025-12-27
 
 **Parity:** ~80% | **Category:** Entity System | **Issues:** #51 (dual world complete)

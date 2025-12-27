@@ -68,6 +68,7 @@ extern "C" {
 // Stats system
 #include "stats_manager.h"
 #include "prototype_managers.h"
+#include "functor_hooks.h"
 
 // Mod loader
 #include "mod_loader.h"
@@ -2667,6 +2668,13 @@ static void install_hooks(void) {
                 // Initialize localization system
                 localization_init(binary_base);
                 LOG_CORE_INFO("Localization system initialized");
+
+                // Initialize functor hooks (ExecuteFunctor/AfterExecuteFunctor events)
+                if (functor_hooks_init(L)) {
+                    LOG_HOOKS_INFO("Functor hooks initialized");
+                } else {
+                    LOG_HOOKS_WARN("Functor hooks initialization failed (events won't fire)");
+                }
                 found = true;
             }
         }
