@@ -44,8 +44,17 @@
 // Global State
 // ============================================================================
 
+// Server-side (esv::)
 static void *g_EoCServer = NULL;       // esv::EoCServer* singleton
+static EntityWorldPtr g_ServerEntityWorld = NULL;
+
+// Client-side (ecl::)
+static void *g_EoCClient = NULL;       // ecl::EoCClient* singleton
+static EntityWorldPtr g_ClientEntityWorld = NULL;
+
+// Legacy alias - points to whichever world is available (server preferred)
 static EntityWorldPtr g_EntityWorld = NULL;
+
 static void *g_MainBinaryBase = NULL;
 static bool g_Initialized = false;
 
@@ -80,6 +89,17 @@ static int g_TypeIdRetryCount = 0;
 // Discovered via Ghidra analysis of symbol __ZN3esv9EocServer5m_ptrE
 // This is a global pointer in __DATA that we can read directly without hooks
 #define OFFSET_EOCSERVER_SINGLETON_PTR 0x10898e8b8
+
+// ecl::EocClient::m_ptr - Static member holding the EoCClient singleton pointer
+// Discovered via Ghidra analysis of gui::DataContextProvider::CreateDataContextClass
+// Address: 0x10898c000 + 0x968 = 0x10898c968
+// See ghidra/offsets/ENTITY_SYSTEM.md for discovery details
+#define OFFSET_EOCCLIENT_SINGLETON_PTR 0x10898c968
+
+// Offset of EntityWorld* within EoCClient struct (estimated from Windows BG3SE)
+// PermissionsManager is at +0x1B8 (verified), EntityWorld should be at +0x1B0
+// May need verification via runtime probing if this offset doesn't work
+#define OFFSET_ENTITYWORLD_IN_EOCCLIENT 0x1B0
 
 // eoc::CombatHelpers::LEGACY_IsInCombat(EntityHandle, EntityWorld&)
 // Note: Hooking this causes crashes during save load - DO NOT USE
@@ -476,14 +496,92 @@ static void *read_eocserver_from_global(void) {
     return eocserver;
 }
 
-// Public function: Try to discover EntityWorld
+// Direct memory read for EoCClient (similar to server)
+// Returns NULL if placeholder address is used or client not initialized
+static void *read_eocclient_from_global(void) {
+    if (!g_MainBinaryBase) {
+        LOG_ENTITY_DEBUG("Cannot read EoCClient: main binary base not set");
+        return NULL;
+    }
+
+    // Check if we have a valid address (not placeholder)
+    if (OFFSET_EOCCLIENT_SINGLETON_PTR == 0) {
+        // Try runtime-discovered address if set via Lua
+        extern uintptr_t g_RuntimeClientSingletonAddr;  // Set via Ext.Entity.SetClientSingleton()
+        if (g_RuntimeClientSingletonAddr == 0) {
+            LOG_ENTITY_DEBUG("EoCClient singleton address not discovered - use Ext.Entity.SetClientSingleton()");
+            return NULL;
+        }
+        // Use runtime-discovered address directly (already adjusted)
+        uintptr_t global_addr = g_RuntimeClientSingletonAddr;
+
+        vm_size_t data_size = sizeof(void*);
+        vm_offset_t data;
+        kern_return_t kr = vm_read(mach_task_self(), (vm_address_t)global_addr,
+                                   data_size, &data, (mach_msg_type_number_t*)&data_size);
+
+        if (kr != KERN_SUCCESS) {
+            LOG_ENTITY_DEBUG("Failed to read EoCClient from runtime address 0x%llx",
+                       (unsigned long long)global_addr);
+            return NULL;
+        }
+
+        void *eocclient = *(void **)data;
+        vm_deallocate(mach_task_self(), data, data_size);
+
+        if (eocclient && is_valid_pointer(eocclient)) {
+            LOG_ENTITY_DEBUG("Read EoCClient pointer from runtime address: %p", eocclient);
+            return eocclient;
+        }
+        return NULL;
+    }
+
+    // Calculate runtime address of ecl::EocClient::m_ptr
+    uintptr_t ghidra_base = GHIDRA_BASE_ADDRESS;
+    uintptr_t actual_base = (uintptr_t)g_MainBinaryBase;
+    uintptr_t global_addr = OFFSET_EOCCLIENT_SINGLETON_PTR - ghidra_base + actual_base;
+
+    LOG_ENTITY_DEBUG("Reading EoCClient from global at 0x%llx", (unsigned long long)global_addr);
+
+    vm_size_t data_size = sizeof(void*);
+    vm_offset_t data;
+    kern_return_t kr = vm_read(mach_task_self(), (vm_address_t)global_addr,
+                               data_size, &data, (mach_msg_type_number_t*)&data_size);
+
+    if (kr != KERN_SUCCESS) {
+        LOG_ENTITY_DEBUG("Failed to read EoCClient global (kern_return: %d)", kr);
+        return NULL;
+    }
+
+    void *eocclient = *(void **)data;
+    vm_deallocate(mach_task_self(), data, data_size);
+
+    if (!eocclient) {
+        LOG_ENTITY_DEBUG("EoCClient global is NULL (client not yet initialized)");
+        return NULL;
+    }
+
+    LOG_ENTITY_DEBUG("Read EoCClient pointer: %p", eocclient);
+
+    if (!is_valid_pointer(eocclient)) {
+        LOG_ENTITY_DEBUG("EoCClient pointer appears invalid");
+        return NULL;
+    }
+
+    return eocclient;
+}
+
+// Runtime-discoverable client singleton address (set via Lua)
+uintptr_t g_RuntimeClientSingletonAddr = 0;
+
+// Public function: Try to discover EntityWorld (server)
 bool entity_discover_world(void) {
-    if (g_EntityWorld) {
-        LOG_ENTITY_DEBUG("EntityWorld already discovered: %p", g_EntityWorld);
+    if (g_ServerEntityWorld) {
+        LOG_ENTITY_DEBUG("Server EntityWorld already discovered: %p", g_ServerEntityWorld);
         return true;
     }
 
-    LOG_ENTITY_DEBUG("Attempting to discover EntityWorld...");
+    LOG_ENTITY_DEBUG("Attempting to discover Server EntityWorld...");
 
     // Method 1 (PRIMARY): Direct read from known global address
     // This is the most reliable method using the address discovered via Ghidra:
@@ -509,17 +607,18 @@ bool entity_discover_world(void) {
         void *entityworld = *(void **)((char *)eocserver + OFFSET_ENTITYWORLD_IN_EOCSERVER);
 
         if (entityworld && is_valid_pointer(entityworld)) {
-            g_EntityWorld = entityworld;
-            LOG_ENTITY_DEBUG("SUCCESS: Discovered EoCServer=%p, EntityWorld=%p",
-                       g_EoCServer, g_EntityWorld);
+            g_ServerEntityWorld = entityworld;
+            g_EntityWorld = entityworld;  // Legacy alias - prefer server world
+            LOG_ENTITY_DEBUG("SUCCESS: Discovered EoCServer=%p, ServerEntityWorld=%p",
+                       g_EoCServer, g_ServerEntityWorld);
 
             // Initialize component registry now that we have EntityWorld
-            if (component_registry_init(g_EntityWorld)) {
+            if (component_registry_init(g_ServerEntityWorld)) {
                 LOG_ENTITY_DEBUG("Component registry initialized");
             }
 
             // Initialize component lookup (data structure traversal for macOS)
-            if (component_lookup_init(g_EntityWorld, g_MainBinaryBase)) {
+            if (component_lookup_init(g_ServerEntityWorld, g_MainBinaryBase)) {
                 LOG_ENTITY_DEBUG("Component lookup initialized (data structure traversal enabled)");
             } else {
                 LOG_ENTITY_DEBUG("WARNING: Component lookup init failed - GetComponent may not work");
@@ -534,6 +633,9 @@ bool entity_discover_world(void) {
                 LOG_ENTITY_DEBUG("WARNING: TypeId discovery init failed - indices remain UNDEFINED");
             }
 
+            // Also try to discover client EntityWorld
+            entity_discover_client_world();
+
             return true;
         } else {
             LOG_ENTITY_DEBUG("Found EoCServer but EntityWorld at +0x288 is NULL or invalid");
@@ -541,8 +643,47 @@ bool entity_discover_world(void) {
         }
     }
 
-    LOG_ENTITY_DEBUG("Failed to discover EntityWorld");
+    LOG_ENTITY_DEBUG("Failed to discover Server EntityWorld");
     return false;
+}
+
+// Public function: Try to discover Client EntityWorld
+bool entity_discover_client_world(void) {
+    if (g_ClientEntityWorld) {
+        LOG_ENTITY_DEBUG("Client EntityWorld already discovered: %p", g_ClientEntityWorld);
+        return true;
+    }
+
+    LOG_ENTITY_DEBUG("Attempting to discover Client EntityWorld...");
+
+    void *eocclient = read_eocclient_from_global();
+    if (!eocclient) {
+        LOG_ENTITY_DEBUG("EoCClient not available - use Ext.Entity.SetClientSingleton() after runtime discovery");
+        return false;
+    }
+
+    g_EoCClient = eocclient;
+
+    // Read EntityWorld from estimated offset
+    void *entityworld = *(void **)((char *)eocclient + OFFSET_ENTITYWORLD_IN_EOCCLIENT);
+
+    if (entityworld && is_valid_pointer(entityworld)) {
+        g_ClientEntityWorld = entityworld;
+        LOG_ENTITY_DEBUG("SUCCESS: Discovered EoCClient=%p, ClientEntityWorld=%p",
+                   g_EoCClient, g_ClientEntityWorld);
+        return true;
+    } else {
+        LOG_ENTITY_DEBUG("Found EoCClient but EntityWorld at +0x%x is NULL or invalid",
+                   OFFSET_ENTITYWORLD_IN_EOCCLIENT);
+        LOG_ENTITY_DEBUG("(Client may need different offset - try probing)");
+    }
+
+    return false;
+}
+
+// Get the appropriate EntityWorld for a given context
+void* entity_get_world_for_context(bool is_server) {
+    return is_server ? g_ServerEntityWorld : g_ClientEntityWorld;
 }
 
 // ============================================================================
@@ -2123,6 +2264,186 @@ static int lua_entity_count_with_component(lua_State *L) {
     return 1;
 }
 
+// ============================================================================
+// Client EntityWorld Discovery API (Runtime Probing)
+// ============================================================================
+
+// Ext.Entity.SetClientSingleton(address) -> boolean
+// Sets the client singleton address discovered via runtime probing
+// Usage: Ext.Entity.SetClientSingleton(0x10898XXXX)
+static int lua_entity_set_client_singleton(lua_State *L) {
+    uint64_t addr = (uint64_t)luaL_checkinteger(L, 1);
+
+    g_RuntimeClientSingletonAddr = addr;
+    LOG_ENTITY_DEBUG("Client singleton address set to 0x%llx via Lua", (unsigned long long)addr);
+
+    // Try to discover client world with the new address
+    bool success = entity_discover_client_world();
+    lua_pushboolean(L, success);
+    return 1;
+}
+
+// Ext.Entity.GetServerWorld() -> lightuserdata or nil
+static int lua_entity_get_server_world(lua_State *L) {
+    if (g_ServerEntityWorld) {
+        lua_pushlightuserdata(L, g_ServerEntityWorld);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+// Ext.Entity.GetClientWorld() -> lightuserdata or nil
+static int lua_entity_get_client_world(lua_State *L) {
+    if (g_ClientEntityWorld) {
+        lua_pushlightuserdata(L, g_ClientEntityWorld);
+    } else {
+        lua_pushnil(L);
+    }
+    return 1;
+}
+
+// Ext.Entity.DiscoverClientWorld() -> boolean
+// Attempts to discover client EntityWorld using current settings
+static int lua_entity_discover_client_world(lua_State *L) {
+    bool success = entity_discover_client_world();
+    lua_pushboolean(L, success);
+    return 1;
+}
+
+// Ext.Entity.ProbeClientSingleton(baseAddr, range, ewOffset) -> table or nil
+// Scans memory near baseAddr looking for structures that look like EoCClient
+// Returns candidates with their pointer values
+static int lua_entity_probe_client_singleton(lua_State *L) {
+    uint64_t base_addr = (uint64_t)luaL_checkinteger(L, 1);
+    uint64_t range = (uint64_t)luaL_optinteger(L, 2, 0x10000);  // Default 64KB
+    uint64_t ew_offset = (uint64_t)luaL_optinteger(L, 3, OFFSET_ENTITYWORLD_IN_EOCCLIENT);
+
+    if (!g_MainBinaryBase) {
+        lua_pushnil(L);
+        lua_pushstring(L, "Binary base not set");
+        return 2;
+    }
+
+    LOG_ENTITY_DEBUG("Probing for client singleton: base=0x%llx, range=0x%llx, ew_offset=0x%llx",
+               (unsigned long long)base_addr, (unsigned long long)range, (unsigned long long)ew_offset);
+
+    lua_newtable(L);
+    int result_idx = 1;
+
+    // Scan memory range for potential singleton pointers
+    for (uint64_t addr = base_addr; addr < base_addr + range; addr += 8) {
+        // Safely read potential pointer
+        vm_size_t data_size = sizeof(void*);
+        vm_offset_t data;
+        kern_return_t kr = vm_read(mach_task_self(), (vm_address_t)addr,
+                                   data_size, &data, (mach_msg_type_number_t*)&data_size);
+
+        if (kr != KERN_SUCCESS) continue;
+
+        void *ptr_value = *(void **)data;
+        vm_deallocate(mach_task_self(), data, data_size);
+
+        // Skip NULL or obviously invalid pointers
+        if (!ptr_value) continue;
+        uintptr_t ptr = (uintptr_t)ptr_value;
+        if (ptr < 0x100000000ULL || ptr > 0x800000000000ULL) continue;
+
+        // Check if this pointer is valid
+        if (!is_valid_pointer(ptr_value)) continue;
+
+        // Try to read EntityWorld at expected offset
+        void *ew_ptr_addr = (void *)(ptr + ew_offset);
+        kr = vm_read(mach_task_self(), (vm_address_t)ew_ptr_addr,
+                     data_size, &data, (mach_msg_type_number_t*)&data_size);
+
+        if (kr != KERN_SUCCESS) continue;
+
+        void *ew_value = *(void **)data;
+        vm_deallocate(mach_task_self(), data, data_size);
+
+        // Check if EntityWorld pointer looks valid
+        if (!ew_value) continue;
+        uintptr_t ew = (uintptr_t)ew_value;
+        if (ew < 0x100000000ULL || ew > 0x800000000000ULL) continue;
+
+        if (!is_valid_pointer(ew_value)) continue;
+
+        // This is a candidate! Add to results
+        lua_newtable(L);
+
+        lua_pushinteger(L, (lua_Integer)addr);
+        lua_setfield(L, -2, "globalAddr");
+
+        lua_pushinteger(L, (lua_Integer)ptr);
+        lua_setfield(L, -2, "singletonPtr");
+
+        lua_pushinteger(L, (lua_Integer)ew);
+        lua_setfield(L, -2, "entityWorld");
+
+        lua_rawseti(L, -2, result_idx++);
+
+        LOG_ENTITY_DEBUG("  Candidate: global=0x%llx -> singleton=0x%llx -> EW=0x%llx",
+                   (unsigned long long)addr, (unsigned long long)ptr, (unsigned long long)ew);
+
+        // Limit to 20 candidates
+        if (result_idx > 20) break;
+    }
+
+    LOG_ENTITY_DEBUG("Probe complete: %d candidates found", result_idx - 1);
+    return 1;
+}
+
+// Ext.Entity.GetKnownAddresses() -> table
+// Returns known addresses for debugging
+static int lua_entity_get_known_addresses(lua_State *L) {
+    lua_newtable(L);
+
+    // Server addresses
+    lua_newtable(L);
+    lua_pushinteger(L, (lua_Integer)OFFSET_EOCSERVER_SINGLETON_PTR);
+    lua_setfield(L, -2, "singletonPtrGhidra");
+    if (g_EoCServer) {
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)g_EoCServer);
+        lua_setfield(L, -2, "singleton");
+    }
+    if (g_ServerEntityWorld) {
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)g_ServerEntityWorld);
+        lua_setfield(L, -2, "entityWorld");
+    }
+    lua_pushinteger(L, OFFSET_ENTITYWORLD_IN_EOCSERVER);
+    lua_setfield(L, -2, "ewOffset");
+    lua_setfield(L, -2, "server");
+
+    // Client addresses
+    lua_newtable(L);
+    lua_pushinteger(L, (lua_Integer)OFFSET_EOCCLIENT_SINGLETON_PTR);
+    lua_setfield(L, -2, "singletonPtrGhidra");
+    if (g_RuntimeClientSingletonAddr) {
+        lua_pushinteger(L, (lua_Integer)g_RuntimeClientSingletonAddr);
+        lua_setfield(L, -2, "singletonPtrRuntime");
+    }
+    if (g_EoCClient) {
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)g_EoCClient);
+        lua_setfield(L, -2, "singleton");
+    }
+    if (g_ClientEntityWorld) {
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)g_ClientEntityWorld);
+        lua_setfield(L, -2, "entityWorld");
+    }
+    lua_pushinteger(L, OFFSET_ENTITYWORLD_IN_EOCCLIENT);
+    lua_setfield(L, -2, "ewOffset");
+    lua_setfield(L, -2, "client");
+
+    // Binary base
+    if (g_MainBinaryBase) {
+        lua_pushinteger(L, (lua_Integer)(uintptr_t)g_MainBinaryBase);
+        lua_setfield(L, -2, "binaryBase");
+    }
+
+    return 1;
+}
+
 void entity_register_lua(lua_State *L) {
     // Create BG3Entity metatable
     luaL_newmetatable(L, "BG3Entity");
@@ -2205,6 +2526,25 @@ void entity_register_lua(lua_State *L) {
 
     lua_pushcfunction(L, lua_entity_count_with_component);
     lua_setfield(L, -2, "CountEntitiesWithComponent");
+
+    // Dual EntityWorld API (Server + Client)
+    lua_pushcfunction(L, lua_entity_get_server_world);
+    lua_setfield(L, -2, "GetServerWorld");
+
+    lua_pushcfunction(L, lua_entity_get_client_world);
+    lua_setfield(L, -2, "GetClientWorld");
+
+    lua_pushcfunction(L, lua_entity_discover_client_world);
+    lua_setfield(L, -2, "DiscoverClientWorld");
+
+    lua_pushcfunction(L, lua_entity_set_client_singleton);
+    lua_setfield(L, -2, "SetClientSingleton");
+
+    lua_pushcfunction(L, lua_entity_probe_client_singleton);
+    lua_setfield(L, -2, "ProbeClientSingleton");
+
+    lua_pushcfunction(L, lua_entity_get_known_addresses);
+    lua_setfield(L, -2, "GetKnownAddresses");
 
     lua_setfield(L, -2, "Entity");  // Ext.Entity = table
 

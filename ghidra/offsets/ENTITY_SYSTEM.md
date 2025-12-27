@@ -288,11 +288,79 @@ GUID lookup SUCCESS: S_HAG_ForestIllusion_Redcap_01_ff840420-... -> handle=0x200
 | Symbol | Address | Description |
 |--------|---------|-------------|
 | `esv::EocServer::m_ptr` | `0x10898e8b8` | Global pointer to EoCServer singleton |
+| `ecl::EocClient::m_ptr` | `0x10898c968` | Global pointer to EoCClient singleton |
 | `EoCServer + 0x288` | - | EntityWorld* within EoCServer struct |
+| `EoCClient + 0x1B8` | - | PermissionsManager* within EoCClient struct |
+| `EoCClient + 0x1B0` | - | EntityWorld* within EoCClient struct (estimated) |
 | HashMap Mappings | `0x00` | Offset in UuidToHandleMappingComponent |
 | `EocServerSDM::Init` | `0x1049b1444` | Creates EoCServer singleton |
 | `EocServerSDM::Shutdown` | `0x1049ba808` | Destroys EoCServer singleton |
 | `EocServerSDM::s_IsInitialized` | `0x108a374c0` | Initialization flag |
+
+## Client Singleton Discovery (Dec 27, 2025)
+
+### ecl::EocClient::m_ptr
+
+**Address:** `0x10898c968`
+
+Discovered via Ghidra analysis of `gui::DataContextProvider::CreateDataContextClass`:
+
+```asm
+1024f0218: adrp x8,0x10898c000
+1024f021c: ldr x25,[x8, #0x968]   ; Load ecl::EocClient::m_ptr
+1024f0228: add x26,x25,#0x1b8    ; PermissionsManager at EocClient+0x1b8
+```
+
+The decompiled code confirms:
+```c
+pEVar4 = ecl::EocClient::m_ptr;
+pPVar1 = (PermissionsManager *)(ecl::EocClient::m_ptr + 0x1b8);
+```
+
+### EocClient Structure (Partial)
+
+| Offset | Type | Member |
+|--------|------|--------|
+| `0x1B0` | `EntityWorld*` | Client EntityWorld (estimated from Windows) |
+| `0x1B8` | `PermissionsManager*` | Permissions (verified via disassembly) |
+
+### Usage in entity_system.c
+
+```c
+#define GHIDRA_BASE_ADDRESS            0x100000000ULL
+#define OFFSET_EOCCLIENT_SINGLETON_PTR 0x10898c968ULL
+#define OFFSET_ENTITYWORLD_IN_EOCCLIENT 0x1B0
+
+static void *g_EoCClient = NULL;
+static void *g_ClientEntityWorld = NULL;
+
+bool discover_client_entity_world(void *main_binary_base) {
+    uintptr_t global_addr = OFFSET_EOCCLIENT_SINGLETON_PTR - GHIDRA_BASE_ADDRESS
+                          + (uintptr_t)main_binary_base;
+
+    g_EoCClient = *(void **)global_addr;
+    if (!g_EoCClient) return false;
+
+    g_ClientEntityWorld = *(void **)((char *)g_EoCClient + OFFSET_ENTITYWORLD_IN_EOCCLIENT);
+    return g_ClientEntityWorld != NULL;
+}
+```
+
+### Verification
+
+To verify the EntityWorld offset at runtime:
+```lua
+-- Check if client world is captured
+local addrs = Ext.Entity.GetKnownAddresses()
+_D(addrs)  -- Should show client.entityWorld if offset is correct
+
+-- If client.entityWorld is nil/0, probe nearby offsets:
+local cw = Ext.Entity.GetClientWorld()
+if not cw then
+    -- The offset 0x1B0 may need adjustment
+    -- Use Ext.Debug.ProbeStruct on the EocClient pointer
+end
+```
 
 ## ARM64 Calling Convention for TryGetSingleton
 

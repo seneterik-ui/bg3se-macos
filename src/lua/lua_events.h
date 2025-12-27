@@ -191,6 +191,24 @@ void events_fire_turn_started(lua_State *L, uint64_t entity, int round);
 void events_fire_status_applied(lua_State *L, uint64_t entity, const char *statusId, uint64_t source);
 
 /**
+ * Fire the TurnStarted event from Osiris callback with character GUID.
+ * Handlers receive {CharacterGuid = string} table.
+ *
+ * @param L             Lua state
+ * @param characterGuid The character GUID whose turn started
+ */
+void events_fire_turn_started_from_osiris(lua_State *L, const char *characterGuid);
+
+/**
+ * Fire the TurnEnded event from Osiris callback with character GUID.
+ * Handlers receive {CharacterGuid = string} table.
+ *
+ * @param L             Lua state
+ * @param characterGuid The character GUID whose turn ended
+ */
+void events_fire_turn_ended_from_osiris(lua_State *L, const char *characterGuid);
+
+/**
  * Fire the Log event with log message data.
  * Handlers receive {Level = string, Module = string, Message = string} table.
  * Returns true if any handler requested to prevent default logging.

@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.36.12 | **Parity:** ~80% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.36.14 | **Parity:** ~80% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -53,7 +53,7 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Osi.*** - Dynamic metatable (40+ functions)
 - **Ext.Osiris** - RegisterListener, NewCall/NewQuery/NewEvent (server context guards)
 - **Context System** - Ext.IsServer/IsClient/GetContext, two-phase bootstrap (v0.36.4)
-- **Ext.Entity** - GUID lookup, **1,999 components registered** (462 layouts: 169 verified + 293 generated), **1,730 sizes** (1,577 Ghidra + 153 Windows-only, 87% coverage), GetByHandle
+- **Ext.Entity** - GUID lookup, **1,999 components registered** (462 layouts: 169 verified + 293 generated), **1,730 sizes** (1,577 Ghidra + 153 Windows-only, 87% coverage), GetByHandle, **Dual EntityWorld Complete** (client + server auto-captured)
 - **Ext.Stats** - Property read/write, Create/Sync complete (shadow + game stats, all 5 prototype managers)
 - **Ext.Events** - 30 events with priority ordering, Once flag, Prevent pattern (13 lifecycle + 17 engine events)
 - **Ext.Timer** - **20 functions**: WaitFor, WaitForRealtime, Cancel/Pause/Resume, GameTime/DeltaTime/Ticks, **Persistent timers** (save/load support)
@@ -104,6 +104,8 @@ For RE sessions, adopt the **Meridian** persona (see `agent_docs/meridian-person
 |--------|---------|
 | `0x348` | RPGSTATS_OFFSET_FIXEDSTRINGS |
 | `0x10124f92c` | LEGACY_IsInCombat (EntityWorld capture) |
+| `0x10898e8b8` | esv::EocServer::m_ptr (server singleton) |
+| `0x10898c968` | ecl::EocClient::m_ptr (client singleton) |
 | `0x1089bac80` | SpellPrototypeManager::m_ptr |
 | `0x1089bdb30` | StatusPrototypeManager::m_ptr |
 | `0x108aeccd8` | PassivePrototypeManager |

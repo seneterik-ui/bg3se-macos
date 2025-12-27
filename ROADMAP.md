@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.12
+## Current Status: v0.36.14
 
 **Overall Feature Parity: ~80%** (based on comprehensive API function count analysis)
 
@@ -36,7 +36,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Osiris` | ✅ Full | ✅ RegisterListener + NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions | **100%** | 1 |
 | `Ext.Json` | ✅ Full (2) | ✅ Parse, Stringify | **100%** | 1 |
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile, AddPathOverride, GetPathOverride (4) | **100%** | 1 |
-| `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, components, enumeration (16) | **62%** | 2 |
+| `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, **Dual EntityWorld**, components, enumeration (22) | **85%** | 2 |
 | `Ext.Stats` | ✅ Full (52) | ✅ Get, GetAll, Create, Sync (all), property read/write (18) | **35%** | 3 |
 | `Ext.Events` | ✅ Full (~30) | ✅ 30 events (13 lifecycle + 17 engine) + Subscribe/Unsubscribe/Prevent | **100%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, IsPaused, MonotonicTime, MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, IsGamePaused, +6 persistent (20) | **100%** | 2.3 |
@@ -180,7 +180,7 @@ end
 - [x] Component accessors via GetComponent template addresses
 
 ### 2.2 Component Access & Property System
-**Status:** ✅ Complete (v0.36.9) - **1,999 components registered** (534 layouts: 169 verified + 365 generated), **1,577 ARM64 sizes** + **702 Windows estimates** = **1,730 total** (87% coverage)
+**Status:** ✅ Complete (v0.36.14) - **Dual EntityWorld** (client + server), **1,999 components registered** (534 layouts: 169 verified + 365 generated), **1,577 ARM64 sizes** + **702 Windows estimates** = **1,730 total** (87% coverage)
 
 **Key Discovery (Dec 2025):** macOS ARM64 has NO `GetRawComponent` dispatcher like Windows. Template functions are **completely inlined** - calling template addresses directly returns NULL.
 
@@ -1398,6 +1398,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.14 | 2025-12-27 | **Dual EntityWorld Complete** - Client singleton discovered (`0x10898c968`), both client + server worlds auto-captured |
 | v0.36.11 | 2025-12-26 | **30 Events Complete** - 11 new events (death, spell, hit, rest, approval, lifecycle), completes Issue #51 |
 | v0.36.10 | 2025-12-26 | **Logging & Debugging** - Ext.Log convenience functions, Ext.Events.Log callback, combat-tested structured logging (#8, #42) |
 | v0.36.9 | 2025-12-24 | **534 Component Layouts** - 3.2x increase (169→534), integrated 365 new layouts from Windows headers (#52) |

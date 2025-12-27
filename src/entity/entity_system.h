@@ -213,11 +213,26 @@ int entity_system_init(void *main_binary_base);
 bool entity_system_ready(void);
 
 /**
- * Attempt to discover EntityWorld via memory scanning.
+ * Attempt to discover Server EntityWorld via memory scanning.
  * Call this after the game server is initialized (e.g., after loading a save).
  * Returns true if EntityWorld was found, false otherwise.
  */
 bool entity_discover_world(void);
+
+/**
+ * Attempt to discover Client EntityWorld.
+ * Requires either the client singleton address to be set via SetClientSingleton()
+ * or discovered via static analysis.
+ * Returns true if ClientEntityWorld was found, false otherwise.
+ */
+bool entity_discover_client_world(void);
+
+/**
+ * Get the EntityWorld for a specific context.
+ * is_server: true for server (esv::) components, false for client (ecl::)
+ * Returns NULL if the requested world is not available.
+ */
+void* entity_get_world_for_context(bool is_server);
 
 /**
  * Get the main binary base address.

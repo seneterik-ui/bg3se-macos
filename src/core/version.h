@@ -6,7 +6,7 @@
 #define BG3SE_VERSION_H
 
 // Version info
-#define BG3SE_VERSION "0.36.12"
+#define BG3SE_VERSION "0.36.14"
 #define BG3SE_NAME "BG3SE-macOS"
 
 // Data directory (under ~/Library/Application Support/)

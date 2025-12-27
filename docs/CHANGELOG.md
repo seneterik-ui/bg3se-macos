@@ -13,6 +13,64 @@ Each entry includes:
 
 ---
 
+## [v0.36.14] - 2025-12-27
+
+**Parity:** ~80% | **Category:** Entity System | **Issues:** #51 (dual world complete)
+
+### Added
+- **Dual EntityWorld Infrastructure** - Full client/server world separation
+  - `Ext.Entity.GetServerWorld()` - Returns server EntityWorld pointer
+  - `Ext.Entity.GetClientWorld()` - Returns client EntityWorld pointer (now working!)
+  - `Ext.Entity.DiscoverClientWorld()` - Attempt client world discovery
+  - `Ext.Entity.SetClientSingleton(addr)` - Set runtime-discovered client address
+  - `Ext.Entity.ProbeClientSingleton(base, range, offset)` - Memory scanning for client singleton
+  - `Ext.Entity.GetKnownAddresses()` - Debug info for all known addresses
+
+### Verified
+- **Client EntityWorld Captured** - Both client and server worlds now auto-captured at runtime
+  - Server EntityWorld: `0x15a08bc00` (at `esv::EocServer + 0x288`)
+  - Client EntityWorld: `0x6000004c19a0` (at `ecl::EocClient + 0x1B0`)
+  - Client singleton discovered via Ghidra: `ecl::EocClient::m_ptr` at `0x10898c968`
+- **Turn Events Working** - Ext.Events.TurnStarted/TurnEnded fire correctly in combat
+  - Character GUIDs passed to handlers (e.g., `S_Player_Astarion_c7c13742-...`)
+  - Both player and NPC turns trigger events
+
+### Technical
+- Added `g_ServerEntityWorld` and `g_ClientEntityWorld` globals
+- Added `g_RuntimeClientSingletonAddr` for Lua-configurable client address
+- Added `entity_discover_client_world()` and `entity_get_world_for_context()`
+- **Client singleton offset discovered:** `OFFSET_EOCCLIENT_SINGLETON_PTR = 0x10898c968`
+- **EntityWorld offset verified:** `OFFSET_ENTITYWORLD_IN_EOCCLIENT = 0x1B0`
+- PermissionsManager at `EocClient + 0x1B8` (confirmed via disassembly)
+
+### Discovery Method
+Found via Ghidra analysis of `gui::DataContextProvider::CreateDataContextClass` at `0x1024f008c`:
+```asm
+1024f0218: adrp x8,0x10898c000
+1024f021c: ldr x25,[x8, #0x968]   ; Load ecl::EocClient::m_ptr
+1024f0228: add x26,x25,#0x1b8    ; PermissionsManager at EocClient+0x1b8
+```
+
+---
+
+## [v0.36.13] - 2025-12-26
+
+**Parity:** ~80% | **Category:** Events System | **Issues:** #51 (bridge complete)
+
+### Added
+- **Osiris → Ext.Events Bridge** - Turn events now fire through both APIs
+  - `Ext.Events.TurnStarted:Subscribe()` now works (was broken - polling returned 0)
+  - `Ext.Events.TurnEnded:Subscribe()` now works
+  - Events bridged from Osiris callbacks with `CharacterGuid` field
+  - Provides Events API features: priority ordering, Once flag, handler IDs
+
+### Technical
+- Added `events_fire_turn_started_from_osiris()` and `events_fire_turn_ended_from_osiris()` in lua_events.c
+- Bridge in `dispatch_event_to_lua()` detects Osiris turn events and fires Ext.Events
+- Handlers receive `{CharacterGuid = "..."}` table
+
+---
+
 ## [v0.36.12] - 2025-12-26
 
 **Parity:** ~80% | **Category:** Logging Infrastructure | **Issues:** #8 (partial)

@@ -2217,6 +2217,27 @@ static void dispatch_event_to_lua(const char *eventName, int arity,
             (void)scope;  // Suppress unused warning
         }
     }
+
+    // ========================================================================
+    // Osiris → Ext.Events Bridge (Issue #51)
+    // Fire Ext.Events.TurnStarted/TurnEnded when Osiris turn events fire
+    // ========================================================================
+    if (strcmp(timing, "after") == 0) {  // Only fire once per event
+        const char *characterGuid = NULL;
+
+        // Extract character GUID from first argument
+        if (args && (args->value.typeId == OSI_TYPE_STRING ||
+                     args->value.typeId == OSI_TYPE_GUIDSTRING) &&
+            args->value.stringVal) {
+            characterGuid = args->value.stringVal;
+        }
+
+        if (strcmp(eventName, "TurnStarted") == 0) {
+            events_fire_turn_started_from_osiris(L, characterGuid);
+        } else if (strcmp(eventName, "TurnEnded") == 0) {
+            events_fire_turn_ended_from_osiris(L, characterGuid);
+        }
+    }
 }
 
 /**

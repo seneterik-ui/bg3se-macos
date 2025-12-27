@@ -851,6 +851,118 @@ void events_fire_turn_started(lua_State *L, uint64_t entity, int round) {
     }
 }
 
+// ============================================================================
+// Osiris Bridge Events (Issue #51 - TurnStarted/TurnEnded from Osiris)
+// ============================================================================
+
+void events_fire_turn_started_from_osiris(lua_State *L, const char *characterGuid) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_TURN_STARTED];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing TurnStarted from Osiris (guid=%s, %d handlers)",
+                characterGuid ? characterGuid : "nil", count);
+
+    g_dispatch_depth[EVENT_TURN_STARTED]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_TURN_STARTED]; i++) {
+        EventHandler *h = &g_handlers[EVENT_TURN_STARTED][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table with CharacterGuid
+        lua_newtable(L);
+        if (characterGuid) {
+            lua_pushstring(L, characterGuid);
+        } else {
+            lua_pushnil(L);
+        }
+        lua_setfield(L, -2, "CharacterGuid");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("TurnStarted (Osiris) handler error (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_TURN_STARTED, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_TURN_STARTED]--;
+
+    if (g_dispatch_depth[EVENT_TURN_STARTED] == 0) {
+        process_deferred_unsubscribes(L, EVENT_TURN_STARTED);
+    }
+}
+
+void events_fire_turn_ended_from_osiris(lua_State *L, const char *characterGuid) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_TURN_ENDED];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing TurnEnded from Osiris (guid=%s, %d handlers)",
+                characterGuid ? characterGuid : "nil", count);
+
+    g_dispatch_depth[EVENT_TURN_ENDED]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_TURN_ENDED]; i++) {
+        EventHandler *h = &g_handlers[EVENT_TURN_ENDED][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table with CharacterGuid
+        lua_newtable(L);
+        if (characterGuid) {
+            lua_pushstring(L, characterGuid);
+        } else {
+            lua_pushnil(L);
+        }
+        lua_setfield(L, -2, "CharacterGuid");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("TurnEnded (Osiris) handler error (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_TURN_ENDED, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_TURN_ENDED]--;
+
+    if (g_dispatch_depth[EVENT_TURN_ENDED] == 0) {
+        process_deferred_unsubscribes(L, EVENT_TURN_ENDED);
+    }
+}
+
 void events_fire_status_applied(lua_State *L, uint64_t entity, const char *statusId, uint64_t source) {
     if (!L) return;
 

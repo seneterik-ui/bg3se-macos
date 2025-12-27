@@ -176,7 +176,28 @@ The infrastructure is in place:
 2. [x] Implement OneFrame pool access code
 3. [x] Verify Osiris TurnStarted/TurnEnded work in combat
 4. [ ] Capture server EntityWorld for `esv::` components
-5. [ ] Bridge Osiris events to Ext.Events for turn events
+5. [x] Bridge Osiris events to Ext.Events for turn events (v0.36.13)
+
+## Implementation Details (v0.36.13)
+
+### Osiris → Ext.Events Bridge
+
+Added in `dispatch_event_to_lua` (main.c:2221-2240):
+- Detects `TurnStarted` and `TurnEnded` Osiris events
+- Extracts character GUID from first argument
+- Fires `events_fire_turn_started_from_osiris()` / `events_fire_turn_ended_from_osiris()`
+
+New functions in lua_events.c (858-963):
+- `events_fire_turn_started_from_osiris(L, characterGuid)`
+- `events_fire_turn_ended_from_osiris(L, characterGuid)`
+- Handlers receive `{CharacterGuid = "..."}`
+
+**Usage:**
+```lua
+Ext.Events.TurnStarted:Subscribe(function(e)
+    Ext.Print("Turn started: " .. (e.CharacterGuid or "nil"))
+end)
+```
 
 ## References
 
