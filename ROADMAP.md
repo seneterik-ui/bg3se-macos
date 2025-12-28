@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.14
+## Current Status: v0.36.16
 
-**Overall Feature Parity: ~80%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~82%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -42,7 +42,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Timer` | ✅ Full (13) | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, IsPaused, MonotonicTime, MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, IsGamePaused, +6 persistent (20) | **100%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
 | `Ext.Vars` | ✅ Full (8) | ✅ User + Mod Variables (12) | **100%** | 2.6 |
-| `Ext.Types` | ✅ Full (15) | ⚠️ GetAllTypes, GetObjectType, GetTypeInfo, Validate (4) | **27%** | 7 |
+| `Ext.Types` | ✅ Full (15) | ✅ GetAllTypes, GetObjectType, GetTypeInfo, Validate, TypeOf, IsA (6) | **70%** | 7 |
 | `Ext.Enums` | ✅ Full | ✅ 14 enum/bitfield types | **100%** | 7 |
 | `Ext.Math` | ✅ Full (59) | ✅ 57 functions (vectors, matrices, 16 quaternions, scalars) | **97%** | 7.5 |
 | `Ext.Input` | ✅ Full | ✅ CGEventTap capture, hotkeys (8 macOS-specific) | **100%** | 9 |
@@ -589,7 +589,6 @@ print("IsClient:", Ext.IsClient())     -- true during BootstrapClient.lua
 **Not Yet Implemented:**
 - True dual Lua state separation (if needed for full isolation)
 - Client-only APIs (Ext.UI, Ext.IMGUI, rendering hooks)
-- Context annotations (C = Client, S = Server, R = Restricted)
 
 ### 2.8 Object Scopes/Lifetimes
 **Status:** ✅ Complete (v0.29.0 - Issue #28)
@@ -1398,6 +1397,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.15 | 2025-12-27 | **API Context Annotations** - Context column (B/S/C) added to all API tables in api-reference.md (Issue #46) |
 | v0.36.14 | 2025-12-27 | **Dual EntityWorld Complete** - Client singleton discovered (`0x10898c968`), both client + server worlds auto-captured |
 | v0.36.11 | 2025-12-26 | **30 Events Complete** - 11 new events (death, spell, hit, rest, approval, lifecycle), completes Issue #51 |
 | v0.36.10 | 2025-12-26 | **Logging & Debugging** - Ext.Log convenience functions, Ext.Events.Log callback, combat-tested structured logging (#8, #42) |
@@ -1482,15 +1482,15 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | **#49 Ext.IO** | Path Overrides | ✅ **Complete** | 2 functions, pure C implementation |
 | **#47 Ext.Math** | Full Math Library | ✅ **Complete** | 47 functions, pure math, no RE needed |
 | **#50 Ext.Timer** | Persistent/Realtime | ✅ **Complete** | 20 functions, full timer system |
-| **#46 Context Docs** | API Annotations | **95%** | Documentation only |
+| **#46 Context Docs** | API Annotations | ✅ **Complete** | Context column (B/S/C) added to all API tables |
 
 **Core Expansion (60-80% acceleration, 1-2 weeks):**
 | Issue | Feature | Acceleration | Key Technique |
 |-------|---------|--------------|---------------|
 | **#52 Components** | Coverage Expansion | **80%** | Tools ready: `extract_typeids.py` + stubs |
-| **#48 Ext.Types** | Full Reflection | **70%** | Port from Windows Types.inl |
-| **#51 Ext.Events** | Engine Events | **60%** | Hook game event dispatch |
-| **#53 Stats Functors** | ExecuteFunctors | **50%** | Windows code portable |
+| ~~#48 Ext.Types~~ | Full Reflection | ✅ **DONE** | Port from Windows Types.inl |
+| ~~#51 Ext.Events~~ | Engine Events | ✅ **DONE** | Hook game event dispatch |
+| ~~#53 Stats Functors~~ | ExecuteFunctors | ✅ **DONE** | Windows code portable |
 
 **Client Features (45-70% acceleration, 2-4 weeks):**
 | Issue | Feature | Acceleration | Key Technique |
@@ -1514,6 +1514,9 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | ~~#32~~ | Stats Sync | ✅ DONE |
 | ~~#40~~ | StaticData | ✅ DONE (auto-capture) |
 | ~~#41~~ | Resource/Template | ✅ DONE |
+| ~~#48~~ | Ext.Types | ✅ DONE (v0.36.16) |
+| ~~#51~~ | Ext.Events | ✅ DONE (v0.36.11) |
+| ~~#53~~ | Stats Functors | ✅ DONE (v0.36.15) |
 
 ### ARM64 Hooking Infrastructure (Dec 2025) ✅ RESOLVED
 
@@ -1551,16 +1554,16 @@ FeatManager::GetFeats prologue @ 0x101b752b4:
 | 1 | **#49 Ext.IO** | ✅ Complete | 2 functions, pure C implementation |
 | 2 | **#47 Ext.Math** | ✅ Complete | 47 functions, pure math, no RE needed |
 | 3 | **#50 Ext.Timer** | ✅ Complete | 20 functions, full timer system |
-| 4 | **#46 Context Docs** | 95% | Documentation only |
+| 4 | **#46 Context Docs** | ✅ Complete | Context annotations added to API docs |
 
 **Phase 2: Core Expansion (1-2 weeks each)**
 
 | Order | Issue | Acceleration | Why This Order |
 |-------|-------|--------------|----------------|
-| 5 | **#48 Ext.Types** | 70% | Unlocks debugger/IDE features |
-| 6 | **#51 Ext.Events** | 60% | Unlocks stat functors |
+| 5 | ~~#48 Ext.Types~~ | ✅ Complete | Unlocks debugger/IDE features |
+| 6 | ~~#51 Ext.Events~~ | ✅ Complete | Unlocks stat functors |
 | 7 | **#52 Components** | 80% | Accelerated workflow exists |
-| 8 | **#53 Stats Functors** | 50% | Needs #51 events |
+| 8 | ~~#53 Stats Functors~~ | ✅ Complete | Needs #51 events |
 
 **Phase 3: Client Features (1-3 weeks each)**
 
@@ -1579,12 +1582,18 @@ FeatManager::GetFeats prologue @ 0x101b752b4:
 | 14 | **#35 Ext.UI** | 25% | Deep Noesis hooks |
 | 15 | **#6 Ext.Net** | 30% | Network stack RE |
 
-**Recommended Starting Point (All Complete as of v0.36.5):**
+**All Quick Wins Complete (as of v0.36.15):**
 1. ✅ **#49 Ext.IO** - 4 functions: LoadFile, SaveFile, AddPathOverride, GetPathOverride
 2. ✅ **#47 Ext.Math** - 47+ functions including 16 quaternion operations
 3. ✅ **#50 Ext.Timer** - 20 functions: core timers, time utilities, persistent timers
+4. ✅ **#46 Context Docs** - Context annotations (B/S/C) added to all API tables
 
-All quick wins completed. Next: Context documentation (#46) or Core Expansion issues.
+**Phase 2 Core Expansion Complete (as of v0.36.16):**
+5. ✅ **#48 Ext.Types** - 6 functions: GetAllTypes, GetTypeInfo, GetObjectType, Validate, TypeOf, IsA
+6. ✅ **#51 Ext.Events** - 32 engine events with priority/once/prevent patterns
+7. ✅ **#53 Stats Functors** - ExecuteFunctor/AfterExecuteFunctor for damage/heal hooks
+
+All Phase 1-2 complete. Next: Component expansion (#52), Client features (#36 IMGUI, #42 Debugger).
 
 ### Patterns from Windows BG3SE
 

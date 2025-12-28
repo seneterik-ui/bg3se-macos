@@ -13,15 +13,49 @@ Each entry includes:
 
 ---
 
+## [v0.36.16] - 2025-12-27
+
+**Parity:** ~82% | **Category:** Reflection API | **Issues:** #48
+
+### Added
+- **Ext.Types Full Reflection API** - Complete type introspection system
+  - `Ext.Types.GetAllTypes()` - Returns all ~2050 registered types (userdata + 1999 components + 50+ enums)
+  - `Ext.Types.GetTypeInfo(name)` - Rich metadata for components, enums, and userdata types
+  - `Ext.Types.TypeOf(obj)` - Returns type info table for an object
+  - `Ext.Types.IsA(obj, typeName)` - Type checking with inheritance/namespace matching
+
+### Changed
+- `Ext.Types.GetTypeInfo()` now returns rich metadata:
+  - **Components**: Kind, Size, TypeIndex, IsOneFrame, IsProxy, Discovered
+  - **Enums**: Kind, ValueCount, TypeIndex, Values (label→value), Labels (ordered array)
+  - **Bitfields**: Same as enums plus AllowedFlags
+  - **Userdata**: Kind, HasMetatable, MethodCount
+
+### Technical
+- Added `enum_registry_iterate()` callback function to `src/enum/enum_registry.c`
+- Modified `lua_types_getalltypes()` to iterate component and enum registries
+- Expanded `lua_types_gettypeinfo()` with component/enum metadata
+- Added helper `get_object_type_name()` for internal type resolution
+
+---
+
 ## [v0.36.15] - 2025-12-27
 
-**Parity:** ~80% | **Category:** Stats/Events | **Issues:** #53
+**Parity:** ~80% | **Category:** Stats/Events/Docs | **Issues:** #53, #46
 
 ### Added
 - **Stats Functor System** - Hook into game's damage/healing/status effect execution
   - `Ext.Events.ExecuteFunctor` - Fires before each functor executes (9 context types)
   - `Ext.Events.AfterExecuteFunctor` - Fires after functor execution completes
   - All 9 context types hooked: AttackTarget, AttackPosition, Move, Target, NearbyAttacked, NearbyAttacking, Equip, Source, Interrupt
+
+### Documentation
+- **API Context Annotations** (Issue #46) - Added context column to all API tables in api-reference.md
+  - **B** = Both (server and client)
+  - **S** = Server-only (Ext.Osiris, Osi.*, Stats writes, combat events)
+  - **C** = Client-only (Ext.Input, KeyInput events)
+  - All 15+ namespaces annotated across 50+ API entries
+  - Added Context Annotations legend section to api-reference.md
 
 ### Technical
 - Created `src/stats/functor_types.h` with data structures

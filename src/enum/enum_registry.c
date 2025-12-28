@@ -96,6 +96,16 @@ int enum_registry_get_count(void) {
     return g_Initialized ? g_EnumTypeCount : 0;
 }
 
+void enum_registry_iterate(EnumIteratorFn callback, void *userdata) {
+    if (!g_Initialized || !callback) return;
+
+    for (int i = 0; i < g_EnumTypeCount; i++) {
+        if (!callback(&g_EnumTypes[i], userdata)) {
+            break;  // Callback returned false, stop iteration
+        }
+    }
+}
+
 const char* enum_find_label(int type_index, uint64_t value) {
     EnumTypeInfo *info = enum_registry_get(type_index);
     if (!info) return NULL;

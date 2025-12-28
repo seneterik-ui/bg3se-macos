@@ -10,6 +10,8 @@
 #include "logging.h"
 #include "../console/console.h"
 #include "../io/path_override.h"
+#include "../entity/component_registry.h"
+#include "../enum/enum_registry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -520,7 +522,7 @@ static int lua_types_validate(lua_State *L) {
 }
 
 // Ext.Types.GetTypeInfo(typeName) -> table
-// Returns metadata about a registered type
+// Returns rich metadata about a registered type (userdata, component, or enum)
 static int lua_types_gettypeinfo(lua_State *L) {
     const char *type_name = luaL_checkstring(L, 1);
 
@@ -529,11 +531,79 @@ static int lua_types_gettypeinfo(lua_State *L) {
     lua_pushstring(L, type_name);
     lua_setfield(L, -2, "Name");
 
-    // Check if this is a known type
+    // First, check component registry
+    const ComponentInfo *comp = component_registry_lookup(type_name);
+    if (comp) {
+        lua_pushstring(L, "Component");
+        lua_setfield(L, -2, "Kind");
+
+        lua_pushinteger(L, comp->size);
+        lua_setfield(L, -2, "Size");
+
+        lua_pushinteger(L, comp->index);
+        lua_setfield(L, -2, "TypeIndex");
+
+        lua_pushboolean(L, comp->is_one_frame);
+        lua_setfield(L, -2, "IsOneFrame");
+
+        lua_pushboolean(L, comp->is_proxy);
+        lua_setfield(L, -2, "IsProxy");
+
+        lua_pushboolean(L, comp->discovered);
+        lua_setfield(L, -2, "Discovered");
+
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "Registered");
+
+        return 1;
+    }
+
+    // Second, check enum registry
+    EnumTypeInfo *enumInfo = enum_registry_find_by_name(type_name);
+    if (enumInfo) {
+        lua_pushstring(L, enumInfo->is_bitfield ? "Bitfield" : "Enum");
+        lua_setfield(L, -2, "Kind");
+
+        lua_pushinteger(L, enumInfo->value_count);
+        lua_setfield(L, -2, "ValueCount");
+
+        lua_pushinteger(L, enumInfo->registry_index);
+        lua_setfield(L, -2, "TypeIndex");
+
+        // Add values table
+        lua_newtable(L);
+        for (int i = 0; i < enumInfo->value_count; i++) {
+            lua_pushinteger(L, (lua_Integer)enumInfo->values[i].value);
+            lua_setfield(L, -2, enumInfo->values[i].label);
+        }
+        lua_setfield(L, -2, "Values");
+
+        // Add labels array (ordered)
+        lua_newtable(L);
+        for (int i = 0; i < enumInfo->value_count; i++) {
+            lua_pushstring(L, enumInfo->values[i].label);
+            lua_rawseti(L, -2, i + 1);
+        }
+        lua_setfield(L, -2, "Labels");
+
+        if (enumInfo->is_bitfield) {
+            lua_pushinteger(L, (lua_Integer)enumInfo->allowed_flags);
+            lua_setfield(L, -2, "AllowedFlags");
+        }
+
+        lua_pushboolean(L, 1);
+        lua_setfield(L, -2, "Registered");
+
+        return 1;
+    }
+
+    // Third, check known userdata types
     int found = 0;
     for (int i = 0; s_known_types[i] != NULL; i++) {
         if (strcmp(s_known_types[i], type_name) == 0) {
             found = 1;
+            lua_pushstring(L, "Userdata");
+            lua_setfield(L, -2, "Kind");
             break;
         }
     }
@@ -565,16 +635,135 @@ static int lua_types_gettypeinfo(lua_State *L) {
     return 1;
 }
 
+// Iterator context for building type list
+typedef struct {
+    lua_State *L;
+    int index;
+} TypeListContext;
+
+// Callback for component iteration
+static bool add_component_to_list(const ComponentInfo *info, void *userdata) {
+    TypeListContext *ctx = (TypeListContext*)userdata;
+    if (info && info->name) {
+        lua_pushstring(ctx->L, info->name);
+        lua_rawseti(ctx->L, -2, ctx->index++);
+    }
+    return true;  // Continue iteration
+}
+
+// Callback for enum iteration
+static bool add_enum_to_list(const EnumTypeInfo *info, void *userdata) {
+    TypeListContext *ctx = (TypeListContext*)userdata;
+    if (info && info->name) {
+        lua_pushstring(ctx->L, info->name);
+        lua_rawseti(ctx->L, -2, ctx->index++);
+    }
+    return true;  // Continue iteration
+}
+
 // Ext.Types.GetAllTypes() -> table
-// Returns list of all known/registered types
+// Returns list of all known/registered types (userdata + components + enums)
 static int lua_types_getalltypes(lua_State *L) {
     lua_newtable(L);
 
+    TypeListContext ctx = { L, 1 };
+
+    // Add userdata types first
     for (int i = 0; s_known_types[i] != NULL; i++) {
         lua_pushstring(L, s_known_types[i]);
-        lua_rawseti(L, -2, i + 1);
+        lua_rawseti(L, -2, ctx.index++);
     }
 
+    // Add all component types
+    component_registry_iterate(add_component_to_list, &ctx);
+
+    // Add all enum types
+    enum_registry_iterate(add_enum_to_list, &ctx);
+
+    return 1;
+}
+
+// Helper to get object's type name (internal use)
+static const char* get_object_type_name(lua_State *L, int index) {
+    if (!lua_isuserdata(L, index)) {
+        return NULL;
+    }
+
+    if (!lua_getmetatable(L, index)) {
+        return NULL;
+    }
+
+    // Check against known metatables
+    for (int i = 0; s_known_types[i] != NULL; i++) {
+        luaL_getmetatable(L, s_known_types[i]);
+        if (lua_rawequal(L, -1, -2)) {
+            lua_pop(L, 2);  // Pop both metatables
+            return s_known_types[i];
+        }
+        lua_pop(L, 1);  // Pop the known metatable
+    }
+
+    // Try to get __name field from metatable
+    lua_getfield(L, -1, "__name");
+    if (lua_isstring(L, -1)) {
+        const char *name = lua_tostring(L, -1);
+        lua_pop(L, 2);  // Pop __name and metatable
+        return name;
+    }
+    lua_pop(L, 2);  // Pop __name (nil) and metatable
+
+    return NULL;
+}
+
+// Ext.Types.TypeOf(obj) -> table or nil
+// Returns full TypeInformation table for an object
+static int lua_types_typeof(lua_State *L) {
+    const char *type_name = get_object_type_name(L, 1);
+    if (!type_name) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Replace the object with its type name and call GetTypeInfo
+    lua_pushstring(L, type_name);
+    lua_replace(L, 1);
+    return lua_types_gettypeinfo(L);
+}
+
+// Ext.Types.IsA(obj, typeName) -> boolean
+// Checks if an object is of a given type or inherits from it
+static int lua_types_isa(lua_State *L) {
+    const char *obj_type = get_object_type_name(L, 1);
+    const char *check_type = luaL_checkstring(L, 2);
+
+    if (!obj_type) {
+        lua_pushboolean(L, 0);
+        return 1;
+    }
+
+    // Direct match
+    if (strcmp(obj_type, check_type) == 0) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // Check if obj_type contains check_type (inheritance pattern)
+    // e.g., "eoc::HealthComponent" IsA "Component"
+    // e.g., "bg3se.StatsObject" IsA "StatsObject"
+    if (strstr(obj_type, check_type) != NULL) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    // Check for namespace prefix match (e.g., "bg3se.Entity" IsA "bg3se")
+    size_t check_len = strlen(check_type);
+    if (strncmp(obj_type, check_type, check_len) == 0 &&
+        (obj_type[check_len] == '.' || obj_type[check_len] == ':')) {
+        lua_pushboolean(L, 1);
+        return 1;
+    }
+
+    lua_pushboolean(L, 0);
     return 1;
 }
 
@@ -599,9 +788,15 @@ void lua_ext_register_types(lua_State *L, int ext_table_index) {
     lua_pushcfunction(L, lua_types_getalltypes);
     lua_setfield(L, -2, "GetAllTypes");
 
+    lua_pushcfunction(L, lua_types_typeof);
+    lua_setfield(L, -2, "TypeOf");
+
+    lua_pushcfunction(L, lua_types_isa);
+    lua_setfield(L, -2, "IsA");
+
     lua_setfield(L, ext_table_index, "Types");
 
-    LOG_LUA_INFO("Ext.Types namespace registered");
+    LOG_LUA_INFO("Ext.Types namespace registered (6 functions)");
 }
 
 // ============================================================================

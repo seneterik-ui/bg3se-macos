@@ -10,6 +10,18 @@ Complete documentation for BG3SE-macOS Lua APIs.
 | ⚠️ | Framework exists, partial implementation |
 | ⏳ | Stub only |
 
+## Context Annotations
+
+APIs are marked with their context availability:
+
+| Symbol | Meaning |
+|--------|---------|
+| **B** | Both - Works in server and client contexts |
+| **S** | Server-only - Requires server context (BootstrapServer.lua) |
+| **C** | Client-only - Requires client context (BootstrapClient.lua) |
+
+**Note:** Most BG3SE-macOS APIs work in both contexts. Server-only restrictions apply to Osiris functions and stat modification. Client-only restrictions apply to input handling.
+
 ---
 
 ## Userdata Lifetime Scoping
@@ -61,27 +73,27 @@ _P(entity.Health.Hp)    -- Works!
 
 ### Core Functions
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Print(...)` | ✅ | Print to BG3SE log |
-| `Ext.GetVersion()` | ✅ | Returns version string |
-| `Ext.IsClient()` | ✅ | Returns true |
-| `Ext.IsServer()` | ✅ | Returns false |
-| `Ext.Require(path)` | ✅ | Load Lua module relative to mod |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Print(...)` | ✅ | B | Print to BG3SE log |
+| `Ext.GetVersion()` | ✅ | B | Returns version string |
+| `Ext.IsClient()` | ✅ | B | Returns true |
+| `Ext.IsServer()` | ✅ | B | Returns false |
+| `Ext.Require(path)` | ✅ | B | Load Lua module relative to mod |
 
 ### Ext.IO
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.IO.LoadFile(path)` | ✅ | Read file contents |
-| `Ext.IO.SaveFile(path, content)` | ✅ | Write file contents |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.IO.LoadFile(path)` | ✅ | B | Read file contents |
+| `Ext.IO.SaveFile(path, content)` | ✅ | B | Write file contents |
 
 ### Ext.Json
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Json.Parse(json)` | ✅ | Parse JSON to Lua table |
-| `Ext.Json.Stringify(table)` | ✅ | Convert Lua table to JSON |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Json.Parse(json)` | ✅ | B | Parse JSON to Lua table |
+| `Ext.Json.Stringify(table)` | ✅ | B | Convert Lua table to JSON |
 
 ---
 
@@ -89,14 +101,14 @@ _P(entity.Health.Hp)    -- Works!
 
 Entity Component System access for querying game objects.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Entity.Get(guid)` | ✅ | Look up entity by GUID string |
-| `Ext.Entity.IsReady()` | ✅ | Check if entity system ready |
-| `entity.Transform` | ✅ | Get transform component (Position, Rotation, Scale) |
-| `entity:GetComponent(name)` | ✅ | Get component by name (short or full) |
-| `entity:IsAlive()` | ✅ | Check if entity is valid |
-| `entity:GetHandle()` | ✅ | Get raw EntityHandle value |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Entity.Get(guid)` | ✅ | B | Look up entity by GUID string |
+| `Ext.Entity.IsReady()` | ✅ | B | Check if entity system ready |
+| `entity.Transform` | ✅ | B | Get transform component (Position, Rotation, Scale) |
+| `entity:GetComponent(name)` | ✅ | B | Get component by name (short or full) |
+| `entity:IsAlive()` | ✅ | B | Check if entity is valid |
+| `entity:GetHandle()` | ✅ | B | Get raw EntityHandle value |
 
 ### Component Property Access
 
@@ -238,14 +250,14 @@ end
 
 ### Debug/Discovery Functions
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Entity.DumpComponentRegistry()` | ✅ | Dump all registered components |
-| `Ext.Entity.DumpStorage(handle)` | ✅ | Test TryGet and dump EntityStorageData |
-| `Ext.Entity.DiscoverTypeIds()` | ✅ | Discover indices from TypeId globals |
-| `Ext.Entity.DumpTypeIds()` | ✅ | Dump all known TypeId addresses |
-| `Ext.Entity.RegisterComponent(name, idx, size)` | ✅ | Register discovered component |
-| `Ext.Entity.LookupComponent(name)` | ✅ | Look up component info by name |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Entity.DumpComponentRegistry()` | ✅ | B | Dump all registered components |
+| `Ext.Entity.DumpStorage(handle)` | ✅ | B | Test TryGet and dump EntityStorageData |
+| `Ext.Entity.DiscoverTypeIds()` | ✅ | B | Discover indices from TypeId globals |
+| `Ext.Entity.DumpTypeIds()` | ✅ | B | Dump all known TypeId addresses |
+| `Ext.Entity.RegisterComponent(name, idx, size)` | ✅ | B | Register discovered component |
+| `Ext.Entity.LookupComponent(name)` | ✅ | B | Look up component info by name |
 
 ---
 
@@ -253,14 +265,14 @@ end
 
 Access to the RPGStats system (weapons, armor, spells, etc.).
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Stats.Get(name)` | ✅ | Get StatsObject by name |
-| `Ext.Stats.GetAll(type?)` | ✅ | Get all stat names, optionally by type |
-| `Ext.Stats.Create(name, type, template?)` | ✅ | Create new stat object at runtime |
-| `Ext.Stats.Sync(name)` | ⚠️ | Mark stat as synced (prototype manager sync pending) |
-| `Ext.Stats.IsReady()` | ✅ | Check if stats system ready |
-| `Ext.Stats.DumpTypes()` | ✅ | Print all stat types to log |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Stats.Get(name)` | ✅ | B | Get StatsObject by name |
+| `Ext.Stats.GetAll(type?)` | ✅ | B | Get all stat names, optionally by type |
+| `Ext.Stats.Create(name, type, template?)` | ✅ | S | Create new stat object at runtime |
+| `Ext.Stats.Sync(name)` | ⚠️ | S | Mark stat as synced (prototype manager sync pending) |
+| `Ext.Stats.IsReady()` | ✅ | B | Check if stats system ready |
+| `Ext.Stats.DumpTypes()` | ✅ | B | Print all stat types to log |
 
 ### Ext.Stats.Create
 
@@ -292,15 +304,15 @@ Ext.Stats.Sync("MyMod_CustomSword")
 
 ### StatsObject Properties
 
-| Property | Status | Description |
-|----------|--------|-------------|
-| `stat.Name` | ✅ | Read-only stat name |
-| `stat.Type` | ✅ | Read-only stat type |
-| `stat.Level` | ✅ | Read-only stat level |
-| `stat.Using` | ✅ | Read-only parent stat |
-| `stat:GetProperty(name)` | ✅ | Get property value |
-| `stat:SetProperty(name, value)` | ✅ | Set property value |
-| `stat:Dump()` | ✅ | Print stat contents to log |
+| Property | Status | Ctx | Description |
+|----------|--------|-----|-------------|
+| `stat.Name` | ✅ | B | Read-only stat name |
+| `stat.Type` | ✅ | B | Read-only stat type |
+| `stat.Level` | ✅ | B | Read-only stat level |
+| `stat.Using` | ✅ | B | Read-only parent stat |
+| `stat:GetProperty(name)` | ✅ | B | Get property value |
+| `stat:SetProperty(name, value)` | ✅ | S | Set property value |
+| `stat:Dump()` | ✅ | B | Print stat contents to log |
 
 **Example:**
 ```lua
@@ -369,6 +381,99 @@ _P(tostring(combined))  -- "Backstab, Torch"
 
 ---
 
+## Ext.Types
+
+Full reflection API for type introspection across all registered types (userdata, components, enums).
+
+### Functions
+
+| Function | Ctx | Description |
+|----------|-----|-------------|
+| `GetAllTypes()` | B | Returns array of all ~2050 registered type names |
+| `GetTypeInfo(name)` | B | Returns rich metadata table for a type |
+| `GetObjectType(obj)` | B | Returns type name string for a userdata object |
+| `TypeOf(obj)` | B | Returns full type info table for an object |
+| `IsA(obj, typeName)` | B | Returns true if object is or inherits from type |
+| `Validate(obj)` | B | Returns true if userdata is still valid |
+
+### GetAllTypes()
+
+```lua
+-- Returns all registered types (userdata + 1999 components + 50+ enums)
+local types = Ext.Types.GetAllTypes()
+_P("Total types: " .. #types)  -- ~2050
+
+-- Filter by namespace
+for _, name in ipairs(types) do
+    if name:match("^eoc::") then
+        _P("EoC component: " .. name)
+    end
+end
+```
+
+### GetTypeInfo(name)
+
+Returns rich metadata depending on type kind:
+
+```lua
+-- Component type info
+local info = Ext.Types.GetTypeInfo("eoc::HealthComponent")
+_P(info.Kind)       -- "Component"
+_P(info.Size)       -- 24 (bytes)
+_P(info.TypeIndex)  -- 575
+_P(info.IsOneFrame) -- false
+_P(info.IsProxy)    -- false
+_P(info.Discovered) -- true
+
+-- Enum type info
+local info = Ext.Types.GetTypeInfo("DamageType")
+_P(info.Kind)        -- "Enum"
+_P(info.ValueCount)  -- 14
+_P(info.Values.Fire) -- 7
+for _, label in ipairs(info.Labels) do
+    _P(label)
+end
+
+-- Bitfield type info
+local info = Ext.Types.GetTypeInfo("AttributeFlags")
+_P(info.Kind)         -- "Bitfield"
+_P(info.AllowedFlags) -- Combined mask of all valid flags
+
+-- Userdata type info
+local info = Ext.Types.GetTypeInfo("bg3se.Entity")
+_P(info.Kind)        -- "Userdata"
+_P(info.HasMetatable)-- true
+_P(info.MethodCount) -- Number of methods
+```
+
+### TypeOf(obj)
+
+```lua
+-- Get type info for an object directly
+local entity = Ext.Entity.Get(GetHostCharacter())
+local info = Ext.Types.TypeOf(entity)
+_P(info.Name)  -- "bg3se.Entity"
+_P(info.Kind)  -- "Userdata"
+```
+
+### IsA(obj, typeName)
+
+```lua
+local entity = Ext.Entity.Get(GetHostCharacter())
+
+-- Direct type match
+Ext.Types.IsA(entity, "bg3se.Entity")  -- true
+
+-- Namespace match
+Ext.Types.IsA(entity, "bg3se")  -- true
+
+-- Substring match (inheritance pattern)
+local stat = Ext.Stats.Get("WPN_Longsword")
+Ext.Types.IsA(stat, "StatsObject")  -- true
+```
+
+---
+
 ## Ext.Events
 
 Event subscription system for game lifecycle events.
@@ -379,26 +484,26 @@ Event subscription system for game lifecycle events.
 > Ext.Events.Subscribe("LevelUp", fn)  -- ❌ Wrong (Subscribe is not on Events table)
 > ```
 
-| Event | Status | Event Data | Description |
-|-------|--------|------------|-------------|
-| `Ext.Events.SessionLoading` | ✅ | {} | Before save loads |
-| `Ext.Events.SessionLoaded` | ✅ | {} | After save loads |
-| `Ext.Events.ResetCompleted` | ✅ | {} | After reset command |
-| `Ext.Events.Tick` | ✅ | {DeltaTime} | Every game loop (~30hz) |
-| `Ext.Events.StatsLoaded` | ✅ | {} | After stats loaded |
-| `Ext.Events.ModuleLoadStarted` | ✅ | {} | Before mod scripts load |
-| `Ext.Events.GameStateChanged` | ✅ | {FromState, ToState} | State transitions |
-| `Ext.Events.KeyInput` | ✅ | {Key, Pressed, Modifiers, Character} | Keyboard input |
-| `Ext.Events.DoConsoleCommand` | ✅ | {Command, Prevent} | Console `!` command interception |
-| `Ext.Events.LuaConsoleInput` | ✅ | {Input, Prevent} | Raw Lua console input interception |
-| `Ext.Events.TurnStarted` | ✅ | {Entity, Round} | Combat turn started |
-| `Ext.Events.TurnEnded` | ✅ | {Entity} | Combat turn ended |
-| `Ext.Events.CombatStarted` | ✅ | {Entity} | Combat initiated |
-| `Ext.Events.CombatEnded` | ✅ | {Entity} | Combat resolved |
-| `Ext.Events.StatusApplied` | ✅ | {Entity, StatusId, Source} | Status effect applied |
-| `Ext.Events.StatusRemoved` | ✅ | {Entity} | Status effect removed |
-| `Ext.Events.EquipmentChanged` | ✅ | {Entity} | Equipment slot changed |
-| `Ext.Events.LevelUp` | ✅ | {Entity} | Character level increased |
+| Event | Status | Ctx | Event Data | Description |
+|-------|--------|-----|------------|-------------|
+| `Ext.Events.SessionLoading` | ✅ | B | {} | Before save loads |
+| `Ext.Events.SessionLoaded` | ✅ | B | {} | After save loads |
+| `Ext.Events.ResetCompleted` | ✅ | B | {} | After reset command |
+| `Ext.Events.Tick` | ✅ | B | {DeltaTime} | Every game loop (~30hz) |
+| `Ext.Events.StatsLoaded` | ✅ | B | {} | After stats loaded |
+| `Ext.Events.ModuleLoadStarted` | ✅ | B | {} | Before mod scripts load |
+| `Ext.Events.GameStateChanged` | ✅ | B | {FromState, ToState} | State transitions |
+| `Ext.Events.KeyInput` | ✅ | C | {Key, Pressed, Modifiers, Character} | Keyboard input |
+| `Ext.Events.DoConsoleCommand` | ✅ | B | {Command, Prevent} | Console `!` command interception |
+| `Ext.Events.LuaConsoleInput` | ✅ | B | {Input, Prevent} | Raw Lua console input interception |
+| `Ext.Events.TurnStarted` | ✅ | S | {Entity, Round} | Combat turn started |
+| `Ext.Events.TurnEnded` | ✅ | S | {Entity} | Combat turn ended |
+| `Ext.Events.CombatStarted` | ✅ | S | {Entity} | Combat initiated |
+| `Ext.Events.CombatEnded` | ✅ | S | {Entity} | Combat resolved |
+| `Ext.Events.StatusApplied` | ✅ | S | {Entity, StatusId, Source} | Status effect applied |
+| `Ext.Events.StatusRemoved` | ✅ | S | {Entity} | Status effect removed |
+| `Ext.Events.EquipmentChanged` | ✅ | S | {Entity} | Equipment slot changed |
+| `Ext.Events.LevelUp` | ✅ | S | {Entity} | Character level increased |
 
 ### Subscribing to Events
 
@@ -507,9 +612,9 @@ end)
 
 ### Convenience Functions
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.OnNextTick(callback)` | ✅ | Run callback on next tick (once) |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.OnNextTick(callback)` | ✅ | B | Run callback on next tick (once) |
 
 ---
 
@@ -521,13 +626,13 @@ Variable persistence system with support for both mod-level storage and entity-a
 
 File-based persistence for mod data across sessions.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Mods[ModTable].PersistentVars` | ✅ | Per-mod persistent storage table |
-| `Ext.Vars.SyncPersistentVars()` | ✅ | Force save all PersistentVars |
-| `Ext.Vars.IsPersistentVarsLoaded()` | ✅ | Check if vars loaded |
-| `Ext.Vars.ReloadPersistentVars()` | ✅ | Force reload from disk |
-| `Ext.Vars.MarkDirty()` | ✅ | Mark for auto-save |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Mods[ModTable].PersistentVars` | ✅ | B | Per-mod persistent storage table |
+| `Ext.Vars.SyncPersistentVars()` | ✅ | B | Force save all PersistentVars |
+| `Ext.Vars.IsPersistentVarsLoaded()` | ✅ | B | Check if vars loaded |
+| `Ext.Vars.ReloadPersistentVars()` | ✅ | B | Force reload from disk |
+| `Ext.Vars.MarkDirty()` | ✅ | B | Mark for auto-save |
 
 **Storage Location:** `~/Library/Application Support/BG3SE/persistentvars/{ModTable}.json`
 
@@ -543,13 +648,13 @@ Ext.Vars.MarkDirty()  -- Will auto-save
 
 Attach custom data to game entities with automatic persistence.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Vars.RegisterUserVariable(name, opts)` | ✅ | Register a variable prototype |
-| `Ext.Vars.GetEntitiesWithVariable(name)` | ✅ | Get all entities with a variable |
-| `Ext.Vars.SyncUserVariables()` | ✅ | Force save user variables |
-| `Ext.Vars.DirtyUserVariables([guid], [key])` | ✅ | Mark variables as dirty |
-| `entity.Vars.VarName` | ✅ | Get/set entity variable |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Vars.RegisterUserVariable(name, opts)` | ✅ | B | Register a variable prototype |
+| `Ext.Vars.GetEntitiesWithVariable(name)` | ✅ | B | Get all entities with a variable |
+| `Ext.Vars.SyncUserVariables()` | ✅ | B | Force save user variables |
+| `Ext.Vars.DirtyUserVariables([guid], [key])` | ✅ | B | Mark variables as dirty |
+| `entity.Vars.VarName` | ✅ | B | Get/set entity variable |
 
 **Registration Options:**
 | Option | Default | Description |
@@ -595,12 +700,12 @@ end
 
 Store global mod data not attached to any specific entity. Ideal for settings, counters, and mod state.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Vars.RegisterModVariable(uuid, name, opts)` | ✅ | Register a mod variable prototype |
-| `Ext.Vars.GetModVariables(uuid)` | ✅ | Get mod variable proxy |
-| `Ext.Vars.SyncModVariables()` | ✅ | Force save mod variables |
-| `Ext.Vars.DirtyModVariables([uuid], [key])` | ✅ | Mark variables as dirty |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Vars.RegisterModVariable(uuid, name, opts)` | ✅ | B | Register a mod variable prototype |
+| `Ext.Vars.GetModVariables(uuid)` | ✅ | B | Get mod variable proxy |
+| `Ext.Vars.SyncModVariables()` | ✅ | B | Force save mod variables |
+| `Ext.Vars.DirtyModVariables([uuid], [key])` | ✅ | B | Mark variables as dirty |
 
 **Storage Location:** `~/Library/Application Support/BG3SE/modvars.json`
 
@@ -639,14 +744,14 @@ Ext.Vars.SyncModVariables()
 
 Timer system for delayed and repeating function calls.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Timer.WaitFor(delay, callback, [repeat])` | ✅ | Create timer (delay in ms) |
-| `Ext.Timer.Cancel(handle)` | ✅ | Cancel a timer |
-| `Ext.Timer.Pause(handle)` | ✅ | Pause a timer |
-| `Ext.Timer.Resume(handle)` | ✅ | Resume a paused timer |
-| `Ext.Timer.IsPaused(handle)` | ✅ | Check if timer is paused |
-| `Ext.Timer.MonotonicTime()` | ✅ | Get monotonic clock (ms) |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Timer.WaitFor(delay, callback, [repeat])` | ✅ | B | Create timer (delay in ms) |
+| `Ext.Timer.Cancel(handle)` | ✅ | B | Cancel a timer |
+| `Ext.Timer.Pause(handle)` | ✅ | B | Pause a timer |
+| `Ext.Timer.Resume(handle)` | ✅ | B | Resume a paused timer |
+| `Ext.Timer.IsPaused(handle)` | ✅ | B | Check if timer is paused |
+| `Ext.Timer.MonotonicTime()` | ✅ | B | Get monotonic clock (ms) |
 
 **Example:**
 ```lua
@@ -670,20 +775,20 @@ Ext.Timer.Cancel(repeater)
 
 Access game object templates (Character, Item, Scenery, etc.). Templates define the base properties for game objects before instantiation.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Template.Get(guid)` | ✅ | Cascading search for template by GUID |
-| `Ext.Template.GetRootTemplate(guid)` | ✅ | Get template from GlobalTemplateBank |
-| `Ext.Template.GetCacheTemplate(guid)` | ✅ | Get template from CacheTemplateManager |
-| `Ext.Template.GetAllRootTemplates()` | ✅ | Get all templates from GlobalTemplateBank |
-| `Ext.Template.GetAllCacheTemplates()` | ✅ | Get all templates from CacheTemplateManager |
-| `Ext.Template.GetAllLocalCacheTemplates()` | ✅ | Get all templates from LocalCacheTemplates |
-| `Ext.Template.GetAllLocalTemplates()` | ✅ | Get all templates from LocalTemplateManager |
-| `Ext.Template.GetCount([managerType])` | ✅ | Get template count (Root, Cache, Local, LocalCache) |
-| `Ext.Template.GetType(template)` | ✅ | Get template type name |
-| `Ext.Template.IsReady()` | ✅ | Check if template manager is ready |
-| `Ext.Template.LoadFridaCapture()` | ✅ | Load captured templates from Frida |
-| `Ext.Template.HasFridaCapture()` | ✅ | Check if Frida capture exists |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Template.Get(guid)` | ✅ | B | Cascading search for template by GUID |
+| `Ext.Template.GetRootTemplate(guid)` | ✅ | B | Get template from GlobalTemplateBank |
+| `Ext.Template.GetCacheTemplate(guid)` | ✅ | B | Get template from CacheTemplateManager |
+| `Ext.Template.GetAllRootTemplates()` | ✅ | B | Get all templates from GlobalTemplateBank |
+| `Ext.Template.GetAllCacheTemplates()` | ✅ | B | Get all templates from CacheTemplateManager |
+| `Ext.Template.GetAllLocalCacheTemplates()` | ✅ | B | Get all templates from LocalCacheTemplates |
+| `Ext.Template.GetAllLocalTemplates()` | ✅ | B | Get all templates from LocalTemplateManager |
+| `Ext.Template.GetCount([managerType])` | ✅ | B | Get template count (Root, Cache, Local, LocalCache) |
+| `Ext.Template.GetType(template)` | ✅ | B | Get template type name |
+| `Ext.Template.IsReady()` | ✅ | B | Check if template manager is ready |
+| `Ext.Template.LoadFridaCapture()` | ✅ | B | Load captured templates from Frida |
+| `Ext.Template.HasFridaCapture()` | ✅ | B | Check if Frida capture exists |
 
 ### Template Object Properties
 
@@ -727,16 +832,16 @@ end
 
 ## Ext.Osiris
 
-Interface to the Osiris scripting engine.
+Interface to the Osiris scripting engine. **Server-only** - Osiris runs on the server context only.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Osiris.RegisterListener(event, arity, timing, callback)` | ✅ | Register Osiris event callback |
-| `Ext.Osiris.NewQuery(name, signature, handler)` | ✅ | Register custom query (returns values) |
-| `Ext.Osiris.NewCall(name, signature, handler)` | ✅ | Register custom call (no return) |
-| `Ext.Osiris.NewEvent(name, signature)` | ✅ | Register custom event |
-| `Ext.Osiris.RaiseEvent(name, ...)` | ✅ | Raise a custom event to dispatch to listeners |
-| `Ext.Osiris.GetCustomFunctions()` | ✅ | Get table of all registered custom functions (debug) |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Osiris.RegisterListener(event, arity, timing, callback)` | ✅ | S | Register Osiris event callback |
+| `Ext.Osiris.NewQuery(name, signature, handler)` | ✅ | S | Register custom query (returns values) |
+| `Ext.Osiris.NewCall(name, signature, handler)` | ✅ | S | Register custom call (no return) |
+| `Ext.Osiris.NewEvent(name, signature)` | ✅ | S | Register custom event |
+| `Ext.Osiris.RaiseEvent(name, ...)` | ✅ | S | Raise a custom event to dispatch to listeners |
+| `Ext.Osiris.GetCustomFunctions()` | ✅ | S | Get table of all registered custom functions (debug) |
 
 **Timing values:** `"before"` or `"after"`
 
@@ -805,14 +910,14 @@ end
 
 ## Ext.Input
 
-Keyboard input capture and injection (macOS CGEventTap).
+Keyboard input capture and injection (macOS CGEventTap). **Client-only** - input handling runs in client context.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Input.RegisterHotkey(key, callback)` | ✅ | Register hotkey handler |
-| `Ext.Input.UnregisterHotkey(key)` | ✅ | Remove hotkey handler |
-| `Ext.Input.InjectKey(key, pressed)` | ✅ | Simulate key press/release |
-| `Ext.Input.IsKeyPressed(key)` | ✅ | Check current key state |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Input.RegisterHotkey(key, callback)` | ✅ | C | Register hotkey handler |
+| `Ext.Input.UnregisterHotkey(key)` | ✅ | C | Remove hotkey handler |
+| `Ext.Input.InjectKey(key, pressed)` | ✅ | C | Simulate key press/release |
+| `Ext.Input.IsKeyPressed(key)` | ✅ | C | Check current key state |
 
 ---
 
@@ -846,12 +951,12 @@ local normalized = Ext.Math.Normalize(v1)
 
 Low-level memory access for debugging and offset discovery.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Memory.Read(addr, size)` | ✅ | Read bytes as hex string |
-| `Ext.Memory.ReadString(addr, maxLen)` | ✅ | Read null-terminated string |
-| `Ext.Memory.Search(pattern, start, size)` | ✅ | Search for byte pattern |
-| `Ext.Memory.GetModuleBase(name)` | ✅ | Get base address of loaded module |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Memory.Read(addr, size)` | ✅ | B | Read bytes as hex string |
+| `Ext.Memory.ReadString(addr, maxLen)` | ✅ | B | Read null-terminated string |
+| `Ext.Memory.Search(pattern, start, size)` | ✅ | B | Search for byte pattern |
+| `Ext.Memory.GetModuleBase(name)` | ✅ | B | Get base address of loaded module |
 
 ---
 
@@ -859,17 +964,17 @@ Low-level memory access for debugging and offset discovery.
 
 Safe memory introspection for offset discovery.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Ext.Debug.ReadPtr(addr)` | ✅ | Read pointer (safe) |
-| `Ext.Debug.ReadU32(addr)` | ✅ | Read uint32 |
-| `Ext.Debug.ReadI32(addr)` | ✅ | Read int32 |
-| `Ext.Debug.ReadU64(addr)` | ✅ | Read uint64 |
-| `Ext.Debug.ReadFloat(addr)` | ✅ | Read float |
-| `Ext.Debug.ReadString(addr, max)` | ✅ | Read C string |
-| `Ext.Debug.ProbeStruct(base, start, end, stride)` | ✅ | Bulk offset discovery |
-| `Ext.Debug.HexDump(addr, size)` | ✅ | Hex dump memory |
-| `Ext.Debug.FindArrayPattern(base, range)` | ✅ | Find array patterns |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Debug.ReadPtr(addr)` | ✅ | B | Read pointer (safe) |
+| `Ext.Debug.ReadU32(addr)` | ✅ | B | Read uint32 |
+| `Ext.Debug.ReadI32(addr)` | ✅ | B | Read int32 |
+| `Ext.Debug.ReadU64(addr)` | ✅ | B | Read uint64 |
+| `Ext.Debug.ReadFloat(addr)` | ✅ | B | Read float |
+| `Ext.Debug.ReadString(addr, max)` | ✅ | B | Read C string |
+| `Ext.Debug.ProbeStruct(base, start, end, stride)` | ✅ | B | Bulk offset discovery |
+| `Ext.Debug.HexDump(addr, size)` | ✅ | B | Hex dump memory |
+| `Ext.Debug.FindArrayPattern(base, range)` | ✅ | B | Find array patterns |
 
 ---
 
@@ -891,17 +996,17 @@ Available in the console for quick debugging:
 
 ## Osi Namespace
 
-Osiris function bindings. Key functions return real game data discovered by observing Osiris events.
+Osiris function bindings. Key functions return real game data discovered by observing Osiris events. **Server-only** - Osiris runs on the server context.
 
-| API | Status | Description |
-|-----|--------|-------------|
-| `Osi.DB_Players:Get(nil)` | ✅ | Returns real player GUIDs |
-| `Osi.IsTagged(char, tag)` | ✅ | Returns true for players in active dialog |
-| `Osi.DialogGetNumberOfInvolvedPlayers(id)` | ✅ | Returns 1 (single-player) |
-| `Osi.SpeakerGetDialog(char, idx)` | ✅ | Returns current dialog resource |
-| `Osi.GetDistanceTo(char1, char2)` | ⏳ | Stub - always returns 0 |
-| `Osi.DialogRequestStop(char)` | ⏳ | Stub - no-op |
-| `Osi.QRY_StartDialog_Fixed(res, char)` | ⏳ | Stub - returns false |
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Osi.DB_Players:Get(nil)` | ✅ | S | Returns real player GUIDs |
+| `Osi.IsTagged(char, tag)` | ✅ | S | Returns true for players in active dialog |
+| `Osi.DialogGetNumberOfInvolvedPlayers(id)` | ✅ | S | Returns 1 (single-player) |
+| `Osi.SpeakerGetDialog(char, idx)` | ✅ | S | Returns current dialog resource |
+| `Osi.GetDistanceTo(char1, char2)` | ⏳ | S | Stub - always returns 0 |
+| `Osi.DialogRequestStop(char)` | ⏳ | S | Stub - no-op |
+| `Osi.QRY_StartDialog_Fixed(res, char)` | ⏳ | S | Stub - returns false |
 
 ---
 

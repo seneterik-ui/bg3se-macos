@@ -67,6 +67,11 @@ EnumTypeInfo* enum_registry_find_by_name(const char *name);
 // Get number of registered types
 int enum_registry_get_count(void);
 
+// Iterate all registered enum types
+// Callback receives EnumTypeInfo pointer, returns true to continue
+typedef bool (*EnumIteratorFn)(const EnumTypeInfo *info, void *userdata);
+void enum_registry_iterate(EnumIteratorFn callback, void *userdata);
+
 // Look up label for a value, returns NULL if not found
 const char* enum_find_label(int type_index, uint64_t value);
 
