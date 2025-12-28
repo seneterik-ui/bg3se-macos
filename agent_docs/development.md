@@ -14,22 +14,19 @@ cd build && cmake .. && cmake --build .
 tail -f "/Users/tomdimino/Library/Application Support/BG3SE/bg3se.log"
 ```
 
-### Log Monitoring Script
+### Log Monitoring
 
-For Claude Code subagents and cleaner log output:
+Filter logs for specific patterns:
 
 ```bash
-# Basic usage (excludes noisy Osiris events)
-./scripts/tail_log.sh --no-osiris
+# Exclude noisy Osiris events
+tail -f "/Users/tomdimino/Library/Application Support/BG3SE/bg3se.log" | grep -v "\[Osiris\]"
 
-# Filter for specific patterns
-./scripts/tail_log.sh -g "ERROR\|WARN"
+# Filter for errors/warnings only
+tail -f "/Users/tomdimino/Library/Application Support/BG3SE/bg3se.log" | grep -E "ERROR|WARN"
 
-# Show last N lines, no follow
-./scripts/tail_log.sh -n 100
-
-# All options
-./scripts/tail_log.sh [-n LINES] [-f] [-g GREP_PATTERN] [--no-osiris]
+# Session-based logs (v0.36.12+)
+tail -f "/Users/tomdimino/Library/Application Support/BG3SE/logs/latest.log"
 ```
 
 ## Live Console (Rapid Iteration)

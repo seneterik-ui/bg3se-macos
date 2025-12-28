@@ -1,3 +1,6 @@
 [submodule "lib/Dobby"]
 	path = lib/Dobby
 	url = https://github.com/jmpews/Dobby.git
+[submodule "lib/imgui"]
+	path = lib/imgui
+	url = https://github.com/ocornut/imgui.git

@@ -37,13 +37,25 @@ static inline uint16_t entity_get_type(EntityHandle h) {
 
 ## Capturing EntityWorld
 
+### Server Singleton (esv::EocServer)
+
+| Symbol | Address | Notes |
+|--------|---------|-------|
+| `esv::EocServer::m_ptr` | `0x10898e8b8` | Server-side EoCServer singleton |
+| Mangled | `__ZN3esv9EocServer5m_ptrE` | Global pointer in `__DATA` segment |
+| EntityWorld offset | `+0x288` | Within EoCServer struct |
+
+### Client Singleton (ecl::EocClient)
+
+| Symbol | Address | Notes |
+|--------|---------|-------|
+| `ecl::EocClient::m_ptr` | `0x10898c968` | Client-side EoCClient singleton |
+| Mangled | `__ZN3ecl9EocClient5m_ptrE` | Global pointer in `__DATA` segment |
+| EntityWorld offset | `+0x288` | Within EoCClient struct |
+
 ### Approach 1: Direct Memory Read (RECOMMENDED)
 
-**Symbol:** `esv::EocServer::m_ptr`
-- **Address:** `0x10898e8b8`
-- **Mangled:** `__ZN3esv9EocServer5m_ptrE`
-- **Type:** Global pointer to EoCServer singleton in `__DATA` segment
-- **EntityWorld offset:** `0x288` (within EoCServer struct)
+**Server context:**
 
 This is the most reliable approach - no hooking required:
 

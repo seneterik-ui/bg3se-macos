@@ -902,6 +902,127 @@ end
 
 ---
 
+## Ext.Resource
+
+Access game resources (Visual, Sound, Material, Texture, Dialog, etc.). Resources are non-GUID assets loaded by the ResourceManager.
+
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.Resource.Get(resourceId, type)` | ✅ | B | Get a resource by ID and type |
+| `Ext.Resource.GetAll(type)` | ✅ | B | Get all resources of a type |
+| `Ext.Resource.GetTypes()` | ✅ | B | Get list of supported resource types |
+| `Ext.Resource.GetCount(type)` | ✅ | B | Get count of resources for a type |
+| `Ext.Resource.IsReady()` | ✅ | B | Check if ResourceManager is available |
+
+### Supported Resource Types (34 types)
+
+```
+Visual, VisualSet, Animation, AnimationBlueprint, AnimationSet,
+Skeleton, Physics, Material, Texture, Script, Effect, Sound,
+MaterialSet, MeshProxy, Terrain, IKRig, Dialog, VoiceBark,
+TileSet, MaterialPreset, DiffusionProfile, CharacterVisual,
+Lighting, Atmosphere, LevelMap, ColorPreset, ColorList,
+TextureMerge, FCurve, BlendSpace, Timeline, ClothCollider,
+ClothAsset, SkeletonMirrorTable
+```
+
+### Resource Object Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `Type` | string | Resource type name |
+| `ResourceId` | string | Resource ID (resolved from FixedString) |
+| `_id` | number | Raw FixedString ID |
+| `_ptr` | userdata | Raw pointer (for debugging) |
+| `_ptrHex` | string | Pointer as hex string |
+
+### Example
+
+```lua
+-- Check if ResourceManager is ready
+if Ext.Resource.IsReady() then
+    -- Get all Visual resources
+    local visuals = Ext.Resource.GetAll("Visual")
+    _P("Found " .. #visuals .. " Visual resources")
+
+    -- Get supported types
+    local types = Ext.Resource.GetTypes()
+    _P("Supported types: " .. table.concat(types, ", "))
+
+    -- Get count for a specific type
+    local count = Ext.Resource.GetCount("Material")
+    _P("Material resources: " .. count)
+end
+```
+
+---
+
+## Ext.StaticData
+
+Access immutable game data (Feats, Races, Backgrounds, Origins, etc.). StaticData entries are loaded from game files and cannot be modified at runtime.
+
+| API | Status | Ctx | Description |
+|-----|--------|-----|-------------|
+| `Ext.StaticData.GetAll(type)` | ✅ | B | Get all entries of a type as array |
+| `Ext.StaticData.Get(type, guid)` | ✅ | B | Get single entry by GUID string |
+| `Ext.StaticData.GetCount(type)` | ✅ | B | Get count of entries for a type |
+| `Ext.StaticData.GetTypes()` | ✅ | B | Get list of available types |
+| `Ext.StaticData.IsReady()` | ✅ | B | Check if StaticData is available |
+
+### Supported Types (9 types)
+
+| Type | Description |
+|------|-------------|
+| `Feat` | Character feats and abilities |
+| `Race` | Playable races |
+| `Background` | Character backgrounds |
+| `Origin` | Origin characters |
+| `God` | Deity options |
+| `Class` | Character classes |
+| `Progression` | Level progression data |
+| `ActionResource` | Action resources (spell slots, etc.) |
+| `FeatDescription` | Feat description text |
+
+### StaticData Entry Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `ResourceUUID` | string | Entry GUID |
+| `Name` | string | Internal name (if available) |
+| `DisplayName` | string | Display name (if available) |
+| `Type` | string | Static data type |
+| `_ptr` | userdata | Raw pointer (for debugging) |
+
+### Example
+
+```lua
+-- List all feats
+local feats = Ext.StaticData.GetAll("Feat")
+_P("Found " .. #feats .. " feats")
+
+for i, feat in ipairs(feats) do
+    if i <= 5 then
+        _P(feat.ResourceUUID .. " -> " .. (feat.Name or "unnamed"))
+    end
+end
+
+-- Get a specific race by GUID
+local human = Ext.StaticData.Get("Race", "0eb594cb-8820-4be6-a58d-8be7a1a98fba")
+if human then
+    _P("Found race: " .. (human.DisplayName or human.Name or "unknown"))
+end
+
+-- Check counts
+for _, type in ipairs(Ext.StaticData.GetTypes()) do
+    local count = Ext.StaticData.GetCount(type)
+    _P(type .. ": " .. count .. " entries")
+end
+```
+
+**Note:** StaticData uses ForceCapture to populate managers at runtime. If `IsReady()` returns false, static data may not be fully loaded yet.
+
+---
+
 ## Ext.Osiris
 
 Interface to the Osiris scripting engine. **Server-only** - Osiris runs on the server context only.

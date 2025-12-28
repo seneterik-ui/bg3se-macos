@@ -31,13 +31,28 @@ This guide covers installation, building, and running BG3SE-macOS.
 ## Building
 
 ```bash
+# Clone with submodules
+git clone --recursive https://github.com/tdimino/bg3se-macos.git
 cd bg3se-macos
-./scripts/build.sh
+
+# If you already cloned without --recursive:
+git submodule update --init --recursive
+
+# Build with CMake
+mkdir -p build && cd build
+cmake ..
+cmake --build .
 ```
 
-This builds a universal binary supporting both ARM64 (native) and x86_64 (Rosetta). Dobby will be built automatically if not present.
+This builds a universal binary supporting both ARM64 (native) and x86_64 (Rosetta).
 
-Output: `build/lib/libbg3se.dylib`
+**Output:** `build/lib/libbg3se.dylib`
+
+**Verify build succeeded:**
+```bash
+ls -la build/lib/libbg3se.dylib    # Should be ~3MB
+file build/lib/libbg3se.dylib      # Should show arm64 and x86_64
+```
 
 ## Installation (Steam)
 
@@ -75,10 +90,20 @@ SE mods work automatically—just install them like any other mod:
 
 ## Verifying Installation
 
-Check `~/Library/Application Support/BG3SE/bg3se.log` for injection and mod loading logs:
+### Log Locations
+
+As of v0.36.12, BG3SE uses session-based logging:
+
+| Location | Description |
+|----------|-------------|
+| `~/Library/Application Support/BG3SE/logs/latest.log` | Symlink to current session |
+| `~/Library/Application Support/BG3SE/logs/YYYY-MM-DD_HH-MM-SS.log` | Individual session logs |
+| `~/Library/Application Support/BG3SE/bg3se.log` | Legacy location (deprecated) |
+
+### Example Log Output
 
 ```
-=== BG3SE-macOS v0.30.0 initialized ===
+=== BG3SE-macOS v0.36.17 initialized ===
 Running in process: Baldur's Gate 3 (PID: XXXXX)
 Architecture: ARM64 (Apple Silicon)
 Dobby inline hooking: enabled

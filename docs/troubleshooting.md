@@ -8,7 +8,9 @@ Common issues and solutions for BG3SE-macOS.
 
 **Solutions:**
 
-1. Check `~/Library/Application Support/BG3SE/bg3se.log` for errors
+1. Check logs for errors:
+   - Session logs: `~/Library/Application Support/BG3SE/logs/latest.log`
+   - Legacy: `~/Library/Application Support/BG3SE/bg3se.log`
 2. Verify the dylib is built:
    ```bash
    file build/lib/libbg3se.dylib
@@ -43,7 +45,7 @@ Common issues and solutions for BG3SE-macOS.
 **Solutions:**
 
 1. Check that hooked functions return the original function's return value
-2. Review `~/Library/Application Support/BG3SE/bg3se.log` for hook call/return messages
+2. Review `~/Library/Application Support/BG3SE/logs/latest.log` for hook call/return messages
 3. Look for `COsiris::Load returned: X` messages
 
 ## Mod Not Loading
