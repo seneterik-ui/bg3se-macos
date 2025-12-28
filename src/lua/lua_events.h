@@ -11,6 +11,7 @@
 #include <lua.h>
 #include <lauxlib.h>
 #include <stdint.h>
+#include <stdbool.h>
 
 // ============================================================================
 // Event Types
