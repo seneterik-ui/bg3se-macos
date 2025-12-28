@@ -951,6 +951,23 @@ int component_property_get_layout_count(void) {
     return g_LayoutCount;
 }
 
+const ComponentLayoutDef *component_property_get_layout_at(int index) {
+    if (index < 0 || index >= g_LayoutCount) {
+        return NULL;
+    }
+    return &g_Layouts[index];
+}
+
+void component_property_iterate_layouts(ComponentLayoutIteratorFn callback, void *userdata) {
+    if (!callback) return;
+
+    for (int i = 0; i < g_LayoutCount; i++) {
+        if (!callback(&g_Layouts[i], userdata)) {
+            break;  // Callback returned false, stop iteration
+        }
+    }
+}
+
 void component_property_dump_layouts(void) {
     LOG_ENTITY_DEBUG("=== Component Property Layouts (%d total) ===", g_LayoutCount);
     for (int i = 0; i < g_LayoutCount; i++) {

@@ -53,6 +53,7 @@ add_library(bg3se SHARED
     src/core/logging.c
     src/core/safe_memory.c
     src/lua/lua_ext.c
+    src/lua/lua_ide_helpers.c
     src/lua/lua_json.c
     src/lua/lua_context.c
     src/lua/lua_osiris.c

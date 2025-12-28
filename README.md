@@ -44,7 +44,7 @@ SE mods work automatically—just install them like any other mod:
 
 ## Status
 
-**Version:** v0.36.16 | **Feature Parity:** ~82%
+**Version:** v0.36.17 | **Feature Parity:** ~82%
 
 | Feature | Status |
 |---------|--------|
@@ -61,7 +61,7 @@ SE mods work automatically—just install them like any other mod:
 | Ext.Input | ✅ Hotkeys, key injection |
 | Ext.Math | ✅ Vector/matrix operations, **16 quaternion functions**, scalar utils |
 | Ext.Enums | ✅ 14 enum/bitfield types |
-| Ext.Types | ✅ Full reflection API (6 functions: GetAllTypes, GetTypeInfo, TypeOf, IsA, Validate) |
+| Ext.Types | ✅ Full reflection API (9 functions), **GenerateIdeHelpers** for VS Code IntelliSense |
 | Ext.StaticData | ✅ **All 9 types** (Feat, Race, Background, Origin, God, Class, Progression, ActionResource, FeatDescription) via ForceCapture |
 | Ext.Resource | ✅ Get, GetAll, GetTypes, GetCount (34 resource types) |
 | Ext.Template | ✅ **Auto-capture**, iteration (Cache/LocalCache), GUID resolution |

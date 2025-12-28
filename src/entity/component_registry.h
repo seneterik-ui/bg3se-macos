@@ -122,6 +122,12 @@ bool component_registry_register(const char *name, ComponentTypeIndex index,
 int component_registry_count(void);
 
 /**
+ * Get component info by index (for iteration).
+ * Returns NULL if index out of bounds.
+ */
+const ComponentInfo *component_registry_get_at(int index);
+
+/**
  * Iterate all discovered components.
  * Callback receives ComponentInfo pointer, returns true to continue.
  */

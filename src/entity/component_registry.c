@@ -292,6 +292,13 @@ int component_registry_count(void) {
     return g_ComponentCount;
 }
 
+const ComponentInfo *component_registry_get_at(int index) {
+    if (index < 0 || index >= g_ComponentCount) {
+        return NULL;
+    }
+    return &g_Components[index];
+}
+
 void component_registry_iterate(ComponentIteratorFn callback, void *userdata) {
     if (!callback) return;
 

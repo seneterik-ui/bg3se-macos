@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.16
+## Current Status: v0.36.17
 
 **Overall Feature Parity: ~82%** (based on comprehensive API function count analysis)
 
@@ -42,7 +42,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Timer` | ✅ Full (13) | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, IsPaused, MonotonicTime, MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, IsGamePaused, +6 persistent (20) | **100%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
 | `Ext.Vars` | ✅ Full (8) | ✅ User + Mod Variables (12) | **100%** | 2.6 |
-| `Ext.Types` | ✅ Full (15) | ✅ GetAllTypes, GetObjectType, GetTypeInfo, Validate, TypeOf, IsA (6) | **70%** | 7 |
+| `Ext.Types` | ✅ Full (15) | ✅ GetAllTypes, GetObjectType, GetTypeInfo, Validate, TypeOf, IsA, GetComponentLayout, GetAllLayouts, GenerateIdeHelpers (9) | **90%** | 7 |
 | `Ext.Enums` | ✅ Full | ✅ 14 enum/bitfield types | **100%** | 7 |
 | `Ext.Math` | ✅ Full (59) | ✅ 57 functions (vectors, matrices, 16 quaternions, scalars) | **97%** | 7.5 |
 | `Ext.Input` | ✅ Full | ✅ CGEventTap capture, hotkeys (8 macOS-specific) | **100%** | 9 |
@@ -991,28 +991,48 @@ tostring(bf)  -- Comma-separated labels
 ```
 
 ### 7.3 Full Type Definitions
-**Status:** ❌ Not Started
+**Status:** ✅ Complete (v0.36.17) - GenerateIdeHelpers API
 
-Complete Lua type annotations for IDE support and runtime validation.
+Complete Lua type annotations for IDE support via runtime generation.
 
-**Features:**
-- LuaLS annotations for all Ext.* APIs
-- Entity component type definitions
-- Osiris function signatures
-- Enum definitions (DamageType, StatusType, etc.)
+**Implemented API:**
+```lua
+-- Generate LuaLS-compatible type annotations file
+Ext.Types.GenerateIdeHelpers("ExtIdeHelpers.lua")  -- Returns content, saves to file
 
-**Deliverables:**
-- `types/` folder with .lua definition files
-- Integration with VS Code Lua extension
-- Runtime type checking (optional)
+-- Query component property layouts
+local layout = Ext.Types.GetComponentLayout("eoc::HealthComponent")
+-- Returns: {Name, ShortName, Size, Properties=[{Name, Type, Offset}...]}
+
+-- Get all available layouts
+local layouts = Ext.Types.GetAllLayouts()  -- Returns array of all 534 layouts
+```
+
+**Generated Output:**
+- `---@meta` header with `---@diagnostic disable`
+- All 14 enum types as `---@alias` definitions
+- All 1,999 component types as `---@class` annotations
+- 534 components with property `---@field` annotations
+- Ext.* namespace with all functions
+
+**Console command:** `!ide_helpers [filename]`
 
 ### 7.4 IDE Integration
-**Status:** ❌ Not Started
+**Status:** ✅ Complete (v0.36.17)
 
-- Autocomplete for all APIs
-- Inline documentation
-- Error detection
-- Go-to-definition support
+- Autocomplete for all APIs via LuaLS
+- Type hints for component properties
+- Enum value completion
+
+**Setup for VS Code:**
+```json
+// .luarc.json
+{
+  "runtime.version": "Lua 5.4",
+  "workspace.library": ["./ExtIdeHelpers.lua"],
+  "diagnostics.globals": ["Ext", "Osi", "Mods"]
+}
+```
 
 ### 7.5 Ext.Math Library
 **Status:** ❌ Not Started
@@ -1397,6 +1417,8 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.17 | 2025-12-28 | **IDE Types** - GenerateIdeHelpers for VS Code IntelliSense, GetComponentLayout, GetAllLayouts (Issue #7) |
+| v0.36.16 | 2025-12-28 | **Ext.Types Full Reflection** - GetAllTypes (~2050), GetTypeInfo, TypeOf, IsA, Validate (Issue #48) |
 | v0.36.15 | 2025-12-27 | **API Context Annotations** - Context column (B/S/C) added to all API tables in api-reference.md (Issue #46) |
 | v0.36.14 | 2025-12-27 | **Dual EntityWorld Complete** - Client singleton discovered (`0x10898c968`), both client + server worlds auto-captured |
 | v0.36.11 | 2025-12-26 | **30 Events Complete** - 11 new events (death, spell, hit, rest, approval, lifecycle), completes Issue #51 |
@@ -1498,7 +1520,7 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | **#36 IMGUI** | Debug Overlay | **70%** | Official ImGui Metal backend |
 | **#42 Debugger** | VS Code DAP | **60%** | DAP reference implementations |
 | **#38 Audio** | WWise Audio | **45%** | WWise SDK documented |
-| **#7 IDE Types** | LuaLS Annotations | **50%** | Build on #48 |
+| ~~#7 IDE Types~~ | LuaLS Annotations | ✅ **DONE** | GenerateIdeHelpers API |
 
 **Complex Integrations (25-50% acceleration, 4+ weeks):**
 | Issue | Feature | Acceleration | Key Technique |
@@ -1514,6 +1536,7 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | ~~#32~~ | Stats Sync | ✅ DONE |
 | ~~#40~~ | StaticData | ✅ DONE (auto-capture) |
 | ~~#41~~ | Resource/Template | ✅ DONE |
+| ~~#7~~ | IDE Types | ✅ DONE (v0.36.17) |
 | ~~#48~~ | Ext.Types | ✅ DONE (v0.36.16) |
 | ~~#51~~ | Ext.Events | ✅ DONE (v0.36.11) |
 | ~~#53~~ | Stats Functors | ✅ DONE (v0.36.15) |
@@ -1572,7 +1595,7 @@ FeatManager::GetFeats prologue @ 0x101b752b4:
 | 9 | **#36 Ext.IMGUI** | 70% | Official Metal backend |
 | 10 | **#38 Ext.Audio** | 45% | WWise documented |
 | 11 | **#42 Debugger** | 60% | DAP reference exists |
-| 12 | **#7 IDE Types** | 50% | Builds on #48 |
+| 12 | ~~#7 IDE Types~~ | ✅ Complete | GenerateIdeHelpers API |
 
 **Phase 4: Complex Integrations (2-4 weeks each)**
 

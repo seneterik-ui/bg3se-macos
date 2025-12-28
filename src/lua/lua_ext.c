@@ -6,11 +6,13 @@
 
 #include "lua_ext.h"
 #include "lua_context.h"
+#include "lua_ide_helpers.h"
 #include "version.h"
 #include "logging.h"
 #include "../console/console.h"
 #include "../io/path_override.h"
 #include "../entity/component_registry.h"
+#include "../entity/component_property.h"
 #include "../enum/enum_registry.h"
 
 #include <stdio.h>
@@ -730,6 +732,119 @@ static int lua_types_typeof(lua_State *L) {
     return lua_types_gettypeinfo(L);
 }
 
+// Helper: Convert FieldType to string for IDE helpers
+static const char* field_type_to_string(FieldType type) {
+    switch (type) {
+        case FIELD_TYPE_INT8:         return "int8";
+        case FIELD_TYPE_UINT8:        return "uint8";
+        case FIELD_TYPE_INT16:        return "int16";
+        case FIELD_TYPE_UINT16:       return "uint16";
+        case FIELD_TYPE_INT32:        return "integer";
+        case FIELD_TYPE_UINT32:       return "integer";
+        case FIELD_TYPE_INT64:        return "integer";
+        case FIELD_TYPE_UINT64:       return "integer";
+        case FIELD_TYPE_BOOL:         return "boolean";
+        case FIELD_TYPE_FLOAT:        return "number";
+        case FIELD_TYPE_DOUBLE:       return "number";
+        case FIELD_TYPE_FIXEDSTRING:  return "string";
+        case FIELD_TYPE_GUID:         return "string";
+        case FIELD_TYPE_ENTITY_HANDLE:return "EntityHandle";
+        case FIELD_TYPE_VEC3:         return "vec3";
+        case FIELD_TYPE_VEC4:         return "vec4";
+        case FIELD_TYPE_INT32_ARRAY:  return "integer[]";
+        case FIELD_TYPE_FLOAT_ARRAY:  return "number[]";
+        case FIELD_TYPE_DYNAMIC_ARRAY:return "table";
+        default:                      return "any";
+    }
+}
+
+// Ext.Types.GetComponentLayout(name) -> table or nil
+// Returns layout definition with properties for IDE helper generation
+static int lua_types_get_component_layout(lua_State *L) {
+    const char *name = luaL_checkstring(L, 1);
+
+    const ComponentLayoutDef *layout = component_property_get_layout(name);
+    if (!layout) {
+        // Try short name
+        layout = component_property_get_layout_by_short_name(name);
+    }
+
+    if (!layout) {
+        lua_pushnil(L);
+        return 1;
+    }
+
+    // Build layout table
+    lua_newtable(L);
+
+    lua_pushstring(L, layout->componentName);
+    lua_setfield(L, -2, "Name");
+
+    if (layout->shortName) {
+        lua_pushstring(L, layout->shortName);
+        lua_setfield(L, -2, "ShortName");
+    }
+
+    lua_pushinteger(L, layout->componentSize);
+    lua_setfield(L, -2, "Size");
+
+    lua_pushinteger(L, layout->componentTypeIndex);
+    lua_setfield(L, -2, "TypeIndex");
+
+    // Build properties array
+    lua_newtable(L);
+    for (int i = 0; i < layout->propertyCount; i++) {
+        const ComponentPropertyDef *prop = &layout->properties[i];
+
+        lua_newtable(L);
+
+        lua_pushstring(L, prop->name);
+        lua_setfield(L, -2, "Name");
+
+        lua_pushinteger(L, prop->offset);
+        lua_setfield(L, -2, "Offset");
+
+        lua_pushstring(L, field_type_to_string(prop->type));
+        lua_setfield(L, -2, "Type");
+
+        lua_pushinteger(L, prop->type);  // Raw enum value
+        lua_setfield(L, -2, "TypeId");
+
+        if (prop->arraySize > 0) {
+            lua_pushinteger(L, prop->arraySize);
+            lua_setfield(L, -2, "ArraySize");
+        }
+
+        lua_pushboolean(L, prop->readOnly);
+        lua_setfield(L, -2, "ReadOnly");
+
+        lua_rawseti(L, -2, i + 1);  // 1-indexed
+    }
+    lua_setfield(L, -2, "Properties");
+
+    lua_pushinteger(L, layout->propertyCount);
+    lua_setfield(L, -2, "PropertyCount");
+
+    return 1;
+}
+
+// Ext.Types.GetAllLayouts() -> table
+// Returns list of all component names that have property layouts
+static int lua_types_get_all_layouts(lua_State *L) {
+    lua_newtable(L);
+
+    int count = component_property_get_layout_count();
+    for (int i = 0; i < count; i++) {
+        const ComponentLayoutDef *layout = component_property_get_layout_at(i);
+        if (layout && layout->componentName) {
+            lua_pushstring(L, layout->componentName);
+            lua_rawseti(L, -2, i + 1);
+        }
+    }
+
+    return 1;
+}
+
 // Ext.Types.IsA(obj, typeName) -> boolean
 // Checks if an object is of a given type or inherits from it
 static int lua_types_isa(lua_State *L) {
@@ -794,9 +909,18 @@ void lua_ext_register_types(lua_State *L, int ext_table_index) {
     lua_pushcfunction(L, lua_types_isa);
     lua_setfield(L, -2, "IsA");
 
+    lua_pushcfunction(L, lua_types_get_component_layout);
+    lua_setfield(L, -2, "GetComponentLayout");
+
+    lua_pushcfunction(L, lua_types_get_all_layouts);
+    lua_setfield(L, -2, "GetAllLayouts");
+
+    lua_pushcfunction(L, lua_ide_helpers_generate);
+    lua_setfield(L, -2, "GenerateIdeHelpers");
+
     lua_setfield(L, ext_table_index, "Types");
 
-    LOG_LUA_INFO("Ext.Types namespace registered (6 functions)");
+    LOG_LUA_INFO("Ext.Types namespace registered (9 functions)");
 }
 
 // ============================================================================
@@ -1067,10 +1191,26 @@ void lua_ext_register_global_helpers(lua_State *L) {
         "  if TestRunner.failed > 0 then Ext.Print('SOME TESTS FAILED') else Ext.Print('ALL TESTS PASSED') end\n"
         "end)\n";
 
+    // IDE helpers command (!ide_helpers)
+    static const char *console_cmd_ide =
+        "Ext.RegisterConsoleCommand('ide_helpers', function(cmd, filename)\n"
+        "  filename = filename or 'ExtIdeHelpers.lua'\n"
+        "  local content = Ext.Types.GenerateIdeHelpers(filename)\n"
+        "  local size = #content\n"
+        "  Ext.Print('Generated IDE helpers: ~/Library/Application Support/BG3SE/' .. filename)\n"
+        "  Ext.Print(string.format('  %d bytes, %d layouts, %d enum types', size,\n"
+        "    #Ext.Types.GetAllLayouts(), 14))\n"
+        "  Ext.Print('\\nVS Code setup:')\n"
+        "  Ext.Print('  1. Copy ExtIdeHelpers.lua to your mod folder')\n"
+        "  Ext.Print('  2. Add to .luarc.json:')\n"
+        "  Ext.Print('     {\"workspace.library\": [\"ExtIdeHelpers.lua\"]}')\n"
+        "end)\n";
+
     // Execute each command registration chunk
     const char *console_cmds[] = {
         console_cmd_probe, console_cmd_dumpstat, console_cmd_findstr,
-        console_cmd_hexdump, console_cmd_types, console_cmd_pv, console_cmd_test
+        console_cmd_hexdump, console_cmd_types, console_cmd_pv, console_cmd_test,
+        console_cmd_ide
     };
     for (size_t i = 0; i < sizeof(console_cmds) / sizeof(console_cmds[0]); i++) {
         if (luaL_dostring(L, console_cmds[i]) != LUA_OK) {
@@ -1081,5 +1221,5 @@ void lua_ext_register_global_helpers(lua_State *L) {
     }
 
     LOG_LUA_INFO("Global helpers registered (_P, _D, _DS, _H, _PTR, _PE, Debug.*)");
-    LOG_LUA_INFO("Console commands: !probe !dumpstat !findstr !hexdump !types !pv_* !test");
+    LOG_LUA_INFO("Console commands: !probe !dumpstat !findstr !hexdump !types !pv_* !test !ide_helpers");
 }

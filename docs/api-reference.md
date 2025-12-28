@@ -395,6 +395,9 @@ Full reflection API for type introspection across all registered types (userdata
 | `TypeOf(obj)` | B | Returns full type info table for an object |
 | `IsA(obj, typeName)` | B | Returns true if object is or inherits from type |
 | `Validate(obj)` | B | Returns true if userdata is still valid |
+| `GetComponentLayout(name)` | B | Returns property layout for a component |
+| `GetAllLayouts()` | B | Returns array of component names with layouts |
+| `GenerateIdeHelpers(filename?)` | B | Generate LuaLS type annotations for VS Code |
 
 ### GetAllTypes()
 
@@ -470,6 +473,75 @@ Ext.Types.IsA(entity, "bg3se")  -- true
 -- Substring match (inheritance pattern)
 local stat = Ext.Stats.Get("WPN_Longsword")
 Ext.Types.IsA(stat, "StatsObject")  -- true
+```
+
+### GetComponentLayout(name)
+
+Returns property layout definition for components with known field offsets:
+
+```lua
+local layout = Ext.Types.GetComponentLayout("eoc::HealthComponent")
+_P(layout.Name)          -- "eoc::HealthComponent"
+_P(layout.ShortName)     -- "Health"
+_P(layout.Size)          -- 40 (bytes)
+_P(layout.PropertyCount) -- 5
+
+-- Inspect properties
+for _, prop in ipairs(layout.Properties) do
+    _P(string.format("  %s: %s (offset 0x%x)", prop.Name, prop.Type, prop.Offset))
+end
+-- Output:
+--   Hp: integer (offset 0x0)
+--   MaxHp: integer (offset 0x4)
+--   TemporaryHp: integer (offset 0x8)
+--   MaxTemporaryHp: integer (offset 0xc)
+--   IsInvulnerable: boolean (offset 0x20)
+```
+
+### GetAllLayouts()
+
+```lua
+-- Get all components with property layouts (~534)
+local layouts = Ext.Types.GetAllLayouts()
+_P("Components with layouts: " .. #layouts)
+
+for i, name in ipairs(layouts) do
+    if i <= 10 then _P(name) end
+end
+```
+
+### GenerateIdeHelpers(filename?)
+
+Generates LuaLS-compatible type annotations for VS Code IntelliSense:
+
+```lua
+-- Generate and save to file
+Ext.Types.GenerateIdeHelpers("ExtIdeHelpers.lua")
+-- Saved to: ~/Library/Application Support/BG3SE/ExtIdeHelpers.lua
+
+-- Or get content as string without saving
+local content = Ext.Types.GenerateIdeHelpers()
+_P("Generated " .. #content .. " bytes")
+```
+
+**Output includes:**
+- `---@class` definitions for all 1,999 components
+- `---@field` annotations for 534 components with known layouts
+- `---@alias` for all 14 enum types
+- `Ext.*` namespace with function signatures
+- `Osi.*` and `Mods` global stubs
+
+**VS Code setup:**
+
+1. Generate helpers: `!ide_helpers` in console
+2. Copy `ExtIdeHelpers.lua` to your mod folder
+3. Create `.luarc.json`:
+```json
+{
+  "runtime.version": "Lua 5.4",
+  "workspace.library": ["./ExtIdeHelpers.lua"],
+  "diagnostics.globals": ["Ext", "Osi", "Mods"]
+}
 ```
 
 ---

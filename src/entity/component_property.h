@@ -213,6 +213,19 @@ void component_property_push_array_proxy(lua_State *L, void *arrayPtr,
 int component_property_get_layout_count(void);
 
 /**
+ * Get layout by index (for iteration).
+ * Returns NULL if index out of bounds.
+ */
+const ComponentLayoutDef *component_property_get_layout_at(int index);
+
+/**
+ * Iterate over all registered layouts.
+ * Callback returns true to continue, false to stop.
+ */
+typedef bool (*ComponentLayoutIteratorFn)(const ComponentLayoutDef *layout, void *userdata);
+void component_property_iterate_layouts(ComponentLayoutIteratorFn callback, void *userdata);
+
+/**
  * Dump all registered layouts to log.
  */
 void component_property_dump_layouts(void);

@@ -13,6 +13,25 @@ Each entry includes:
 
 ---
 
+## [v0.36.17] - 2025-12-28
+
+**Parity:** ~83% | **Category:** IDE Integration | **Issues:** #7
+
+### Added
+- **IDE Type Helpers** - Generate LuaLS annotations for VS Code IntelliSense
+  - `Ext.Types.GenerateIdeHelpers(filename?)` - Generate type definitions file
+  - `Ext.Types.GetComponentLayout(name)` - Get property layout for components
+  - `Ext.Types.GetAllLayouts()` - List all components with property layouts
+  - `!ide_helpers` console command for quick generation
+
+### Technical
+- Created `src/lua/lua_ide_helpers.c/h` - Modular IDE helper generation
+- Added `component_property_get_layout_at(index)` and `component_property_iterate_layouts()` to component_property.c
+- Added `component_registry_get_at(index)` to component_registry.c
+- Output includes: ~2000 component classes, 534 with property annotations, 14 enum aliases, Ext.* namespace
+
+---
+
 ## [v0.36.16] - 2025-12-27
 
 **Parity:** ~82% | **Category:** Reflection API | **Issues:** #48
