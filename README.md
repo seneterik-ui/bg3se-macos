@@ -67,28 +67,28 @@ file build/lib/libbg3se.dylib
 | `CMake Error: source directory does not exist` | Stale cache after moving repo. Delete `build/` and rebuild: `rm -rf build && mkdir build && cd build && cmake .. && cmake --build .` |
 | Code changes don't appear in game | Stale CMake cache. Delete `build/` directory and rebuild from scratch |
 
-### Using SE Mods
+### Using Script Extender Mods
 
-SE mods work automatically—just install them like any other mod:
+Script Extender (SE) mods are mods that require BG3SE to function—they use Lua scripting to add features that aren't possible with standard modding. With BG3SE-macOS installed, these mods work just like any other mod:
 
-1. Download the mod's `.pak` file from Nexus Mods
-2. Place it in `~/Documents/Larian Studios/Baldur's Gate 3/Mods/`
-3. Enable the mod in the game's mod manager
-4. Launch via Steam
+1. **Download** the mod's `.pak` file from [Nexus Mods](https://www.nexusmods.com/baldursgate3)
+2. **Install** by placing it in `~/Documents/Larian Studios/Baldur's Gate 3/Mods/`
+3. **Enable** the mod using the in-game mod manager (or a mod manager like [BG3 Mod Manager](https://github.com/LaughingLeader/BG3ModManager))
+4. **Launch** the game via Steam (using the launch options configured above)
 
-**BG3SE-macOS reads scripts directly from PAK files—no extraction needed!**
+> **Tip:** BG3SE-macOS reads Lua scripts directly from PAK files—no manual extraction required. If a mod page says "requires Script Extender," it should work automatically once you've set up BG3SE-macOS.
 
-### Officially Supported Mods
+### Mod Compatibility
 
-These mods have been tested and confirmed working with BG3SE-macOS:
+Most SE mods designed for the Windows Script Extender will work on macOS. We're actively testing popular mods and tracking compatibility:
 
 | Mod | Author | Status | Notes |
 |-----|--------|--------|-------|
 | [More Reactive Companions](https://www.nexusmods.com/baldursgate3/mods/5447) | LightningLarryL | ✅ Working | Party banter, companion reactions |
 
-> **Note:** Many SE mods will work out of the box. This list tracks mods we've explicitly tested. See **[docs/supported-mods.md](docs/supported-mods.md)** for the full compatibility list, testing notes, and how to report mod compatibility.
+This is just a sample—many more mods work out of the box. See **[docs/supported-mods.md](docs/supported-mods.md)** for the full compatibility list, testing notes, and known issues.
 
-**Help expand this list!** If you've tested a mod, please [open an issue](https://github.com/tdimino/bg3se-macos/issues/new?template=mod-compatibility.md) or PR to add it.
+**Tested a mod?** Help the community by [reporting your results](https://github.com/tdimino/bg3se-macos/issues/new?template=mod-compatibility.md)! Whether it works perfectly or has issues, your feedback helps other Mac players.
 
 ## Status
 
