@@ -491,7 +491,7 @@ int imgui_objects_get_window_count(void);
 int imgui_objects_get_total_count(void);
 
 // Render all windows (call from render loop)
-void imgui_render_all_windows(void);
+void imgui_metal_render_all_windows(void);
 
 #ifdef __cplusplus
 }

@@ -394,11 +394,6 @@ static void render_widget(ImguiObject *obj) {
         return;
     }
 
-    static int widget_log_counter = 0;
-    if (widget_log_counter++ % 600 == 0) {
-        LOG_IMGUI_INFO("render_widget: type=%d label='%s'", obj->type, obj->styled.label);
-    }
-
     // Push style overrides before rendering
     imgui_object_push_style(obj);
 
@@ -1018,7 +1013,7 @@ static void render_window(ImguiObject *win) {
 // Public Render API (for standalone test apps)
 // ============================================================================
 
-void imgui_render_all_windows(void) {
+void imgui_metal_render_all_windows(void) {
     int window_count = 0;
     ImguiHandle *windows = imgui_get_all_windows(&window_count);
 

@@ -40,7 +40,7 @@ Each entry includes:
 
 ### Technical
 - Added `imgui_objects_get_window_count()`, `imgui_objects_get_total_count()` for statistics
-- Added `imgui_render_all_windows()` public API for standalone rendering
+- Added `imgui_metal_render_all_windows()` public API for standalone rendering
 - Test tool includes stub implementations for metal backend when running standalone
 - ~1,400 lines of new widget rendering code across 14 widget types
 

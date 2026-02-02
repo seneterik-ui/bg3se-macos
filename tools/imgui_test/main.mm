@@ -254,7 +254,7 @@ static void render_window(ImguiObject *win) {
     }
 }
 
-void imgui_render_all_windows(void) {
+void imgui_metal_render_all_windows(void) {
     int window_count = 0;
     ImguiHandle *windows = imgui_get_all_windows(&window_count);
 
@@ -628,7 +628,7 @@ static void render_test_control_window(void) {
     render_test_control_window();
 
     // 3. Render all BG3SE IMGUI windows (from Lua)
-    imgui_render_all_windows();
+    imgui_metal_render_all_windows();
 
     // Rendering
     ImGui::Render();
