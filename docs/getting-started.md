@@ -88,6 +88,18 @@ SE mods work automatically—just install them like any other mod:
 
 **BG3SE-macOS reads scripts directly from PAK files—no extraction needed!**
 
+## Verification Checklist
+
+After building, verify each step works:
+
+| Step | Command | Expected Result |
+|------|---------|-----------------|
+| Library exists | `ls -la build/lib/libbg3se.dylib` | File ~3-5MB |
+| Universal binary | `file build/lib/libbg3se.dylib` | Shows `arm64` AND `x86_64` |
+| Steam configured | Launch BG3 via Steam | Game starts normally |
+| Injection working | Check logs (see below) | "BG3SE macOS initialized" in log |
+| Console available | `nc -U /tmp/bg3se.sock` (while game running) | Connection accepted |
+
 ## Verifying Installation
 
 ### Log Locations
@@ -154,8 +166,8 @@ Features:
 ### 3. File-Based Console (Automation)
 
 ```bash
-# Watch output
-tail -f ~/Library/Application\ Support/BG3SE/bg3se.log
+# Watch output (use session-based log)
+tail -f ~/Library/Application\ Support/BG3SE/logs/latest.log
 
 # Send commands
 echo 'Ext.Print("Hello!")' > ~/Library/Application\ Support/BG3SE/commands.txt

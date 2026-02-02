@@ -2,6 +2,40 @@
 
 Common issues and solutions for BG3SE-macOS.
 
+## Build Issues
+
+### "cmake: command not found"
+
+Install CMake via Homebrew:
+```bash
+brew install cmake
+```
+
+### "Submodule not initialized" or missing Dobby/Lua errors
+
+Initialize git submodules:
+```bash
+git submodule update --init --recursive
+```
+
+### Build succeeds but code changes don't appear
+
+Your CMake cache may be stale. This happens after moving the repository or switching branches. Clean rebuild:
+```bash
+rm -rf build
+mkdir build && cd build
+cmake .. && cmake --build .
+```
+
+### "CMake Error: source directory does not exist"
+
+Same cause as above - stale CMake cache. Delete and rebuild:
+```bash
+rm -rf build
+mkdir build && cd build
+cmake .. && cmake --build .
+```
+
 ## Injection Not Working
 
 **Symptoms:** Game launches but mods don't load, no SE output in logs.
@@ -78,9 +112,11 @@ Common issues and solutions for BG3SE-macOS.
 
 **Solutions:**
 
-1. Rebuild with universal binary support:
+1. Rebuild with CMake (creates universal binary by default):
    ```bash
-   ./scripts/build.sh
+   rm -rf build
+   mkdir build && cd build
+   cmake .. && cmake --build .
    ```
 2. Verify with:
    ```bash
@@ -160,12 +196,21 @@ Common issues and solutions for BG3SE-macOS.
 
 **Symptoms:** Can't find the log file.
 
-**Location:** `~/Library/Application Support/BG3SE/bg3se.log`
+**Locations (in order of preference):**
 
-**Quick access:**
-```bash
-tail -f ~/Library/Application\ Support/BG3SE/bg3se.log
-```
+1. **Session-based logs (v0.36.12+):**
+   ```bash
+   # Current session (symlink)
+   tail -f ~/Library/Application\ Support/BG3SE/logs/latest.log
+
+   # List all session logs
+   ls ~/Library/Application\ Support/BG3SE/logs/
+   ```
+
+2. **Legacy location (deprecated):**
+   ```bash
+   tail -f ~/Library/Application\ Support/BG3SE/bg3se.log
+   ```
 
 If the directory doesn't exist, BG3SE hasn't been run yet. Launch the game with injection.
 

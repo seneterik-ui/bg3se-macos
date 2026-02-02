@@ -30,8 +30,10 @@ cd bg3se-macos
 # If you already cloned without --recursive:
 git submodule update --init --recursive
 
-# Build
-./scripts/build.sh
+# Build with CMake
+mkdir -p build && cd build
+cmake ..
+cmake --build .
 ```
 
 ### Verify Build Succeeded
@@ -47,11 +49,20 @@ file build/lib/libbg3se.dylib
 ### Configure Steam Launch Options
 
 1. Right-click **Baldur's Gate 3** in Steam → **Properties**
-2. Under **General** → **Launch Options**, enter:
+2. Under **General** → **Launch Options**, enter the **full path** to `bg3w.sh`:
    ```
-   /full/path/to/bg3se-macos/scripts/bg3w.sh %command%
+   /Users/YOUR_USERNAME/bg3se-macos/scripts/bg3w.sh %command%
    ```
-   Replace `/full/path/to` with the actual path where you cloned the repo.
+
+   **Important:** Replace `YOUR_USERNAME` with your actual macOS username. Example:
+   ```
+   /Users/john/bg3se-macos/scripts/bg3w.sh %command%
+   ```
+
+   To find your path, run this in Terminal and copy the output:
+   ```bash
+   echo "$(cd bg3se-macos && pwd)/scripts/bg3w.sh %command%"
+   ```
 
 ### Troubleshooting Build Issues
 
