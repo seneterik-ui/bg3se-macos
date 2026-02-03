@@ -71,6 +71,7 @@ typedef enum {
     LOG_MODULE_GAME,         // Game state tracking
     LOG_MODULE_INPUT,        // Input system, Ext.Input
     LOG_MODULE_IMGUI,        // ImGui overlay system
+    LOG_MODULE_NET,          // Network messaging (Issue #6)
     LOG_MODULE_MAX
 } LogModule;
 
@@ -433,6 +434,12 @@ LogModule log_module_from_string(const char* str);
 #define LOG_IMGUI_INFO(fmt, ...)  LOGM_INFO(LOG_MODULE_IMGUI, fmt __VA_OPT__(,) __VA_ARGS__)
 #define LOG_IMGUI_WARN(fmt, ...)  LOGM_WARN(LOG_MODULE_IMGUI, fmt __VA_OPT__(,) __VA_ARGS__)
 #define LOG_IMGUI_ERROR(fmt, ...) LOGM_ERROR(LOG_MODULE_IMGUI, fmt __VA_OPT__(,) __VA_ARGS__)
+
+// Network module (Issue #6: NetChannel API)
+#define LOG_NET_DEBUG(fmt, ...) LOGM_DEBUG(LOG_MODULE_NET, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_NET_INFO(fmt, ...)  LOGM_INFO(LOG_MODULE_NET, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_NET_WARN(fmt, ...)  LOGM_WARN(LOG_MODULE_NET, fmt __VA_OPT__(,) __VA_ARGS__)
+#define LOG_NET_ERROR(fmt, ...) LOGM_ERROR(LOG_MODULE_NET, fmt __VA_OPT__(,) __VA_ARGS__)
 
 #ifdef __cplusplus
 }

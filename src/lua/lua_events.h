@@ -57,6 +57,7 @@ typedef enum {
     EVENT_DEAL_DAMAGE,         // During damage application
     EVENT_DEALT_DAMAGE,        // After damage applied
     EVENT_BEFORE_DEAL_DAMAGE,  // Before damage calculation
+    EVENT_NET_MOD_MESSAGE,     // Network mod message (Issue #6)
     EVENT_MAX
 } BG3SEEventType;
 
@@ -231,6 +232,23 @@ void events_fire_turn_started_from_osiris(lua_State *L, const char *characterGui
  * @param characterGuid The character GUID whose turn ended
  */
 void events_fire_turn_ended_from_osiris(lua_State *L, const char *characterGuid);
+
+/**
+ * Fire the NetModMessage event with network message data.
+ * Handlers receive {Channel, Payload, Module, UserID, RequestId, ReplyId, Binary} table.
+ *
+ * @param L         Lua state
+ * @param channel   Channel name
+ * @param payload   Message payload (JSON string)
+ * @param module    Module UUID
+ * @param userId    User ID (0 for server)
+ * @param requestId Request ID (for request/reply correlation)
+ * @param replyId   Reply ID (if this is a reply)
+ * @param binary    Whether payload is binary
+ */
+void events_fire_net_mod_message(lua_State *L, const char *channel, const char *payload,
+                                  const char *module, int userId, uint64_t requestId,
+                                  uint64_t replyId, bool binary);
 
 /**
  * Fire the Log event with log message data.

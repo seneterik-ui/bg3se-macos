@@ -93,7 +93,8 @@ static const char *g_event_names[EVENT_MAX] = {
     "AfterExecuteFunctor",
     "DealDamage",
     "DealtDamage",
-    "BeforeDealDamage"
+    "BeforeDealDamage",
+    "NetModMessage"           // Network mod message (Issue #6)
 };
 
 // ============================================================================
@@ -1132,6 +1133,80 @@ void events_fire_after_execute_functor(lua_State *L, int ctxType, void *functors
 
     if (g_dispatch_depth[EVENT_AFTER_EXECUTE_FUNCTOR] == 0) {
         process_deferred_unsubscribes(L, EVENT_AFTER_EXECUTE_FUNCTOR);
+    }
+}
+
+// ============================================================================
+// NetModMessage Event (Issue #6)
+// ============================================================================
+
+void events_fire_net_mod_message(lua_State *L, const char *channel, const char *payload,
+                                  const char *module, int userId, uint64_t requestId,
+                                  uint64_t replyId, bool binary) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_NET_MOD_MESSAGE];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing NetModMessage (%d handlers), channel=%s", count, channel);
+
+    g_dispatch_depth[EVENT_NET_MOD_MESSAGE]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_NET_MOD_MESSAGE]; i++) {
+        EventHandler *h = &g_handlers[EVENT_NET_MOD_MESSAGE][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table
+        lua_newtable(L);
+
+        lua_pushstring(L, channel ? channel : "");
+        lua_setfield(L, -2, "Channel");
+
+        lua_pushstring(L, payload ? payload : "{}");
+        lua_setfield(L, -2, "Payload");
+
+        lua_pushstring(L, module ? module : "");
+        lua_setfield(L, -2, "Module");
+
+        lua_pushinteger(L, userId);
+        lua_setfield(L, -2, "UserID");
+
+        lua_pushinteger(L, (lua_Integer)requestId);
+        lua_setfield(L, -2, "RequestId");
+
+        lua_pushinteger(L, (lua_Integer)replyId);
+        lua_setfield(L, -2, "ReplyId");
+
+        lua_pushboolean(L, binary);
+        lua_setfield(L, -2, "Binary");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("Error in NetModMessage handler (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_NET_MOD_MESSAGE, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_NET_MOD_MESSAGE]--;
+
+    if (g_dispatch_depth[EVENT_NET_MOD_MESSAGE] == 0) {
+        process_deferred_unsubscribes(L, EVENT_NET_MOD_MESSAGE);
     }
 }
 

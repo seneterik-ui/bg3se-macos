@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.22
+## Current Status: v0.36.23
 
-**Overall Feature Parity: ~87%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~88%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -38,7 +38,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile, AddPathOverride, GetPathOverride (4) | **100%** | 1 |
 | `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, **Dual EntityWorld**, components, enumeration (22) | **85%** | 2 |
 | `Ext.Stats` | ✅ Full (52) | ✅ Get, GetAll, Create, Sync (all), property read/write (18) | **35%** | 3 |
-| `Ext.Events` | ✅ Full (~32) | ✅ 32 events (13 lifecycle + 17 engine + 2 functor) + Subscribe/Unsubscribe/Prevent | **100%** | 2.5 |
+| `Ext.Events` | ✅ Full (~33) | ✅ 33 events (13 lifecycle + 17 engine + 2 functor + 1 network) + Subscribe/Unsubscribe/Prevent | **100%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, IsPaused, MonotonicTime, MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, IsGamePaused, +6 persistent (20) | **100%** | 2.3 |
 | `Ext.Debug` | ✅ Full (8) | ✅ Memory introspection (11 macOS-specific) | **100%** | 2.3 |
 | `Ext.Vars` | ✅ Full (8) | ✅ User + Mod Variables (12) | **100%** | 2.6 |
@@ -46,7 +46,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Enums` | ✅ Full | ✅ 14 enum/bitfield types | **100%** | 7 |
 | `Ext.Math` | ✅ Full (59) | ✅ 57 functions (vectors, matrices, 16 quaternions, scalars) | **97%** | 7.5 |
 | `Ext.Input` | ✅ Full | ✅ CGEventTap capture, hotkeys (8 macOS-specific) | **100%** | 9 |
-| `Ext.Net` | ✅ Full | ❌ Not impl | **0%** | 6 |
+| `Ext.Net` | ✅ Full | ⚠️ Phase 1 Complete (local messaging, 6 functions) | **60%** | 6 |
 | `Ext.UI` | ✅ Full (9) | ❌ Not impl | **0%** | 8 |
 | `Ext.IMGUI` | ✅ Full (7+) | ✅ Complete widget system (40 types) - All widgets, events, Metal backend | **100%** | 8 |
 | `Ext.Level` | ✅ Full (21) | ❌ Not impl | **0%** | 9 |
@@ -877,37 +877,51 @@ Ext.Debug.HexDump(addr, size)
 ## Phase 6: Networking & Co-op Sync
 
 ### 6.1 NetChannel API (New - v22+)
-**Status:** ❌ Not Started - **CRITICAL for multiplayer**
+**Status:** ⚠️ Phase 1 Complete (v0.36.23) - Local messaging working, Phase 2/3 planned
 
 From API.md: "NetChannel API provides a structured abstraction for request/response and message broadcasting."
 
-**Target API:**
+**Implemented API (Phase 1):**
 ```lua
 -- Create channel
 local channel = Net.CreateChannel(ModuleUUID, "MyChannel")
 
--- Fire-and-forget handler
+-- Fire-and-forget handler (✅ Working)
 channel:SetHandler(function(data, user)
-    Osi.TemplateAddTo(data.Template, data.Target, data.Amount)
+    _P("Received: " .. Ext.Json.Stringify(data))
 end)
 
--- Request/reply handler
-channel:SetRequestHandler(function(data, user)
-    return { Result = CheckSomething(data) }
-end)
-
--- Client → Server
+-- Client → Server (✅ Working)
 channel:SendToServer(data)
-channel:RequestToServer(data, function(response) ... end)
 
--- Server → Client(s)
+-- Server → Client(s) (✅ Working locally)
 channel:SendToClient(data, userOrGuid)
 channel:Broadcast(data)
-channel:RequestToClient(data, user, function(response) ... end)
 
--- Utility
-Ext.Net.IsHost()
+-- Utility (✅ Working)
+Ext.Net.IsHost()   -- Returns true in single-player
+Ext.Net.Version()  -- Returns 2 (binary support)
 ```
+
+**Phase 1 Implementation (Complete):**
+- [x] `Ext.Net` namespace with 6 functions
+- [x] `Net.CreateChannel()` high-level API
+- [x] `SetHandler()` for fire-and-forget messages
+- [x] `SendToServer()`, `SendToClient()`, `Broadcast()`
+- [x] In-process message bus for local/single-player
+- [x] `NetModMessage` event firing to handlers
+- [x] `Ext.Mod` namespace (IsModLoaded, GetLoadOrder, GetMod, GetBaseMod)
+
+**Phase 2 TODO (Request/Reply):**
+- [ ] `SetRequestHandler()` for request/reply pattern
+- [ ] `RequestToServer()` with callback
+- [ ] `RequestToClient()` with callback
+- [ ] Callback registry for reply correlation
+
+**Phase 3 TODO (True Multiplayer):**
+- [ ] Hook `NetMessageFactory` for custom message type
+- [ ] Real network transmission for multiplayer
+- [ ] User ID tracking across peers
 
 **Benefits over legacy NetMessage:**
 - Structured request/reply semantics
@@ -1443,6 +1457,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.23 | 2026-02-03 | **NetChannel API Phase 1** - Ext.Net namespace (6 functions), Net.CreateChannel high-level API, Ext.Mod namespace, in-process message bus for local/single-player. Fire-and-forget messaging working (Issue #6) |
 | v0.36.22 | 2026-02-02 | **Critical Bug Fix: Reaction Crash** - Fixed game crash on in-combat reactions (AoO, Counterspell, etc.). Root cause: Interrupt functor hook had wrong 3-param signature instead of 4-param with HitResult* first (Issue #60) |
 | v0.36.21 | 2026-01-30 | **Complete Ext.IMGUI Widget System** - All 40 widget types (InputText, Combo, Slider, ColorEdit, Tree, Table, Tabs, Menu), event callbacks, standalone test app (Issue #36) |
 | v0.36.20 | 2025-12-31 | **ImGui Widget Foundation** - Handle-based objects, Lua userdata, basic widgets (Window, Text, Button, Checkbox) (Issue #36) |
@@ -1557,7 +1572,7 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | Issue | Feature | Acceleration | Key Technique |
 |-------|---------|--------------|---------------|
 | **#37 Ext.Level** | Physics/Raycast | **50%** | Find physics engine, port LevelLib.inl |
-| **#6 NetChannel** | Networking | **30%** | Lua wrappers portable, C bridge complex |
+| ~~#6 NetChannel~~ | Networking | ⚠️ **Phase 1 DONE** | Local messaging complete, Phase 2-3 pending |
 | **#35 Ext.UI** | Noesis UI | **25%** | Deep game UI hooks required |
 
 **Completed:**
@@ -1634,7 +1649,7 @@ FeatManager::GetFeats prologue @ 0x101b752b4:
 |-------|-------|--------------|----------|
 | 13 | **#37 Ext.Level** | 50% | Physics RE needed |
 | 14 | **#35 Ext.UI** | 25% | Deep Noesis hooks |
-| 15 | **#6 Ext.Net** | 30% | Network stack RE |
+| 15 | ~~#6 Ext.Net~~ | ⚠️ Phase 1 DONE | Phase 2-3 pending |
 
 **All Quick Wins Complete (as of v0.36.15):**
 1. ✅ **#49 Ext.IO** - 4 functions: LoadFile, SaveFile, AddPathOverride, GetPathOverride

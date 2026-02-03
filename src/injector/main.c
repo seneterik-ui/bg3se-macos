@@ -132,6 +132,12 @@ extern "C" {
 #include "resource_manager.h"
 #include "lua_resource.h"
 
+// Mod system (Issue #6: NetChannel dependency)
+#include "lua_mod.h"
+
+// Network system (Issue #6: NetChannel API)
+#include "lua_net.h"
+
 // Enable hooks (set to 0 to disable for testing)
 #define ENABLE_HOOKS 1
 
@@ -727,8 +733,18 @@ static void register_ext_api(lua_State *L) {
     // Ext.IMGUI namespace (debug overlay)
     lua_imgui_register(L, -1);
 
+    // Ext.Mod namespace (mod information - Issue #6 dependency)
+    lua_mod_register(L, -1);
+
+    // Ext.Net namespace (network messaging - Issue #6)
+    // Note: is_server is determined by context, for now use true as we're server-side
+    lua_net_register(L, -1, true);
+
     // Set Ext as global
     lua_setglobal(L, "Ext");
+
+    // Load Net library scripts (must be after Ext is global - scripts use Ext.*)
+    lua_net_load_scripts(L);
 
     // Register global helper functions (must be after Ext is set as global)
     lua_ext_register_global_helpers(L);
@@ -2283,6 +2299,10 @@ static void fake_Event(void *thisPtr, uint32_t funcId, OsiArgumentDesc *args) {
 
         // Poll for one-frame event components (Issue #51)
         events_poll_oneframe_components(L);
+
+        // Process pending network messages (Issue #6: NetChannel API)
+        // Note: In full implementation, client_L would be the client Lua state
+        lua_net_process_messages(L, L);  // Both server and client in same process for now
     }
 
     // Capture COsiris pointer if we haven't already

@@ -100,7 +100,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 
 ## Status
 
-**Version:** v0.36.22 | **Feature Parity:** ~87%
+**Version:** v0.36.23 | **Feature Parity:** ~88%
 
 | Feature | Status |
 |---------|--------|
@@ -110,7 +110,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions), **server context guards** |
 | Ext.Entity | ✅ GUID lookup, **Dual EntityWorld** (client + server), **1,999 components registered** (534 layouts: 169 verified + 365 generated), **1,577 ARM64 sizes** + **702 Windows estimates** = **1,730 total** (87% coverage) |
 | Ext.Stats | ✅ 15,774 stats, property read/write, **Sync complete (created + existing stats)** |
-| Ext.Events | ✅ 32 events (13 lifecycle + 17 engine + 2 functor) with Prevent pattern |
+| Ext.Events | ✅ 33 events (13 lifecycle + 17 engine + 2 functor + 1 network) with Prevent pattern |
 | Ext.IO | ✅ LoadFile, SaveFile, **AddPathOverride, GetPathOverride** |
 | Ext.Timer | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, **MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, Persistent timers (6 functions)** |
 | Ext.Vars | ✅ PersistentVars + User Variables + Mod Variables |
@@ -121,6 +121,9 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Ext.StaticData | ✅ **All 9 types** (Feat, Race, Background, Origin, God, Class, Progression, ActionResource, FeatDescription) via ForceCapture |
 | Ext.Resource | ✅ Get, GetAll, GetTypes, GetCount (34 resource types) |
 | Ext.Template | ✅ **Auto-capture**, iteration (Cache/LocalCache), GUID resolution |
+| Ext.Net | ✅ **Phase 1 Complete** - PostMessageToServer/User/Client, BroadcastMessage, Version, IsHost |
+| Net.CreateChannel | ✅ **Phase 1 Complete** - High-level channel API with SetHandler, SendToServer, Broadcast |
+| Ext.Mod | ✅ IsModLoaded, GetLoadOrder, GetMod, GetBaseMod |
 | Lifetime Scoping | ✅ Prevents stale object access |
 | Context System | ✅ **Server/Client context awareness**, Ext.IsServer/IsClient/GetContext, two-phase bootstrap |
 | Debug Console | ✅ Socket + file + in-game overlay |

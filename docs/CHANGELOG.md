@@ -13,6 +13,51 @@ Each entry includes:
 
 ---
 
+## [v0.36.23] - 2026-02-03
+
+**Parity:** ~88% | **Category:** Network API | **Issues:** #6
+
+### Added
+- **Ext.Net Namespace** - Network messaging API for multiplayer mod synchronization
+  - `PostMessageToServer(channel, payload, module, handler, replyId, binary)` - Client to server messaging
+  - `PostMessageToUser(userId, channel, payload, module, handler, replyId, binary)` - Server to specific user
+  - `PostMessageToClient(guid, channel, payload, module, handler, replyId, binary)` - Server to specific client
+  - `BroadcastMessage(channel, payload, excludeChar, module, handler, replyId, binary)` - Server to all clients
+  - `Version()` - Returns protocol version (2 for binary support)
+  - `IsHost()` - Returns true if running as host
+
+- **Ext.Mod Namespace** - Mod information and query functions
+  - `IsModLoaded(modGuid)` - Check if a mod is loaded by UUID or name
+  - `GetLoadOrder()` - Get array of mod UUIDs in load order
+  - `GetMod(modGuid)` - Get mod information by UUID
+  - `GetBaseMod()` - Get base game mod (GustavX)
+  - `GetModManager()` - Get mod manager info (stub)
+
+- **Net.CreateChannel API** - High-level channel abstraction for network communication
+  - `Net.CreateChannel(module, channel)` - Create a network channel
+  - `channel:SetHandler(fn)` - Set message handler
+  - `channel:SetRequestHandler(fn)` - Set request/reply handler
+  - `channel:SendToServer(data)` - Fire-and-forget to server
+  - `channel:RequestToServer(data, callback)` - Request with reply callback
+  - `channel:SendToClient(data, user)` - Send to specific client
+  - `channel:Broadcast(data)` - Send to all clients
+
+- **NetModMessage Event** - Event fired when network messages are received
+  - Fields: Channel, Payload, Module, UserID, RequestId, ReplyId, Binary
+
+### Technical
+- New source files:
+  - `src/lua/lua_mod.c/h` - Ext.Mod implementation
+  - `src/lua/lua_net.c/h` - Ext.Net implementation
+  - `src/lua/lua_net_scripts.h` - Embedded Lua libraries (Class, NetChannel, NetworkManager)
+  - `src/network/message_bus.c/h` - In-process message routing
+  - `src/network/callback_registry.c/h` - Request/reply correlation
+- Added `LOG_MODULE_NET` to logging system
+- Phase 1 implementation: Local in-process message routing for single-player testing
+- Phase 2/3 (network hooks) planned for future release
+
+---
+
 ## [v0.36.22] - 2026-02-02
 
 **Parity:** ~87% | **Category:** Bug Fix | **Issues:** #60

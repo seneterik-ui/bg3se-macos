@@ -59,7 +59,8 @@ static const char* g_module_names[] = {
     "Persist",  // LOG_MODULE_PERSIST
     "Game",     // LOG_MODULE_GAME
     "Input",    // LOG_MODULE_INPUT
-    "ImGui"     // LOG_MODULE_IMGUI
+    "ImGui",    // LOG_MODULE_IMGUI
+    "Net"       // LOG_MODULE_NET
 };
 
 static const char* g_level_colors[] = {
