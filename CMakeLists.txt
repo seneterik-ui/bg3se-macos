@@ -1,11 +1,13 @@
 cmake_minimum_required(VERSION 3.20)
 project(bg3se-macos VERSION 0.1.0 LANGUAGES C CXX OBJC OBJCXX)
 
-# Set C/C++ standards
+# Set C/C++/Objective-C++ standards
 # Using C23 for __VA_OPT__ support in variadic macros (logging.h)
 set(CMAKE_C_STANDARD 23)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_OBJCXX_STANDARD 20)
+set(CMAKE_OBJCXX_STANDARD_REQUIRED ON)
 
 # Build for both architectures (universal binary)
 set(CMAKE_OSX_ARCHITECTURES "arm64;x86_64")
