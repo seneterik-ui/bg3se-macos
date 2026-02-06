@@ -2326,7 +2326,9 @@ static void fake_Event(void *thisPtr, uint32_t funcId, OsiArgumentDesc *args) {
 
         // Deferred network initialization (Issue #65)
         // Performs net capture/hook/insert here instead of during fake_Load
-        net_hooks_deferred_tick();
+        if (net_hooks_deferred_tick()) {
+            log_message("INFO", "Net", "Network hooks initialized via deferred tick");
+        }
     }
 
     // Capture COsiris pointer if we haven't already

@@ -30,7 +30,7 @@
 #include <string.h>
 #include <stdint.h>
 #include <stdio.h>
-#include <time.h>
+#include <mach/mach_time.h>
 
 // ============================================================================
 // Static State
@@ -234,25 +234,36 @@ void net_hooks_remove(void) {
                 }
 
                 if (found_idx >= 0) {
+                    bool write_ok = true;
                     // Swap-with-last to fill the gap, then decrement size
                     if (found_idx < (int)(size - 1)) {
                         void *last = NULL;
                         safe_memory_read_pointer(
                             (mach_vm_address_t)&data[size - 1], &last);
-                        safe_memory_write_pointer(
-                            (mach_vm_address_t)&data[found_idx], last);
+                        if (!safe_memory_write_pointer(
+                                (mach_vm_address_t)&data[found_idx], last)) {
+                            LOG_NET_WARN("  Failed to write swap entry during removal");
+                            write_ok = false;
+                        }
                     }
-                    // Clear the last slot and decrement size
-                    safe_memory_write_pointer(
-                        (mach_vm_address_t)&data[size - 1], NULL);
-                    __sync_synchronize();
-                    safe_memory_write_u32(
-                        (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE,
-                        (uint32_t)(size - 1));
-                    __sync_synchronize();
+                    if (write_ok) {
+                        // Clear the last slot and decrement size
+                        if (!safe_memory_write_pointer(
+                                (mach_vm_address_t)&data[size - 1], NULL)) {
+                            LOG_NET_WARN("  Failed to clear last slot during removal");
+                        }
+                        __sync_synchronize();
+                        if (!safe_memory_write_u32(
+                                (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE,
+                                (uint32_t)(size - 1))) {
+                            LOG_NET_WARN("  Failed to update ProtocolList size during removal");
+                        }
+                        __sync_synchronize();
+                    }
 
-                    LOG_NET_INFO("  Removed ExtenderProtocol from ProtocolList index %d (new size=%llu)",
-                                 found_idx, (unsigned long long)(size - 1));
+                    LOG_NET_INFO("  Removed ExtenderProtocol from ProtocolList index %d (new size=%llu%s)",
+                                 found_idx, (unsigned long long)(size - 1),
+                                 write_ok ? "" : ", with write errors");
                 } else {
                     LOG_NET_WARN("  ExtenderProtocol not found in ProtocolList during cleanup");
                 }
@@ -874,7 +885,8 @@ typedef enum {
     DEFERRED_PENDING,       // Init requested, waiting for stability
     DEFERRED_CAPTURING,     // About to perform capture (transient)
     DEFERRED_COMPLETE,      // Successfully initialized
-    DEFERRED_FAILED         // All retries exhausted
+    DEFERRED_FAILED,        // All retries exhausted
+    DEFERRED_DISABLED       // User set BG3SE_NO_NET=1 (intentional)
 } DeferredState;
 
 #define DEFERRED_STABILITY_MS  500   // Wait 500ms in Running before capture
@@ -882,9 +894,16 @@ typedef enum {
 #define DEFERRED_BASE_DELAY_MS 1000  // Initial retry delay (doubles each time)
 
 static DeferredState s_deferred_state = DEFERRED_IDLE;
-static clock_t       s_deferred_running_since = 0;  // When Running state was first seen
+static uint64_t      s_deferred_running_since = 0;  // Monotonic ms when Running first seen
 static int           s_deferred_retries = 0;
-static clock_t       s_deferred_retry_after = 0;    // Don't retry before this time
+static uint64_t      s_deferred_retry_after = 0;    // Monotonic ms: don't retry before this
+
+/** Wall-clock monotonic time in milliseconds (mach_absolute_time). */
+static uint64_t deferred_monotonic_ms(void) {
+    static mach_timebase_info_data_t tb = {0};
+    if (tb.denom == 0) mach_timebase_info(&tb);
+    return (mach_absolute_time() * tb.numer) / (tb.denom * 1000000ULL);
+}
 
 static void deferred_state_reset(void) {
     s_deferred_state = DEFERRED_IDLE;
@@ -926,7 +945,7 @@ void net_hooks_request_deferred_init(void) {
             LOG_NET_INFO("Network hooks DISABLED (BG3SE_NO_NET=1)");
             warned = true;
         }
-        s_deferred_state = DEFERRED_FAILED;
+        s_deferred_state = DEFERRED_DISABLED;
         return;
     }
 
@@ -947,11 +966,12 @@ void net_hooks_request_deferred_init(void) {
 bool net_hooks_deferred_tick(void) {
     if (s_deferred_state == DEFERRED_IDLE ||
         s_deferred_state == DEFERRED_COMPLETE ||
-        s_deferred_state == DEFERRED_FAILED) {
+        s_deferred_state == DEFERRED_FAILED ||
+        s_deferred_state == DEFERRED_DISABLED) {
         return false;
     }
 
-    clock_t now = clock();
+    uint64_t now = deferred_monotonic_ms();
 
     // PENDING: wait for Running state stability
     if (s_deferred_state == DEFERRED_PENDING) {
@@ -967,21 +987,21 @@ bool net_hooks_deferred_tick(void) {
             return false;
         }
 
-        double elapsed_ms = (double)(now - s_deferred_running_since) * 1000.0 / CLOCKS_PER_SEC;
+        uint64_t elapsed_ms = now - s_deferred_running_since;
         if (elapsed_ms < DEFERRED_STABILITY_MS) {
             return false;  // Keep waiting
         }
 
         // Check retry backoff
         if (s_deferred_retry_after != 0) {
-            double retry_elapsed_ms = (double)(now - s_deferred_retry_after) * 1000.0 / CLOCKS_PER_SEC;
-            if (retry_elapsed_ms < deferred_backoff_ms(s_deferred_retries)) {
+            uint64_t retry_elapsed_ms = now - s_deferred_retry_after;
+            if (retry_elapsed_ms < (uint64_t)deferred_backoff_ms(s_deferred_retries)) {
                 return false;  // Still in backoff
             }
         }
 
-        LOG_NET_INFO("Deferred net init: Running stable for %.0fms, attempting capture (attempt %d/%d)",
-                     elapsed_ms, s_deferred_retries + 1, DEFERRED_MAX_RETRIES);
+        LOG_NET_INFO("Deferred net init: Running stable for %llums, attempting capture (attempt %d/%d)",
+                     (unsigned long long)elapsed_ms, s_deferred_retries + 1, DEFERRED_MAX_RETRIES);
         s_deferred_state = DEFERRED_CAPTURING;
     }
 
@@ -995,6 +1015,11 @@ bool net_hooks_deferred_tick(void) {
 
         if (!net_hooks_capture_peer(eoc_server)) {
             LOG_NET_WARN("Deferred net init: capture_peer failed");
+            goto retry;
+        }
+
+        if (!s_ptrs.protocol_list) {
+            LOG_NET_WARN("Deferred net init: ProtocolList not available after capture");
             goto retry;
         }
 

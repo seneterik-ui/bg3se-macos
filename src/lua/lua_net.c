@@ -12,6 +12,7 @@
 #include "../network/message_bus.h"
 #include "../network/callback_registry.h"
 #include "../network/peer_manager.h"
+#include "../network/net_hooks.h"
 #include "../core/logging.h"
 
 #include <lauxlib.h>
@@ -206,8 +207,8 @@ static int lua_net_is_host(lua_State *L) {
  */
 static int lua_net_is_ready(lua_State *L) {
     if (s_is_server_context) {
-        // Server is always ready once initialized
-        lua_pushboolean(L, s_initialized);
+        // Server ready = local init done AND deferred net hooks complete
+        lua_pushboolean(L, s_initialized && net_hooks_is_ready());
     } else {
         // Client is ready if host peer (user_id=1) has proto_version > 0
         PeerInfo *host = peer_manager_get_host();
