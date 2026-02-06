@@ -13,6 +13,26 @@ Each entry includes:
 
 ---
 
+## [v0.36.37] - 2026-02-06
+
+**Parity:** ~92% | **Category:** Issue #65 Diagnostics + Net Parity | **Issues:** #65, #6
+
+### Fixed
+- **Issue #65 fallback init:** Added `deferred_session_init_tick()` fallback at end of `fake_InitGame` for machines where `fake_Event` (tick loop) never fires. On affected hardware (M4 / macOS Tahoe 26.2), the game tears down the session before Osiris events flow, so tick-based deferred init never runs.
+
+### Added
+- **`BG3SE_NO_HOOKS` diagnostic env var (Issue #65):** Set `BG3SE_NO_HOOKS=1` to skip ALL Dobby hook installation. Lua runtime remains active but Osiris/Event interception is disabled. Isolates whether inline code patching itself causes the game crash vs. other factors.
+- **`bg3w.sh` env var passthrough:** Steam launch script now forwards `BG3SE_NO_HOOKS`, `BG3SE_NO_NET`, and `BG3SE_MINIMAL` environment variables to the game process.
+- **Legacy `Ext.Events.NetMessage` (Issue #6):** Messages sent without a module UUID now auto-fire the legacy `NetMessage` event (Channel, Payload, UserID) in addition to `NetModMessage`. Most existing BG3SE mods use this legacy event.
+- **`Ext.Net.PlayerHasExtender(userId)` (Issue #6):** Server-only function to check if a player's client has the script extender installed. Accepts userId (integer) for immediate lookup; GUID (string) returns nil pending entity component wiring.
+
+### Technical
+- `EVENT_NET_MESSAGE` added to event enum (33 → 34 events total)
+- `lua_net_player_has_extender()` registered in server context only (9 functions vs 8 for client)
+- Version bumped to v0.36.37
+
+---
+
 ## [v0.36.36] - 2026-02-06
 
 **Parity:** ~92% | **Category:** Build System | **Issues:** N/A

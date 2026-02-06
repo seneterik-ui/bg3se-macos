@@ -45,8 +45,19 @@ if [[ ! -f "$DYLIB" ]]; then
 fi
 
 echo "DYLIB: $DYLIB" >> /tmp/bg3w_debug.log
+
+# Pass through BG3SE environment variables (Issue #65 diagnostics)
+BG3SE_ENVS=""
+for var in BG3SE_NO_HOOKS BG3SE_NO_NET BG3SE_MINIMAL; do
+    if [[ -n "${!var}" ]]; then
+        BG3SE_ENVS="${BG3SE_ENVS} ${var}=${!var}"
+        echo "  ${var}=${!var}" >> /tmp/bg3w_debug.log
+    fi
+done
+
 echo "Forcing ARM64 architecture with inline DYLD_INSERT_LIBRARIES" >> /tmp/bg3w_debug.log
 echo "===========================" >> /tmp/bg3w_debug.log
 
 # Force ARM64 architecture with inline env var (export doesn't work with arch)
-exec arch -arm64 env DYLD_INSERT_LIBRARIES="$DYLIB" "$EXEC_PATH" "$@"
+# shellcheck disable=SC2086
+exec arch -arm64 env DYLD_INSERT_LIBRARIES="$DYLIB" $BG3SE_ENVS "$EXEC_PATH" "$@"

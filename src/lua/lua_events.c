@@ -94,7 +94,8 @@ static const char *g_event_names[EVENT_MAX] = {
     "DealDamage",
     "DealtDamage",
     "BeforeDealDamage",
-    "NetModMessage"           // Network mod message (Issue #6)
+    "NetModMessage",          // Network mod message (Issue #6)
+    "NetMessage"              // Legacy network message (no module, Issue #6)
 };
 
 // ============================================================================
@@ -1145,6 +1146,12 @@ void events_fire_net_mod_message(lua_State *L, const char *channel, const char *
                                   uint64_t replyId, bool binary) {
     if (!L) return;
 
+    // Legacy compatibility (Issue #6): If no module and no requestId,
+    // fire the legacy NetMessage event. Most existing mods use this.
+    if ((!module || module[0] == '\0') && requestId == 0 && replyId == 0) {
+        events_fire_net_message(L, channel, payload, userId);
+    }
+
     int count = g_handler_counts[EVENT_NET_MOD_MESSAGE];
     if (count == 0) return;
 
@@ -1207,6 +1214,70 @@ void events_fire_net_mod_message(lua_State *L, const char *channel, const char *
 
     if (g_dispatch_depth[EVENT_NET_MOD_MESSAGE] == 0) {
         process_deferred_unsubscribes(L, EVENT_NET_MOD_MESSAGE);
+    }
+}
+
+// ============================================================================
+// Legacy NetMessage Event (Issue #6 - Windows BG3SE Parity)
+//
+// In Windows BG3SE, messages without a module UUID fire Ext.Events.NetMessage
+// instead of Ext.Events.NetModMessage. Most existing mods use this legacy API.
+// ============================================================================
+
+void events_fire_net_message(lua_State *L, const char *channel, const char *payload,
+                              int userId) {
+    if (!L) return;
+
+    int count = g_handler_counts[EVENT_NET_MESSAGE];
+    if (count == 0) return;
+
+    LOG_EVENTS_DEBUG("Firing NetMessage (legacy, %d handlers), channel=%s", count, channel);
+
+    g_dispatch_depth[EVENT_NET_MESSAGE]++;
+
+    for (int i = 0; i < g_handler_counts[EVENT_NET_MESSAGE]; i++) {
+        EventHandler *h = &g_handlers[EVENT_NET_MESSAGE][i];
+        if (h->callback_ref == LUA_NOREF || h->callback_ref == LUA_REFNIL) {
+            continue;
+        }
+
+        lua_rawgeti(L, LUA_REGISTRYINDEX, h->callback_ref);
+        if (!lua_isfunction(L, -1)) {
+            lua_pop(L, 1);
+            continue;
+        }
+
+        // Create event data table (legacy format: Channel, Payload, UserID)
+        lua_newtable(L);
+
+        lua_pushstring(L, channel ? channel : "");
+        lua_setfield(L, -2, "Channel");
+
+        lua_pushstring(L, payload ? payload : "{}");
+        lua_setfield(L, -2, "Payload");
+
+        lua_pushinteger(L, userId);
+        lua_setfield(L, -2, "UserID");
+
+        if (lua_pcall(L, 1, 0, 0) != LUA_OK) {
+            const char *err = lua_tostring(L, -1);
+            LOG_EVENTS_ERROR("Error in NetMessage handler (id=%llu): %s",
+                       h->handler_id, err ? err : "unknown");
+            lua_pop(L, 1);
+        }
+
+        if (h->once) {
+            if (g_deferred_unsub_count < MAX_DEFERRED_OPERATIONS) {
+                g_deferred_unsubs[g_deferred_unsub_count++] =
+                    (DeferredUnsubscribe){EVENT_NET_MESSAGE, h->handler_id};
+            }
+        }
+    }
+
+    g_dispatch_depth[EVENT_NET_MESSAGE]--;
+
+    if (g_dispatch_depth[EVENT_NET_MESSAGE] == 0) {
+        process_deferred_unsubscribes(L, EVENT_NET_MESSAGE);
     }
 }
 

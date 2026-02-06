@@ -1997,6 +1997,19 @@ static void fake_InitGame(void *thisPtr) {
             events_fire(L, EVENT_MODULE_LOAD_STARTED);
             load_mod_scripts(L);
         }
+
+        // FALLBACK: Run deferred session init NOW if still pending (Issue #65).
+        // On some machines (macOS Tahoe 26.2, M4), fake_Event never fires —
+        // the game tears down the session before any Osiris events flow.
+        // The tick-loop-based init would never run, leaving the session
+        // permanently stuck at LoadSession. Running it here during InitGame
+        // is our last chance before the game engine may abort.
+        // On machines where Events DO fire, this is a no-op (state is already
+        // COMPLETE by the first Event tick, or this runs it slightly earlier).
+        if (s_session_init_state == SESSION_INIT_PENDING) {
+            LOG_GAME_INFO("Running deferred session init from InitGame (Event fallback - Issue #65)");
+            deferred_session_init_tick();
+        }
     }
 }
 
@@ -2637,6 +2650,19 @@ static void install_hooks(void) {
         return;
     }
 
+    // BG3SE_NO_HOOKS: Skip all Dobby hook installation (Issue #65 diagnostic).
+    // The dylib still loads, Lua initializes, but no functions are patched.
+    // This tests whether the hooks themselves cause the game to abort.
+    static int no_hooks = -1;
+    if (no_hooks < 0) no_hooks = (getenv("BG3SE_NO_HOOKS") != NULL);
+    if (no_hooks) {
+        LOG_HOOKS_INFO("BG3SE_NO_HOOKS=1: ALL Dobby hooks SKIPPED. "
+                       "Lua runtime is active but Osiris/Event interception disabled.");
+        hooks_installed = 1;  // Prevent re-entry
+        // Still initialize subsystems (entity, stats, etc.) for diagnostics
+        goto init_subsystems;
+    }
+
     LOG_HOOKS_INFO("Installing Dobby hooks...");
 
     // Test pattern scanner infrastructure
@@ -2741,6 +2767,7 @@ static void install_hooks(void) {
     LOG_HOOKS_INFO("Hooks installed: %d/3", hook_count);
     hooks_installed = 1;
 
+init_subsystems:
     // Initialize Entity System
     // Find the BG3 main executable (not our injected dylib)
     // With DYLD_INSERT_LIBRARIES, our dylib is at index 0, so we need to search

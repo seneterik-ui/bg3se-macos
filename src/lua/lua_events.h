@@ -58,6 +58,7 @@ typedef enum {
     EVENT_DEALT_DAMAGE,        // After damage applied
     EVENT_BEFORE_DEAL_DAMAGE,  // Before damage calculation
     EVENT_NET_MOD_MESSAGE,     // Network mod message (Issue #6)
+    EVENT_NET_MESSAGE,         // Legacy network message (no module, Issue #6)
     EVENT_MAX
 } BG3SEEventType;
 
@@ -249,6 +250,15 @@ void events_fire_turn_ended_from_osiris(lua_State *L, const char *characterGuid)
 void events_fire_net_mod_message(lua_State *L, const char *channel, const char *payload,
                                   const char *module, int userId, uint64_t requestId,
                                   uint64_t replyId, bool binary);
+
+/**
+ * Fire the legacy NetMessage event (for mods that don't use module UUIDs).
+ * In Windows BG3SE, messages without a module fire NetMessage instead of NetModMessage.
+ * Most existing mods still use this legacy event.
+ * Handlers receive {Channel, Payload, UserID} table.
+ */
+void events_fire_net_message(lua_State *L, const char *channel, const char *payload,
+                              int userId);
 
 /**
  * Fire the Log event with log message data.

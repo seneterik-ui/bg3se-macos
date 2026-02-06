@@ -230,6 +230,39 @@ static int lua_net_peer_version(lua_State *L) {
     return 1;
 }
 
+/**
+ * Ext.Net.PlayerHasExtender(characterGuidOrUserId) -> boolean?
+ *
+ * Server-only. Returns true if the specified player's client has the script
+ * extender installed and the handshake has completed. Returns nil if the
+ * player cannot be found.
+ *
+ * Accepts either a userId (integer) or a character GUID (string).
+ * GUID lookup requires entity system to resolve UserID from the character.
+ */
+static int lua_net_player_has_extender(lua_State *L) {
+    if (!s_is_server_context) {
+        return luaL_error(L, "Ext.Net.PlayerHasExtender is server-only");
+    }
+
+    if (lua_isinteger(L, 1)) {
+        // Direct userId lookup
+        int32_t user_id = (int32_t)lua_tointeger(L, 1);
+        lua_pushboolean(L, peer_manager_can_send_extender(user_id));
+        return 1;
+    }
+
+    if (lua_isstring(L, 1)) {
+        // GUID string — would need entity component lookup for UserID
+        // For now, return nil (unknown) since we can't resolve GUID→UserID yet
+        // TODO: Add entity_get_user_id_by_guid() when component read is available
+        lua_pushnil(L);
+        return 1;
+    }
+
+    return luaL_argerror(L, 1, "expected userId (integer) or characterGuid (string)");
+}
+
 // ============================================================================
 // Embedded Script Loading
 // ============================================================================
@@ -306,11 +339,17 @@ void lua_net_register(lua_State *L, int ext_table_index, bool is_server) {
     lua_pushcfunction(L, lua_net_peer_version);
     lua_setfield(L, -2, "PeerVersion");
 
+    // Server-only functions
+    if (is_server) {
+        lua_pushcfunction(L, lua_net_player_has_extender);
+        lua_setfield(L, -2, "PlayerHasExtender");
+    }
+
     // Set as Ext.Net
     lua_setfield(L, abs_ext_index, "Net");
 
-    LOG_LUA_INFO("Registered Ext.Net namespace (8 functions, context=%s)",
-                is_server ? "server" : "client");
+    LOG_LUA_INFO("Registered Ext.Net namespace (%d functions, context=%s)",
+                is_server ? 9 : 8, is_server ? "server" : "client");
 
     // NOTE: lua_net_load_scripts() must be called separately AFTER Ext is global
 }
