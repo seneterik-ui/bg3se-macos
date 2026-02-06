@@ -47,20 +47,20 @@
 
 /**
  * GameServer → ProtocolList (Array<Protocol*>).
- * Windows ~0x2B0, macOS shifted +48 due to pthread_mutex_t growth.
+ * Windows ~0x2B0, macOS shifted +32 due to pthread_mutex_t growth.
  *
- * Array layout (confirmed via statistical binary analysis, NETWORKING.md):
- *   +0x2E0: data pointer (Protocol**)   — 61 accesses confirmed
- *   +0x2F0: capacity (uint64_t)         — LDR X12 confirmed
- *   +0x300: size/count (uint64_t)       — LDR X10 confirmed
+ * Compact Array layout (confirmed via runtime probe, Feb 2026):
+ *   +0x2D0: data pointer (Protocol**)
+ *   +0x2D8: capacity (uint32_t)         — e.g. 64
+ *   +0x2DC: size/count (uint32_t)       — e.g. 45 protocols
  *
- * 16-byte stride between fields (data→capacity→size) is standard for
- * Larian's Array template which includes padding/alignment.
+ * 16-byte struct total: {ptr(8), cap(4), size(4)}.
+ * Next field at +0x2E0 is ProtocolMap (hash table, -1 sentinel buckets).
  */
-#define OFFSET_GAMESERVER_PROTOLIST       0x2E0
-#define OFFSET_GAMESERVER_PROTOLIST_CAP   0x2F0
-#define OFFSET_GAMESERVER_PROTOLIST_SIZE  0x300
-#define OFFSET_GAMESERVER_PROTOMAP        0x310
+#define OFFSET_GAMESERVER_PROTOLIST       0x2D0
+#define OFFSET_GAMESERVER_PROTOLIST_CAP   0x2D8
+#define OFFSET_GAMESERVER_PROTOLIST_SIZE  0x2DC
+#define OFFSET_GAMESERVER_PROTOMAP        0x2E0
 
 // ============================================================================
 // Ghidra Addresses (Phase 4F)
@@ -71,6 +71,74 @@
 
 /** NetMessageFactory::GetMessage (GetFreeMessage) — 524 callers confirmed. */
 #define ADDR_GETMESSAGE 0x1063d5998ULL
+
+// ============================================================================
+// GameServer Peer Array Offsets (Phase 4H)
+//
+// From Ghidra ActivatePeer/DeactivatePeer disassembly (NETWORKING.md):
+//   +0x650: peer array data pointer
+//   +0x65c: peer count (uint32_t)
+//
+// NOTE: May be a hash container rather than a flat array.
+// net_hooks_sync_active_peers() has a fallback if direct read fails.
+// ============================================================================
+
+/** GameServer → ActivePeerIds data pointer. */
+#define OFFSET_GAMESERVER_ACTIVE_PEERS       0x650
+
+/** GameServer → ActivePeerIds count. */
+#define OFFSET_GAMESERVER_ACTIVE_PEERS_COUNT 0x65c
+
+// ============================================================================
+// BitstreamSerializer Layout (Phase 4G)
+//
+// Windows reference (Net.h):
+//   +0x00: vptr
+//   +0x08: uint32_t IsWriting (0=reading, 1=writing)
+//   +0x10: Bitstream* bitstream
+//
+// Itanium ABI VMT (ARM64):
+//   VMT[0] complete_destructor
+//   VMT[1] deleting_destructor
+//   VMT[2] Unknown
+//   VMT[3] WriteBytes(void*, uint64_t)
+//   VMT[4] ReadBytes(void*, uint64_t)
+// ============================================================================
+
+/** Offset of IsWriting field in BitstreamSerializer (after 8-byte VMT pointer). */
+#define OFFSET_SERIALIZER_ISWRITING  0x08
+
+/** VMT index for WriteBytes (Itanium ABI: +2 destructor entries). */
+#define VMT_IDX_WRITEBYTES  3
+
+/** VMT index for ReadBytes (Itanium ABI: +2 destructor entries). */
+#define VMT_IDX_READBYTES   4
+
+// ============================================================================
+// AbstractPeer VMT Indices (for outbound send, Phase 4G)
+//
+// Windows AbstractPeerVMT (MSVC ABI):
+//   Unknown[27]           — indices 0-26
+//   SendToPeer            — index 27
+//   Unknown2[3]           — indices 28-30
+//   SendToMultiplePeers   — index 31
+//   ClientSend            — index 32
+//
+// Itanium ABI shift: +1 destructor entry (complete + deleting = 2 vs MSVC's 1)
+// So MSVC index N becomes Itanium index N+1.
+//
+// Signature: void (*)(AbstractPeer* this, int32_t* peerId, Message* msg)
+// ARM64: x0=this, x1=&peerId, x2=msg
+// ============================================================================
+
+/** SendToPeer VMT index (Itanium ABI = MSVC 27 + 1). */
+#define VMT_IDX_SEND_TO_PEER           28
+
+/** SendToMultiplePeers VMT index (Itanium ABI = MSVC 31 + 1). */
+#define VMT_IDX_SEND_TO_MULTIPLE_PEERS 32
+
+/** ClientSend VMT index (Itanium ABI = MSVC 32 + 1). */
+#define VMT_IDX_CLIENT_SEND            33
 
 // ============================================================================
 // Protocol Version (matches Windows BG3SE ProtoVersion enum)

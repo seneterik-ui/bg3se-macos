@@ -146,6 +146,15 @@ bool safe_memory_write(mach_vm_address_t dest, const void *src, size_t size);
 bool safe_memory_write_pointer(mach_vm_address_t address, void *value);
 
 /**
+ * Safely write a uint32_t value to an address.
+ *
+ * @param address Address to write to
+ * @param value   Value to write
+ * @return true on success, false on failure
+ */
+bool safe_memory_write_u32(mach_vm_address_t address, uint32_t value);
+
+/**
  * Safely write a uint64_t value to an address.
  *
  * @param address Address to write to

@@ -226,3 +226,55 @@ void peer_manager_clear(void) {
     s_initialized = false;
     LOG_NET_DEBUG("Peer manager cleared");
 }
+
+// ============================================================================
+// Iteration and Lookup (Phase 4H)
+// ============================================================================
+
+int peer_manager_iterate(PeerIterator fn, void *user_data) {
+    if (!fn) return 0;
+    if (!s_initialized) {
+        peer_manager_init();
+    }
+
+    int visited = 0;
+    for (int i = 0; i < MAX_PEERS; i++) {
+        if (s_peers[i].active) {
+            visited++;
+            if (!fn(&s_peers[i], user_data)) {
+                break;
+            }
+        }
+    }
+    return visited;
+}
+
+int32_t peer_manager_find_by_guid(const char *guid) {
+    if (!guid || !guid[0]) return -1;
+    if (!s_initialized) {
+        peer_manager_init();
+    }
+
+    for (int i = 0; i < MAX_PEERS; i++) {
+        if (s_peers[i].active && s_peers[i].character_guid[0] &&
+            strcmp(s_peers[i].character_guid, guid) == 0) {
+            return s_peers[i].user_id;
+        }
+    }
+    return -1;
+}
+
+// ============================================================================
+// Handshake Gating (Phase 4I)
+// ============================================================================
+
+bool peer_manager_can_send_extender(int32_t user_id) {
+    if (!s_initialized) {
+        peer_manager_init();
+    }
+
+    int slot = find_slot_by_user_id(user_id);
+    if (slot < 0) return false;
+
+    return s_peers[slot].proto_version > 0;
+}

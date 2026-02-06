@@ -128,4 +128,46 @@ bool peer_manager_set_rate_limit(int32_t user_id, uint32_t max_per_sec);
  */
 void peer_manager_clear(void);
 
+// ============================================================================
+// Iteration and Lookup (Phase 4H)
+// ============================================================================
+
+/**
+ * Callback for peer iteration.
+ * Return true to continue iterating, false to stop early.
+ */
+typedef bool (*PeerIterator)(const PeerInfo *peer, void *user_data);
+
+/**
+ * Iterate all active peers, calling fn(peer, user_data) for each.
+ * Stops early if fn returns false.
+ *
+ * @param fn        Callback function
+ * @param user_data Opaque pointer passed to callback
+ * @return Number of peers visited
+ */
+int peer_manager_iterate(PeerIterator fn, void *user_data);
+
+/**
+ * Find a peer by character GUID.
+ * Linear scan (MAX_PEERS=16, always fast).
+ *
+ * @param guid Character GUID to search for
+ * @return user_id of matching peer, or -1 if not found
+ */
+int32_t peer_manager_find_by_guid(const char *guid);
+
+// ============================================================================
+// Handshake Gating (Phase 4I)
+// ============================================================================
+
+/**
+ * Check if a peer has completed the extender handshake.
+ * A peer can send/receive extender messages if proto_version > 0.
+ *
+ * @param user_id User ID to check
+ * @return true if peer exists and has negotiated a protocol version
+ */
+bool peer_manager_can_send_extender(int32_t user_id);
+
 #endif /* PEER_MANAGER_H */

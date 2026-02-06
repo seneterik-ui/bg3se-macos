@@ -225,6 +225,10 @@ bool safe_memory_write_pointer(mach_vm_address_t address, void *value) {
     return safe_memory_write(address, &value, sizeof(void *));
 }
 
+bool safe_memory_write_u32(mach_vm_address_t address, uint32_t value) {
+    return safe_memory_write(address, &value, sizeof(uint32_t));
+}
+
 bool safe_memory_write_u64(mach_vm_address_t address, uint64_t value) {
     return safe_memory_write(address, &value, sizeof(uint64_t));
 }

@@ -19,6 +19,8 @@
 #include "protocol.h"
 #include "extender_protocol.h"
 #include "extender_message.h"
+#include "peer_manager.h"
+#include "network_backend.h"
 #include "../core/logging.h"
 #include "../core/safe_memory.h"
 #include "../entity/entity_system.h"  // entity_get_binary_base()
@@ -26,6 +28,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <stdio.h>
 
 // ============================================================================
 // Static State
@@ -42,6 +45,13 @@ static void *s_net_msg_factory = NULL;     // NetMessageFactory* (from GameServe
 typedef void *(*GetMessage_t)(void *factory, uint32_t message_id);
 static GetMessage_t s_orig_GetMessage = NULL;
 static void *s_hook_target_addr = NULL;    // For cleanup
+
+// Outbound send state (Phase 4G)
+static bool s_send_vmt_probed = false;
+static void *s_send_fn = NULL;  // Resolved SendToPeer function pointer
+
+// Forward declarations (Phase 4I)
+static void send_client_hello(void);
 
 // ============================================================================
 // Safe Memory Helpers
@@ -143,11 +153,12 @@ static int probe_protocol_list(void *game_server, uintptr_t data_offset,
     if (!data_raw) return 0;
     void **data = (void **)data_raw;
 
-    // Read size as uint64_t safely
-    uint64_t size = 0;
-    if (!safe_read_u64(game_server, size_offset, &size)) return 0;
+    // Read size as uint32_t (Larian Array uses packed {ptr, u32 cap, u32 size})
+    uint32_t size32 = 0;
+    if (!safe_memory_read_u32((mach_vm_address_t)game_server + size_offset, &size32)) return 0;
+    uint64_t size = size32;
 
-    // Sanity check: protocol count should be small (typically 3-10)
+    // Sanity check: protocol count should be reasonable (typically 3-50)
     if (size == 0 || size > 64) return 0;
 
     // Validate entries: each should be a pointer to an object with a vtable
@@ -199,8 +210,9 @@ void net_hooks_remove(void) {
         ExtenderProtocol *proto = extender_protocol_get();
         if (proto) {
             void *data_raw = safe_read_ptr(s_game_server, OFFSET_GAMESERVER_PROTOLIST);
-            uint64_t size = 0;
-            safe_read_u64(s_game_server, OFFSET_GAMESERVER_PROTOLIST_SIZE, &size);
+            uint32_t size32 = 0;
+            safe_memory_read_u32((mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE, &size32);
+            uint64_t size = size32;
 
             if (data_raw && size > 0 && size <= 64) {
                 void **data = (void **)data_raw;
@@ -229,9 +241,9 @@ void net_hooks_remove(void) {
                     safe_memory_write_pointer(
                         (mach_vm_address_t)&data[size - 1], NULL);
                     __sync_synchronize();
-                    safe_memory_write_u64(
+                    safe_memory_write_u32(
                         (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE,
-                        size - 1);
+                        (uint32_t)(size - 1));
                     __sync_synchronize();
 
                     LOG_NET_INFO("  Removed ExtenderProtocol from ProtocolList index %d (new size=%llu)",
@@ -264,6 +276,8 @@ void net_hooks_remove(void) {
     s_game_server = NULL;
     s_net_msg_factory = NULL;
     s_hook_target_addr = NULL;
+    s_send_vmt_probed = false;
+    s_send_fn = NULL;
 }
 
 NetHookStatus net_hooks_get_status(void) {
@@ -470,6 +484,98 @@ bool net_hooks_register_message(void) {
     }
 }
 
+// ============================================================================
+// Outbound Send (Phase 4G)
+//
+// Sends an ExtenderMessage to a specific peer using the game's transport.
+// Uses GameServer VMT dispatch: SendToPeer at Itanium index 28.
+//
+// ARM64 calling convention:
+//   x0 = this (GameServer*/AbstractPeer*)
+//   x1 = &peerId (int32_t*, passed by pointer — Windows pattern)
+//   x2 = msg (Message*)
+// ============================================================================
+
+/**
+ * Probe GameServer VMT to discover and validate SendToPeer.
+ * One-time operation on first send attempt.
+ */
+static bool probe_send_vmt(void) {
+    if (s_send_vmt_probed) return (s_send_fn != NULL);
+
+    if (!s_game_server) {
+        LOG_NET_WARN("probe_send_vmt: GameServer not captured");
+        return false;
+    }
+
+    void **vmt = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)s_game_server, (void **)&vmt)) {
+        LOG_NET_WARN("probe_send_vmt: failed to read GameServer VMT");
+        return false;
+    }
+
+    LOG_NET_INFO("probe_send_vmt: GameServer=%p, VMT=%p", s_game_server, (void *)vmt);
+
+    // Read SendToPeer at expected index
+    void *fn = NULL;
+    if (!safe_memory_read_pointer(
+            (mach_vm_address_t)&vmt[VMT_IDX_SEND_TO_PEER], &fn)) {
+        LOG_NET_WARN("probe_send_vmt: failed to read VMT[%d]", VMT_IDX_SEND_TO_PEER);
+        return false;
+    }
+
+    if (!fn) {
+        LOG_NET_WARN("probe_send_vmt: VMT[%d] is NULL", VMT_IDX_SEND_TO_PEER);
+        return false;
+    }
+
+    // Log nearby VMT entries for diagnostic verification
+    LOG_NET_INFO("  VMT entries around SendToPeer (index %d):", VMT_IDX_SEND_TO_PEER);
+    for (int i = VMT_IDX_SEND_TO_PEER - 2; i <= VMT_IDX_SEND_TO_PEER + 2; i++) {
+        if (i < 0) continue;
+        void *entry = NULL;
+        safe_memory_read_pointer((mach_vm_address_t)&vmt[i], &entry);
+        LOG_NET_INFO("    VMT[%d] = %p%s", i, entry,
+                     (i == VMT_IDX_SEND_TO_PEER) ? " <-- SendToPeer" : "");
+    }
+
+    s_send_fn = fn;
+    s_send_vmt_probed = true;  // Only mark probed after successful resolution
+    LOG_NET_INFO("  SendToPeer resolved: %p", s_send_fn);
+    return true;
+}
+
+bool net_hooks_send_message(int32_t peer_id, void *msg) {
+    if (!s_game_server) {
+        LOG_NET_WARN("net_hooks_send_message: GameServer not captured");
+        return false;
+    }
+    if (!msg) {
+        LOG_NET_WARN("net_hooks_send_message: NULL message");
+        return false;
+    }
+
+    if (!probe_send_vmt()) {
+        LOG_NET_WARN("net_hooks_send_message: SendToPeer not resolved");
+        return false;
+    }
+
+    LOG_NET_DEBUG("net_hooks_send_message: peer=%d, msg=%p via SendToPeer=%p",
+                  peer_id, msg, s_send_fn);
+
+    // Call SendToPeer(this, &peerId, msg)
+    // ARM64: x0=GameServer*, x1=&peerId, x2=Message*
+    typedef void (*SendToPeer_t)(void *self, int32_t *peer_id_ptr, void *msg);
+    int32_t pid = peer_id;
+    ((SendToPeer_t)s_send_fn)(s_game_server, &pid, msg);
+
+    return true;
+}
+
+void *net_hooks_get_game_server(void) {
+    return s_game_server;
+}
+
 bool net_hooks_insert_protocol(void) {
     if (!s_game_server) {
         LOG_NET_WARN("net_hooks_insert_protocol: GameServer not captured");
@@ -493,17 +599,20 @@ bool net_hooks_insert_protocol(void) {
                  (void *)proto, s_game_server);
 
     // ---- Phase 4E: Live ProtocolList insertion ----
-    // Read current data/capacity/size from GameServer offsets
+    // Read current data/capacity/size from GameServer offsets.
+    // Larian Array<T> layout: {data_ptr(8), capacity(u32), size(u32)} = 16 bytes.
     void *data_raw = safe_read_ptr(s_game_server, OFFSET_GAMESERVER_PROTOLIST);
-    uint64_t capacity = 0, size = 0;
-    if (!safe_read_u64(s_game_server, OFFSET_GAMESERVER_PROTOLIST_CAP, &capacity)) {
+    uint32_t capacity32 = 0, size32 = 0;
+    if (!safe_memory_read_u32((mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_CAP, &capacity32)) {
         LOG_NET_WARN("  Failed to read ProtocolList capacity");
         return false;
     }
-    if (!safe_read_u64(s_game_server, OFFSET_GAMESERVER_PROTOLIST_SIZE, &size)) {
+    if (!safe_memory_read_u32((mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE, &size32)) {
         LOG_NET_WARN("  Failed to read ProtocolList size");
         return false;
     }
+    uint64_t capacity = capacity32;
+    uint64_t size = size32;
 
     if (!data_raw || size > 64 || capacity > 128) {
         LOG_NET_WARN("  ProtocolList sanity check failed: data=%p, capacity=%llu, size=%llu",
@@ -554,9 +663,9 @@ bool net_hooks_insert_protocol(void) {
             free(new_data);
             return false;
         }
-        if (!safe_memory_write_u64(
+        if (!safe_memory_write_u32(
                 (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_CAP,
-                new_cap)) {
+                (uint32_t)new_cap)) {
             LOG_NET_ERROR("  Failed to write new capacity");
             return false;
         }
@@ -578,9 +687,9 @@ bool net_hooks_insert_protocol(void) {
 
     // Increment size — write AFTER data[0] is set for thread safety
     __sync_synchronize();  // ARM64 full memory barrier
-    safe_memory_write_u64(
+    safe_memory_write_u32(
         (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_PROTOLIST_SIZE,
-        size + 1);
+        (uint32_t)(size + 1));
     __sync_synchronize();
 
     // Verify insertion
@@ -598,5 +707,138 @@ bool net_hooks_insert_protocol(void) {
 
     s_status.protocol_list_hooked = true;
     proto->active = true;
+
+    // Switch to RakNet backend now that protocol is fully inserted (Phase 4I)
+    // Moved from net_hooks_capture_peer() — must happen AFTER protocol insertion
+    // so incoming messages can be dispatched through our ExtenderProtocol.
+    // NOTE: Must switch backend BEFORE marking host peer ready, otherwise
+    // messages could be routed through LocalBackend instead of RakNet.
+    network_backend_set_raknet();
+
+    // Mark the host peer as handshake-complete (Phase 4I).
+    // The host always has the extender (it's us), so set proto_version directly.
+    // This ensures raknet_send() gating passes for the local host peer.
+    PeerInfo *host = peer_manager_get_host();
+    if (host) {
+        peer_manager_set_proto_version(host->user_id, PROTO_VERSION_CURRENT);
+    }
+
+    // Send hello to server if we're a client (Phase 4I handshake)
+    send_client_hello();
+
     return true;
+}
+
+// ============================================================================
+// Client Hello (Phase 4I)
+//
+// Sends a JSON hello message to the server after protocol insertion.
+// The server will reply with its own hello, completing the handshake.
+// Wire format: {"t":"hello","v":2}
+// ============================================================================
+
+static void send_client_hello(void) {
+    // Build hello JSON with current protocol version
+    char hello[64];
+    snprintf(hello, sizeof(hello), "{\"t\":\"hello\",\"v\":%d}", PROTO_VERSION_CURRENT);
+
+    // Create ExtenderMessage with hello payload
+    ExtenderMessage *msg = extender_message_pool_get();
+    if (!msg) {
+        LOG_NET_WARN("send_client_hello: pool exhausted, skipping hello");
+        return;
+    }
+
+    if (!extender_message_set_payload(msg, hello, (uint32_t)strlen(hello))) {
+        LOG_NET_WARN("send_client_hello: failed to set payload");
+        extender_message_pool_return(msg);
+        return;
+    }
+
+    // Send to server (peer 0)
+    bool ok = net_hooks_send_message(0, &msg->base);
+    if (ok) {
+        LOG_NET_INFO("Sent client hello to server (version %d)", PROTO_VERSION_CURRENT);
+    } else {
+        LOG_NET_WARN("send_client_hello: send failed");
+        extender_message_pool_return(msg);
+    }
+}
+
+// ============================================================================
+// ActivePeerIds Sync (Phase 4H)
+//
+// Reads the GameServer's ActivePeerIds array and registers any unknown
+// peers into PeerManager. Called before broadcast to ensure coverage.
+//
+// GameServer+0x650: peer array data pointer
+// GameServer+0x65c: peer count (uint32_t)
+//
+// NOTE: This may be a hash container, not a flat array. If direct read
+// produces invalid peer IDs, the function returns 0 and broadcast falls
+// back to implicit peer registration from extender_process_msg.
+// ============================================================================
+
+int net_hooks_sync_active_peers(void) {
+    if (!s_game_server) return 0;
+
+    // Read peer array data pointer
+    void *peer_data = safe_read_ptr(s_game_server, OFFSET_GAMESERVER_ACTIVE_PEERS);
+    if (!peer_data) return 0;
+
+    // Read peer count (32-bit)
+    uint32_t peer_count = 0;
+    if (!safe_memory_read_u32(
+            (mach_vm_address_t)s_game_server + OFFSET_GAMESERVER_ACTIVE_PEERS_COUNT,
+            &peer_count)) {
+        return 0;
+    }
+
+    // Sanity: BG3 supports max ~4 players, but allow headroom
+    if (peer_count == 0 || peer_count > MAX_PEERS) return 0;
+
+    int synced = 0;
+    for (uint32_t i = 0; i < peer_count; i++) {
+        int32_t peer_id = 0;
+        if (!safe_memory_read_u32(
+                (mach_vm_address_t)peer_data + (i * sizeof(int32_t)),
+                (uint32_t *)&peer_id)) {
+            continue;
+        }
+
+        // Sanity: peer IDs should be small non-negative integers
+        if (peer_id < 0 || peer_id > 64) continue;
+
+        if (!peer_manager_get_peer(peer_id)) {
+            peer_manager_add_peer(peer_id, NULL, (peer_id == 0));
+            synced++;
+        }
+    }
+
+    if (synced > 0) {
+        LOG_NET_DEBUG("net_hooks_sync_active_peers: synced %d new peers (total in array: %u)",
+                      synced, peer_count);
+    } else if (peer_count > 0) {
+        // Check if we already knew about all peers, or if the data is garbage
+        int known = 0;
+        for (uint32_t i = 0; i < peer_count; i++) {
+            int32_t pid = 0;
+            if (safe_memory_read_u32(
+                    (mach_vm_address_t)peer_data + (i * sizeof(int32_t)),
+                    (uint32_t *)&pid) && pid >= 0 && pid <= 64) {
+                if (peer_manager_get_peer(pid)) known++;
+            }
+        }
+        if (known == 0) {
+            static bool s_hash_warning_logged = false;
+            if (!s_hash_warning_logged) {
+                LOG_NET_WARN("net_hooks_sync_active_peers: 0/%u peer IDs valid — "
+                             "OFFSET_GAMESERVER_ACTIVE_PEERS (0x%X) may be wrong",
+                             peer_count, OFFSET_GAMESERVER_ACTIVE_PEERS);
+                s_hash_warning_logged = true;
+            }
+        }
+    }
+
+    return synced;
 }

@@ -110,4 +110,31 @@ bool net_hooks_register_message(void);
  */
 bool net_hooks_insert_protocol(void);
 
+/**
+ * Send an ExtenderMessage to a specific peer via the game's transport.
+ * Uses GameServer's VMT SendToPeer (ARM64 Itanium index 28).
+ *
+ * Must be called after GameServer is captured (net_hooks_capture_peer).
+ *
+ * @param peer_id  Target peer ID (server uses 1 for host, clients use 0+)
+ * @param msg      ExtenderMessage with payload set
+ * @return true if the send call was made, false on error
+ */
+bool net_hooks_send_message(int32_t peer_id, void *msg);
+
+/**
+ * Get the captured GameServer pointer.
+ * Returns NULL if not yet captured.
+ */
+void *net_hooks_get_game_server(void);
+
+/**
+ * Sync GameServer's ActivePeerIds into PeerManager.
+ * Reads the peer array at GameServer+0x650 and registers unknown peers.
+ * Called before broadcast to ensure PeerManager is up-to-date.
+ *
+ * @return Number of newly registered peers (0 if none or on failure)
+ */
+int net_hooks_sync_active_peers(void);
+
 #endif /* NET_HOOKS_H */

@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.28
+## Current Status: v0.36.31
 
 **Overall Feature Parity: ~88%** (based on comprehensive API function count analysis)
 
@@ -46,7 +46,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Enums` | ✅ Full | ✅ 14 enum/bitfield types | **100%** | 7 |
 | `Ext.Math` | ✅ Full (59) | ✅ 57 functions (vectors, matrices, 16 quaternions, scalars) | **97%** | 7.5 |
 | `Ext.Input` | ✅ Full | ✅ CGEventTap capture, hotkeys (8 macOS-specific) | **100%** | 9 |
-| `Ext.Net` | ✅ Full | ✅ Phase 4F Complete (GetMessage hook, message pool, incoming pipeline) | **90%** | 6 |
+| `Ext.Net` | ✅ Full | ✅ Phase 4I Complete (handshake, version negotiation, full multiplayer transport) | **95%** | 6 |
 | `Ext.UI` | ✅ Full (9) | ❌ Not impl | **0%** | 8 |
 | `Ext.IMGUI` | ✅ Full (7+) | ✅ Complete widget system (40 types) - All widgets, events, Metal backend | **100%** | 8 |
 | `Ext.Level` | ✅ Full (21) | ❌ Not impl | **0%** | 9 |
@@ -877,7 +877,7 @@ Ext.Debug.HexDump(addr, size)
 ## Phase 6: Networking & Co-op Sync
 
 ### 6.1 NetChannel API (New - v22+)
-**Status:** ✅ Phase 4F Complete (v0.36.28) - GetMessage hook intercepts ID 400, message pool, incoming pipeline routes to message_bus. BitstreamSerializer RE needed for actual payload parsing (Phase 4G).
+**Status:** ✅ Phase 4I Complete (v0.36.31) - Full multiplayer transport with handshake: JSON hello exchange, CanSendExtenderMessages gating, Ext.Net.IsReady/PeerVersion, auto-switch timing fix.
 
 From API.md: "NetChannel API provides a structured abstraction for request/response and message broadcasting."
 
@@ -899,12 +899,14 @@ channel:SendToClient(data, userOrGuid)
 channel:Broadcast(data)
 
 -- Utility (✅ Working)
-Ext.Net.IsHost()   -- Returns true in single-player
-Ext.Net.Version()  -- Returns 2 (binary support)
+Ext.Net.IsHost()            -- Returns true in single-player
+Ext.Net.Version()           -- Returns 2 (binary support)
+Ext.Net.IsReady()           -- Returns true after handshake
+Ext.Net.PeerVersion(userId) -- Returns peer's proto version
 ```
 
 **Phase 1 Implementation (Complete):**
-- [x] `Ext.Net` namespace with 6 functions
+- [x] `Ext.Net` namespace with 8 functions
 - [x] `Net.CreateChannel()` high-level API
 - [x] `SetHandler()` for fire-and-forget messages
 - [x] `SendToServer()`, `SendToClient()`, `Broadcast()`
@@ -940,8 +942,8 @@ end)
 - [x] Found `GameServer::DeactivatePeer` at `0x105347910`
 - [x] **EocServer+0xA8 = GameServer** (233 accesses, statistical analysis of 2706 loads)
 - [x] **GameServer+0x1F8 = NetMessageFactory** (74 accesses, +16 from Windows)
-- [x] **GameServer+0x2E0 = ProtocolList** (data/capacity/size at +0x2E0/+0x2F0/+0x300)
-- [x] **GameServer+0x310 = ProtocolMap** (HashMap for protocol ID lookup)
+- [x] **GameServer+0x2D0 = ProtocolList** (Larian Array: ptr(8)+cap_u32(4)+size_u32(4) = 16 bytes)
+- [x] **GameServer+0x2E0 = ProtocolMap** (HashMap for protocol ID lookup, -1 sentinel buckets)
 - [x] Itanium ABI vtable with dual destructor entries implemented
 - [x] `net_hooks_capture_peer()` reads GameServer, NetMessageFactory, ProtocolList from live game
 - [x] Integrated into main.c after EntityWorld discovery
@@ -950,15 +952,39 @@ end)
 - [x] Documented Windows struct layouts from BG3Extender reference
 - [x] Created ARM64 binary analysis scripts (`scripts/re/`)
 - [x] Full RE documentation in `ghidra/offsets/NETWORKING.md`
-- [ ] Runtime probe EocServer→GameServer offset (Windows: 0xA8)
-- [ ] Find macOS ProtocolList offset (Windows: ~0x2B0, shifted on ARM64)
-- [ ] Find macOS NetMessageFactory offset (Windows: ~0x1E8, shifted on ARM64)
-- [ ] Find message dispatch / ProcessMsg hook point
+- [x] Runtime probe EocServer→GameServer offset — confirmed 0xA8 at runtime
+- [x] ProtocolList offset corrected from +0x2E0 to +0x2D0 via live memory probing
+- [x] NetMessageFactory offset confirmed at +0x1F8 via runtime
+- [x] ProcessMsg dispatch via Protocol VMT[2] (Itanium ABI)
 
-**Phase 3 TODO (True Multiplayer):**
-- [ ] Hook `NetMessageFactory` for custom message type
-- [ ] Real network transmission for multiplayer
-- [ ] User ID tracking across peers
+**Phase 4G: BitstreamSerializer + Outbound Send (COMPLETE - v0.36.29):**
+- [x] em_serialize uses BitstreamSerializer VMT dispatch (WriteBytes at VMT[3], ReadBytes at VMT[4])
+- [x] IsWriting flag at serializer+0x08 determines read vs write mode
+- [x] `net_hooks_send_message()` — outbound send via GameServer VMT SendToPeer (index 28)
+- [x] Runtime VMT probe validates SendToPeer function pointer before first call
+- [x] RakNet backend: JSON wire format, send_to_server, send_to_user implemented
+- [x] `network_backend_set_raknet()` switches from Local to RakNet when GameServer captured
+
+**Phase 4H: Peer Resolution + Broadcast + Auto-Detect (COMPLETE - v0.36.30):**
+- [x] GUID-to-peer resolution for `send_to_client` via `peer_manager_find_by_guid()`
+- [x] Peer iteration for `broadcast` via `peer_manager_iterate()` + `broadcast_visitor`
+- [x] Auto-detect multiplayer: `network_backend_set_raknet()` called from `net_hooks_insert_protocol()`
+- [x] Implicit peer handshake: unknown peers auto-registered in `extender_process_msg()`
+- [x] `net_hooks_sync_active_peers()` reads GameServer ActivePeerIds (+0x650/+0x65c)
+
+**Phase 4I: Handshake + Version Negotiation (COMPLETE - v0.36.31):**
+- [x] JSON hello handshake: `{"t":"hello","v":2}` exchange via ExtenderMessage
+- [x] `peer_manager_can_send_extender()` gates all RakNet sends on proto_version > 0
+- [x] `Ext.Net.IsReady()` and `Ext.Net.PeerVersion(userId)` Lua API
+- [x] Hello message parsing in `extender_process_msg()` (intercepts before message bus)
+- [x] Server auto-replies to client hello messages (ping-pong prevention: only first hello)
+- [x] Fixed auto-switch timing: moved to `net_hooks_insert_protocol()` (was premature in `net_hooks_capture_peer()`)
+- [x] Hash container warning in `net_hooks_sync_active_peers()` for invalid peer IDs (log-once guard)
+- [x] **ProtocolList offset corrected**: +0x2D0 with packed uint32 cap/size (was +0x2E0 with uint64)
+- [x] **Larian Array layout**: `{data_ptr(8), capacity_u32(4), size_u32(4)}` — 16-byte compact struct
+- [x] Buffer overread fix: hello parsing copies to NUL-terminated stack buffer before strstr/sscanf
+- [x] Race condition fix: backend switch before host peer proto_version assignment
+- [x] Added `safe_memory_write_u32()` for compact array field updates
 
 **Benefits over legacy NetMessage:**
 - Structured request/reply semantics
@@ -1440,7 +1466,7 @@ Full debugging experience with breakpoints, stepping, and variable inspection.
 | A2 | PersistentVars | Medium | ✅ Complete |
 | A3 | Stats Property Read/Write | High | ✅ Complete (v0.18.0) |
 | A4 | Component Property Access | High | ✅ Complete (v0.24.0) |
-| A5 | NetChannel API | High | ❌ Not Started |
+| A5 | NetChannel API | High | ✅ Phase 4I Complete (v0.36.31) |
 | A6 | User Variables | High | ✅ Complete |
 
 ### Priority B: High Impact (Breaks Many Mods)
@@ -1494,6 +1520,9 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.31 | 2026-02-06 | **NetChannel API Phase 4I** - Handshake + version negotiation: JSON hello exchange, CanSendExtenderMessages gating, Ext.Net.IsReady/PeerVersion, auto-switch timing fix (Issue #6) |
+| v0.36.30 | 2026-02-06 | **NetChannel API Phase 4H** - Peer resolution + broadcast + auto-detect: GUID-to-peer lookup, peer iteration broadcast, ActivePeerIds sync, implicit handshake (Issue #6) |
+| v0.36.29 | 2026-02-06 | **NetChannel API Phase 4G** - Bidirectional transport: em_serialize via BitstreamSerializer VMT dispatch (WriteBytes/ReadBytes), outbound send via GameServer VMT SendToPeer (index 28), RakNet backend with JSON wire format, network_backend_set_raknet() (Issue #6) |
 | v0.36.28 | 2026-02-06 | **NetChannel API Phase 4F** - GetMessage hook via Dobby (ASLR-aware), ExtenderMessage pool (8 slots), full net::Message layout (40 bytes), em_serialize diagnostic, process_msg routes to message_bus (Issue #6) |
 | v0.36.27 | 2026-02-05 | **NetChannel API Phase 4E** - Live ProtocolList insertion (swap-to-end pattern), MessageFactory runtime probe, safe_memory write API, cleanup on shutdown (Issue #6, #65) |
 | v0.36.26 | 2026-02-05 | **NetChannel API Phase 4D** - All network offsets RE'd via statistical binary analysis: EocServer+0xA8=GameServer, GameServer+0x1F8=NetMessageFactory, +0x2E0=ProtocolList. Itanium ABI vtable, capture pipeline in main.c (Issue #6) |
@@ -1614,12 +1643,12 @@ See `agent_docs/acceleration.md` for detailed methodology |
 | Issue | Feature | Acceleration | Key Technique |
 |-------|---------|--------------|---------------|
 | **#37 Ext.Level** | Physics/Raycast | **50%** | Find physics engine, port LevelLib.inl |
-| ~~#6 NetChannel~~ | Networking | ⚠️ **Phase 4F DONE** | GetMessage hook, message pool, incoming pipeline. Phase 4G (BitstreamSerializer RE, outbound send) next |
 | **#35 Ext.UI** | Noesis UI | **25%** | Deep game UI hooks required |
 
 **Completed:**
 | Issue | Feature | Status |
 |-------|---------|--------|
+| ~~#6~~ | NetChannel API | ✅ DONE (v0.36.31, Phase 4I) |
 | ~~#15~~ | Client Lua State | ✅ DONE (v0.36.4) |
 | ~~#32~~ | Stats Sync | ✅ DONE |
 | ~~#40~~ | StaticData | ✅ DONE (auto-capture) |

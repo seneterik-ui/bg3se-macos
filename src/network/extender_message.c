@@ -40,49 +40,180 @@ static void em_deleting_destructor(MessageBase *self) {
     free(em);
 }
 
+// ============================================================================
+// BitstreamSerializer Virtual Dispatch (Phase 4G)
+//
+// The game passes a BitstreamSerializer* to Message::Serialize().
+// Layout (Windows reference, identical on ARM64 except vtable shift):
+//   +0x00: const VMT* vmt
+//   +0x08: uint32_t IsWriting  (0=reading, 1=writing)
+//   +0x10: Bitstream* bitstream
+//
+// Itanium ABI vtable layout:
+//   VMT[0] complete_destructor
+//   VMT[1] deleting_destructor
+//   VMT[2] Unknown
+//   VMT[3] WriteBytes(void*, uint64_t)  -> VMT_IDX_WRITEBYTES
+//   VMT[4] ReadBytes(void*, uint64_t)   -> VMT_IDX_READBYTES
+//
+// We call WriteBytes/ReadBytes through the VMT for ABI correctness.
+// ============================================================================
+
+static bool s_serializer_diag_done = false;
+
+/**
+ * Call serializer->WriteBytes(buf, size) via VMT dispatch.
+ * Returns true if the call was made, false on safety failure.
+ */
+static bool serializer_write_bytes(void *serializer, const void *data, uint64_t size) {
+    void **vmt = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)serializer, (void **)&vmt)) {
+        LOG_NET_WARN("serializer_write_bytes: failed to read VMT pointer");
+        return false;
+    }
+
+    typedef void (*WriteBytes_t)(void *self, const void *buf, uint64_t size);
+    WriteBytes_t fn = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)&vmt[VMT_IDX_WRITEBYTES],
+                                   (void **)&fn)) {
+        LOG_NET_WARN("serializer_write_bytes: failed to read VMT[%d]", VMT_IDX_WRITEBYTES);
+        return false;
+    }
+
+    if (!fn) {
+        LOG_NET_WARN("serializer_write_bytes: VMT[%d] is NULL", VMT_IDX_WRITEBYTES);
+        return false;
+    }
+
+    fn(serializer, data, size);
+    return true;
+}
+
+/**
+ * Call serializer->ReadBytes(buf, size) via VMT dispatch.
+ * Returns true if the call was made, false on safety failure.
+ */
+static bool serializer_read_bytes(void *serializer, void *data, uint64_t size) {
+    void **vmt = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)serializer, (void **)&vmt)) {
+        LOG_NET_WARN("serializer_read_bytes: failed to read VMT pointer");
+        return false;
+    }
+
+    typedef void (*ReadBytes_t)(void *self, void *buf, uint64_t size);
+    ReadBytes_t fn = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)&vmt[VMT_IDX_READBYTES],
+                                   (void **)&fn)) {
+        LOG_NET_WARN("serializer_read_bytes: failed to read VMT[%d]", VMT_IDX_READBYTES);
+        return false;
+    }
+
+    if (!fn) {
+        LOG_NET_WARN("serializer_read_bytes: VMT[%d] is NULL", VMT_IDX_READBYTES);
+        return false;
+    }
+
+    fn(serializer, data, size);
+    return true;
+}
+
 static void em_serialize(MessageBase *self, void *serializer) {
     ExtenderMessage *em = (ExtenderMessage *)self;
 
-    LOG_NET_INFO("ExtenderMessage::Serialize called: self=%p, serializer=%p",
-                 (void *)self, serializer);
-
     if (!serializer) {
-        LOG_NET_WARN("  Serialize: NULL serializer");
+        LOG_NET_WARN("ExtenderMessage::Serialize: NULL serializer");
         return;
     }
 
-    // Diagnostic: dump first 64 bytes of serializer for layout discovery.
-    // The game calls msg->Serialize(serializer) where serializer is a
-    // BitstreamSerializer. We need to discover:
-    //   - IsWriting flag (bool/uint8_t at some offset)
-    //   - ReadBytes/WriteBytes method pointers or inline functions
-    //
-    // This diagnostic runs until BitstreamSerializer RE is complete (Phase 4G).
-    LOG_NET_INFO("  Serializer dump (first 64 bytes):");
-    for (int i = 0; i < 64; i += 8) {
-        uint64_t val = 0;
-        if (safe_memory_read_u64((mach_vm_address_t)serializer + i, &val)) {
-            LOG_NET_INFO("    +0x%02x: 0x%016llx", i, (unsigned long long)val);
-        } else {
-            LOG_NET_INFO("    +0x%02x: <unreadable>", i);
-            break;
-        }
-    }
+    // One-time diagnostic: log VMT and layout on first call for verification
+    if (!s_serializer_diag_done) {
+        s_serializer_diag_done = true;
 
-    // Heuristic: try common IsWriting offsets (0x08, 0x10, 0x18)
-    // If IsWriting==0 (deserializing), we're receiving a message.
-    // If IsWriting==1 (serializing), we're sending a message.
-    for (int off = 0x08; off <= 0x18; off += 0x08) {
-        uint8_t flag = 0xFF;
-        if (safe_memory_read_u8((mach_vm_address_t)serializer + off, &flag)) {
-            if (flag == 0 || flag == 1) {
-                LOG_NET_INFO("  Candidate IsWriting at +0x%02x = %u", off, flag);
+        void **vmt = NULL;
+        safe_memory_read_pointer((mach_vm_address_t)serializer, (void **)&vmt);
+        LOG_NET_INFO("BitstreamSerializer first-call diagnostic:");
+        LOG_NET_INFO("  serializer=%p, VMT=%p", serializer, (void *)vmt);
+
+        if (vmt) {
+            for (int i = 0; i < 5; i++) {
+                void *entry = NULL;
+                safe_memory_read_pointer((mach_vm_address_t)&vmt[i], &entry);
+                LOG_NET_INFO("  VMT[%d] = %p", i, entry);
+            }
+        }
+
+        // Dump IsWriting candidates
+        for (int off = 0x08; off <= 0x18; off += 0x08) {
+            uint32_t val = 0;
+            if (safe_memory_read_u32((mach_vm_address_t)serializer + off, &val)) {
+                LOG_NET_INFO("  +0x%02x (u32) = %u", off, val);
             }
         }
     }
 
-    LOG_NET_INFO("  Payload state: valid=%d, size=%u",
-                 em->valid, em->payload_size);
+    // Read IsWriting flag at +0x08 (uint32_t, 0=reading, 1=writing)
+    uint32_t is_writing = 0;
+    if (!safe_memory_read_u32((mach_vm_address_t)serializer + OFFSET_SERIALIZER_ISWRITING,
+                               &is_writing)) {
+        LOG_NET_WARN("em_serialize: failed to read IsWriting at +0x%x",
+                     OFFSET_SERIALIZER_ISWRITING);
+        return;
+    }
+
+    if (is_writing) {
+        // OUTBOUND: write payload to bitstream
+        uint32_t size = em->payload_size;
+        LOG_NET_DEBUG("em_serialize: WRITE mode, payload_size=%u", size);
+
+        if (!serializer_write_bytes(serializer, &size, sizeof(uint32_t))) {
+            LOG_NET_WARN("em_serialize: WriteBytes failed for size prefix");
+            return;
+        }
+
+        if (em->payload && size > 0) {
+            if (!serializer_write_bytes(serializer, em->payload, size)) {
+                LOG_NET_WARN("em_serialize: WriteBytes failed for payload");
+                return;
+            }
+        }
+    } else {
+        // INBOUND: read payload from bitstream
+        uint32_t size = 0;
+        LOG_NET_DEBUG("em_serialize: READ mode");
+
+        if (!serializer_read_bytes(serializer, &size, sizeof(uint32_t))) {
+            LOG_NET_WARN("em_serialize: ReadBytes failed for size prefix");
+            extender_message_reset(em);  // Clear stale payload from pooled message
+            return;
+        }
+
+        LOG_NET_DEBUG("em_serialize: read size prefix = %u", size);
+
+        if (size > 0 && size <= MAX_EXTENDER_PAYLOAD) {
+            uint8_t *buf = malloc(size);
+            if (buf) {
+                if (!serializer_read_bytes(serializer, buf, size)) {
+                    LOG_NET_WARN("em_serialize: ReadBytes failed for payload (%u bytes)", size);
+                    free(buf);
+                    extender_message_reset(em);  // Clear stale payload
+                    return;
+                }
+                extender_message_set_payload(em, buf, size);
+                free(buf);
+                LOG_NET_DEBUG("em_serialize: read %u bytes payload", size);
+            } else {
+                LOG_NET_ERROR("em_serialize: malloc(%u) failed", size);
+                extender_message_reset(em);  // Clear stale payload
+            }
+        } else if (size > MAX_EXTENDER_PAYLOAD) {
+            LOG_NET_ERROR("em_serialize: payload size %u exceeds max %u",
+                          size, MAX_EXTENDER_PAYLOAD);
+            extender_message_reset(em);  // Clear stale payload
+        } else {
+            // size == 0: empty message
+            extender_message_reset(em);
+        }
+    }
 }
 
 static void em_unknown(MessageBase *self) {
@@ -350,4 +481,14 @@ void extender_message_pool_return(ExtenderMessage *msg) {
 
     // Not from pool — was malloc'd as fallback, free it
     extender_message_destroy(msg);
+}
+
+bool extender_message_is_ours(const void *msg) {
+    if (!msg) return false;
+    // Read the VMT pointer from the message (first field of MessageBase)
+    const Message_VMT *vmt = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)msg, (void **)&vmt)) {
+        return false;
+    }
+    return (vmt == &s_vtable_block.vmt);
 }

@@ -212,4 +212,11 @@ ExtenderMessage *extender_message_pool_get(void);
  */
 void extender_message_pool_return(ExtenderMessage *msg);
 
+/**
+ * Check if a message pointer is an ExtenderMessage (VMT validation).
+ * Returns true if msg's VMT matches our ExtenderMessage VMT.
+ * Used to guard casts in the protocol dispatch path.
+ */
+bool extender_message_is_ours(const void *msg);
+
 #endif /* EXTENDER_MESSAGE_H */

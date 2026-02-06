@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.36.28 | **Parity:** ~88% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.36.29 | **Parity:** ~88% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -89,7 +89,7 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Ext.Debug** - Memory introspection (ReadPtr, ProbeStruct, HexDump)
 - **Ext.IMGUI** - **Complete widget system** (40 widget types): NewWindow, AddText, AddButton, AddCheckbox, AddInputText, AddCombo, AddSlider, AddColorEdit, AddProgressBar, AddTree, AddTable, AddTabBar, AddMenu, handle-based objects, event callbacks (OnClick, OnChange, OnClose, OnExpand, OnCollapse)
 - **Ext.Mod** - Mod information (5 functions): IsModLoaded, GetLoadOrder, GetMod, GetBaseMod, GetModManager
-- **Ext.Net** - Network messaging (6 functions): PostMessageToServer, PostMessageToUser, PostMessageToClient, BroadcastMessage, Version, IsHost, **Request/Reply Callbacks**
+- **Ext.Net** - Network messaging (6 functions): PostMessageToServer, PostMessageToUser, PostMessageToClient, BroadcastMessage, Version, IsHost, **Request/Reply Callbacks**, **RakNet Backend** (Phase 4G)
 - **Net.CreateChannel** - High-level NetChannel API for multiplayer mod sync (SetHandler, **SetRequestHandler**, SendToServer, **RequestToServer with callbacks**, SendToClient, Broadcast)
 
 ## Conventions

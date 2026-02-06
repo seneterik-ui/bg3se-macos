@@ -13,6 +13,94 @@ Each entry includes:
 
 ---
 
+## [v0.36.31] - 2026-02-06
+
+**Parity:** ~88% | **Category:** Network Handshake | **Issues:** #6
+
+### Added
+- **NetChannel API Phase 4I: ClientConnect Handshake + Version Negotiation**
+  - JSON-based hello handshake: client sends `{"t":"hello","v":2}` after protocol insertion, server replies
+  - `peer_manager_can_send_extender()` — gates all RakNet sends on handshake completion (proto_version > 0)
+  - `Ext.Net.IsReady()` — Lua API to check if handshake is complete (server: always true, client: after hello exchange)
+  - `Ext.Net.PeerVersion(userId)` — Lua API to query a peer's negotiated protocol version
+  - Hello message parsing in `extender_process_msg()` — intercepts `{"t":"hello","v":N}` before routing to message bus
+  - Server auto-replies to hello messages from clients
+  - Host peer marked as handshake-complete on protocol insertion
+
+### Fixed
+- **ProtocolList offset corrected** — changed from `+0x2E0` to `+0x2D0`, and capacity/size fields from `uint64_t` at 16-byte stride to packed `uint32_t` at 4-byte stride. Fixes protocol insertion failing silently on all game versions. Discovered via runtime probing (45 protocols, cap=64).
+- **Phase 4H critical: auto-switch timing** — moved `network_backend_set_raknet()` from `net_hooks_capture_peer()` to end of `net_hooks_insert_protocol()`, preventing message loss in the gap before protocol insertion
+- **Phase 4H: hash container warning** — `net_hooks_sync_active_peers()` now logs a warning (once) when 0 of N peer IDs pass sanity check
+- **Hello ping-pong prevention** — only reply to a peer's first hello (check `proto_version == 0` before replying)
+- **Buffer overread in hello parsing** — `is_hello_message()` and `parse_hello_version()` now copy payload to NUL-terminated stack buffer before `strstr`/`sscanf`
+- **Race condition** — `network_backend_set_raknet()` now runs before setting host peer proto_version, preventing wrong backend routing
+
+### Technical
+- `send_client_hello()` and `send_hello_reply()` bypass `raknet_send()` gating (use `net_hooks_send_message()` directly)
+- `broadcast_visitor()` skips peers with `proto_version == 0`
+- Implicit handshake (Phase 4H) preserved: any ExtenderMessage receipt sets `PROTO_VERSION_CURRENT`
+- Ext.Net namespace now has 8 functions (added IsReady, PeerVersion)
+- Added `safe_memory_write_u32()` to safe_memory API
+- Larian Array layout confirmed: `{data_ptr(8), capacity_u32(4), size_u32(4)}` = 16 bytes
+
+---
+
+## [v0.36.30] - 2026-02-06
+
+**Parity:** ~88% | **Category:** Network Multiplayer | **Issues:** #6
+
+### Added
+- **NetChannel API Phase 4H: Peer Resolution + Broadcast + Auto-Detect** - Completes RakNet backend for actual multiplayer
+  - `peer_manager_iterate()` — callback-based iteration over all active peers
+  - `peer_manager_find_by_guid()` — GUID-to-user_id lookup for `SendToClient`
+  - `raknet_send_to_client()` — resolves character GUID to peer ID via PeerManager, then sends via GameServer VMT
+  - `raknet_broadcast()` — iterates all non-host peers via PeerManager, sends to each (skips host + excluded character)
+  - `net_hooks_sync_active_peers()` — reads GameServer ActivePeerIds array (+0x650/+0x65c) and syncs into PeerManager
+  - Auto-switch to RakNet backend when GameServer is captured in `net_hooks_capture_peer()`
+  - Implicit peer handshake — unknown peers auto-registered on first ExtenderMessage receipt in `extender_process_msg()`
+
+### Technical
+- `OFFSET_GAMESERVER_ACTIVE_PEERS = 0x650`, `OFFSET_GAMESERVER_ACTIVE_PEERS_COUNT = 0x65c` in protocol.h
+- `PeerIterator` callback typedef and `broadcast_visitor` pattern for safe peer iteration
+- ActivePeerIds sync called before broadcast to ensure PeerManager coverage
+- Fallback: if ActivePeerIds is a hash container (not flat array), implicit registration provides coverage
+
+---
+
+## [v0.36.29] - 2026-02-06
+
+**Parity:** ~88% | **Category:** Network Transport | **Issues:** #6
+
+### Added
+- **NetChannel API Phase 4G: Bidirectional Message Transport** - Real payload I/O via BitstreamSerializer VMT dispatch + outbound send via GameServer
+  - `em_serialize` replaced diagnostic stub with real WriteBytes/ReadBytes via BitstreamSerializer VMT
+  - BitstreamSerializer layout: VMT at +0x00, IsWriting (uint32) at +0x08, Bitstream* at +0x10
+  - Itanium ABI VMT dispatch: WriteBytes at VMT[3], ReadBytes at VMT[4] (shifted from MSVC by +1 destructor)
+  - One-time diagnostic logging on first serialize call for runtime verification
+  - All VMT calls use `safe_memory_read_pointer` for crash safety
+- **Outbound Send via GameServer VMT** - `net_hooks_send_message()` sends ExtenderMessages to peers
+  - SendToPeer at VMT index 28 (Itanium ABI = MSVC index 27 + 1)
+  - Runtime VMT probe validates function pointer before first call
+  - Signature: `void (*)(AbstractPeer* this, int32_t* peerId, void* msg)` — peerId by pointer (ARM64)
+  - Diagnostic logging of VMT entries around SendToPeer index for verification
+- **RakNet Backend Implementation** - Full backend for real multiplayer message transport
+  - JSON wire format: `{"c":"channel","m":"module","p":payload,"r":request_id,"b":binary}`
+  - `raknet_send_to_server()` — client sends to peer 0 (server)
+  - `raknet_send_to_user()` — server sends to specific peer by ID
+  - `raknet_send_to_client()` — falls back to local (GUID resolution deferred)
+  - `raknet_broadcast()` — falls back to local (peer iteration deferred)
+  - `network_backend_set_raknet()` — auto-switches when GameServer is captured
+  - ExtenderMessage pool allocation with controlled lifetime (pool slot intentionally held during transport)
+
+### Technical
+- `VMT_IDX_SEND_TO_PEER = 28`, `VMT_IDX_SEND_TO_MULTIPLE_PEERS = 32`, `VMT_IDX_CLIENT_SEND = 33` in protocol.h
+- `OFFSET_SERIALIZER_ISWRITING = 0x08`, `VMT_IDX_WRITEBYTES = 3`, `VMT_IDX_READBYTES = 4` in protocol.h
+- `net_hooks_send_message()` and `net_hooks_get_game_server()` added to net_hooks public API
+- RakNet backend uses `extender_message_pool_get()` for zero-malloc send path
+- Pool slots intentionally leaked during transport (game holds reference); reclamation deferred to post-send hook
+
+---
+
 ## [v0.36.28] - 2026-02-06
 
 **Parity:** ~88% | **Category:** Network Hooks | **Issues:** #6

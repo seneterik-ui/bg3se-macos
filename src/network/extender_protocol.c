@@ -15,10 +15,12 @@
 #include "extender_message.h"
 #include "message_bus.h"
 #include "peer_manager.h"
+#include "net_hooks.h"
 #include "../core/logging.h"
 #include "../core/safe_memory.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 // ============================================================================
 // Static State
@@ -52,6 +54,85 @@ static void extender_deleting_destructor(Protocol *self) {
     free(ep);
 }
 
+// ============================================================================
+// Hello Message Helpers (Phase 4I)
+//
+// The hello message is a JSON handshake: {"t":"hello","v":N}
+// where N is the ProtoVersion value (currently 2).
+//
+// When received:
+//   - Register/update the peer's proto_version
+//   - If we're the server, send a hello reply
+// ============================================================================
+
+/**
+ * Check if a payload is a hello message.
+ * Copies payload into a NUL-terminated stack buffer to avoid overreads
+ * (em->payload may not be NUL-terminated).
+ */
+static bool is_hello_message(const uint8_t *payload, uint32_t len) {
+    if (!payload || len < 14 || len > 127) return false;  // minimum: {"t":"hello"}
+    char buf[128];
+    memcpy(buf, payload, len);
+    buf[len] = '\0';
+    return strstr(buf, "\"t\":\"hello\"") != NULL;
+}
+
+/**
+ * Parse the version field from a hello JSON payload.
+ * Copies payload into a NUL-terminated stack buffer first.
+ * Looks for "v":N where N is an integer.
+ * Returns 0 on parse failure.
+ */
+static uint32_t parse_hello_version(const uint8_t *payload, uint32_t len) {
+    if (!payload || len == 0 || len > 127) return 0;
+    char buf[128];
+    memcpy(buf, payload, len);
+    buf[len] = '\0';
+
+    const char *vp = strstr(buf, "\"v\":");
+    if (!vp) return 0;
+
+    vp += 4;  // skip "v":
+    while (*vp == ' ') vp++;
+
+    int version = 0;
+    if (sscanf(vp, "%d", &version) != 1 || version < 0) {
+        return 0;
+    }
+    return (uint32_t)version;
+}
+
+/**
+ * Send a hello reply to a specific peer.
+ * Uses net_hooks_send_message() directly (bypasses raknet_send gating).
+ */
+static void send_hello_reply(int32_t peer_id) {
+    char hello[64];
+    snprintf(hello, sizeof(hello), "{\"t\":\"hello\",\"v\":%d}", PROTO_VERSION_CURRENT);
+
+    ExtenderMessage *msg = extender_message_pool_get();
+    if (!msg) {
+        LOG_NET_WARN("send_hello_reply: pool exhausted");
+        return;
+    }
+
+    if (!extender_message_set_payload(msg, hello, (uint32_t)strlen(hello))) {
+        LOG_NET_WARN("send_hello_reply: failed to set payload");
+        extender_message_pool_return(msg);
+        return;
+    }
+
+    bool ok = net_hooks_send_message(peer_id, &msg->base);
+    if (ok) {
+        LOG_NET_INFO("Sent hello reply to peer %d (version %d)",
+                     peer_id, PROTO_VERSION_CURRENT);
+    } else {
+        LOG_NET_WARN("send_hello_reply: send to peer %d failed", peer_id);
+        extender_message_pool_return(msg);
+    }
+}
+
 /**
  * Process an incoming network message.
  *
@@ -81,7 +162,20 @@ static ProtocolResult extender_process_msg(Protocol *self, void *unused,
     int32_t sender = ctx ? ctx->user_id : -1;
     LOG_NET_INFO("ExtenderProtocol: received NETMSG_SCRIPT_EXTENDER from user %d", sender);
 
-    // Cast to ExtenderMessage (our GetMessage hook returned this from the pool)
+    // Auto-register unknown peers on first message (implicit handshake, Phase 4H)
+    if (sender >= 0 && !peer_manager_get_peer(sender)) {
+        peer_manager_add_peer(sender, NULL, false);
+        peer_manager_set_proto_version(sender, PROTO_VERSION_CURRENT);
+        LOG_NET_INFO("  Auto-registered peer user_id=%d (implicit handshake)", sender);
+    }
+
+    // Validate VMT before casting — ensures msg was allocated by our GetMessage hook
+    if (!extender_message_is_ours(msg)) {
+        LOG_NET_WARN("ExtenderProtocol: msg %p has unknown VMT, not our ExtenderMessage", msg);
+        return PROTOCOL_RESULT_UNHANDLED;
+    }
+
+    // Cast to ExtenderMessage (VMT-validated)
     ExtenderMessage *em = (ExtenderMessage *)msg;
 
     // At this point, the game has already called em_serialize(deserializer).
@@ -89,6 +183,32 @@ static ProtocolResult extender_process_msg(Protocol *self, void *unused,
     // contain the deserialized payload bytes.
     if (!em->payload || em->payload_size == 0) {
         LOG_NET_DEBUG("  ExtenderMessage has no payload (em_serialize is diagnostic-only)");
+        extender_message_pool_return(em);
+        return PROTOCOL_RESULT_HANDLED;
+    }
+
+    // Phase 4I: Intercept hello messages for handshake
+    if (is_hello_message(em->payload, em->payload_size)) {
+        uint32_t peer_version = parse_hello_version(em->payload, em->payload_size);
+        if (sender >= 0 && peer_version > 0) {
+            // Only reply if this is the peer's FIRST hello (proto_version was 0).
+            // This prevents infinite ping-pong: client sends hello → server replies
+            // → client receives reply (also a hello) but doesn't reply again.
+            bool first_hello = false;
+            PeerInfo *pi = peer_manager_get_peer(sender);
+            if (pi && pi->proto_version == 0) {
+                first_hello = true;
+            }
+
+            peer_manager_set_proto_version(sender, peer_version);
+            LOG_NET_INFO("  Handshake: peer %d, version %u", sender, peer_version);
+
+            if (first_hello) {
+                send_hello_reply(sender);
+            }
+        } else if (peer_version == 0) {
+            LOG_NET_WARN("  Hello from peer %d has invalid version", sender);
+        }
         extender_message_pool_return(em);
         return PROTOCOL_RESULT_HANDLED;
     }

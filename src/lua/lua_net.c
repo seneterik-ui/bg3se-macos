@@ -11,6 +11,7 @@
 #include "lua_net_scripts.h"
 #include "../network/message_bus.h"
 #include "../network/callback_registry.h"
+#include "../network/peer_manager.h"
 #include "../core/logging.h"
 
 #include <lauxlib.h>
@@ -195,6 +196,39 @@ static int lua_net_is_host(lua_State *L) {
     return 1;
 }
 
+/**
+ * Ext.Net.IsReady() -> boolean
+ *
+ * Returns true if the extender handshake has completed and multiplayer
+ * messages can be sent. In single-player or server context, always true
+ * once the protocol is initialized. In multiplayer client context, true
+ * after the hello exchange with the server completes.
+ */
+static int lua_net_is_ready(lua_State *L) {
+    if (s_is_server_context) {
+        // Server is always ready once initialized
+        lua_pushboolean(L, s_initialized);
+    } else {
+        // Client is ready if host peer (user_id=1) has proto_version > 0
+        PeerInfo *host = peer_manager_get_host();
+        lua_pushboolean(L, host && host->proto_version > 0);
+    }
+    return 1;
+}
+
+/**
+ * Ext.Net.PeerVersion(userId) -> integer
+ *
+ * Returns the negotiated protocol version for a peer.
+ * Returns 0 if the peer is unknown or handshake not yet completed.
+ */
+static int lua_net_peer_version(lua_State *L) {
+    int32_t user_id = (int32_t)luaL_checkinteger(L, 1);
+    PeerInfo *peer = peer_manager_get_peer(user_id);
+    lua_pushinteger(L, peer ? (lua_Integer)peer->proto_version : 0);
+    return 1;
+}
+
 // ============================================================================
 // Embedded Script Loading
 // ============================================================================
@@ -265,10 +299,16 @@ void lua_net_register(lua_State *L, int ext_table_index, bool is_server) {
     lua_pushcfunction(L, lua_net_is_host);
     lua_setfield(L, -2, "IsHost");
 
+    lua_pushcfunction(L, lua_net_is_ready);
+    lua_setfield(L, -2, "IsReady");
+
+    lua_pushcfunction(L, lua_net_peer_version);
+    lua_setfield(L, -2, "PeerVersion");
+
     // Set as Ext.Net
     lua_setfield(L, abs_ext_index, "Net");
 
-    LOG_LUA_INFO("Registered Ext.Net namespace (6 functions, context=%s)",
+    LOG_LUA_INFO("Registered Ext.Net namespace (8 functions, context=%s)",
                 is_server ? "server" : "client");
 
     // NOTE: lua_net_load_scripts() must be called separately AFTER Ext is global
