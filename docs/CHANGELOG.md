@@ -13,6 +13,21 @@ Each entry includes:
 
 ---
 
+## [v0.36.36] - 2026-02-06
+
+**Parity:** ~92% | **Category:** Build System | **Issues:** N/A
+
+### Fixed
+- **Build system now auto-builds all dependencies from source.** Previously, CMake linked against pre-built `.a` files (`libdobby-universal.a`, `liblua-universal.a`) that were gitignored and had no build instructions. Users who cloned the repo had no way to produce these files.
+
+### Changed
+- **Dobby** now built via `add_subdirectory(lib/Dobby)` — CMake compiles it as `dobby_static` target
+- **Lua 5.4** now built as `lua_static` CMake target from source files in `lib/lua/src/`
+- Removed `libdobby-universal.a` specific gitignore entry (global `*.a` pattern still covers build artifacts)
+- Fresh `git clone --recursive` + `cmake .. && cmake --build .` now works with zero manual steps
+
+---
+
 ## [v0.36.35] - 2026-02-06
 
 **Parity:** ~92% | **Category:** Critical Bug Fix | **Issues:** #65

@@ -302,6 +302,7 @@ static const char *LUA_SCRIPT_NET_INIT =
 "    __index = function(t, k)\n"
 "        if k == 'CreateChannel' then\n"
 "            return function(module, channel)\n"
+"                if channel == nil then channel = module; module = '' end\n"
 "                _G._NetworkManager:RegisterEvents()\n"
 "                return _G._NetworkManager:AddChannel(module, channel)\n"
 "            end\n"

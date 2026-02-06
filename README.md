@@ -14,7 +14,7 @@ A native macOS implementation of the BG3 Script Extender, working toward full fe
 
 ### Requirements
 
-- macOS 12+ (tested on macOS 15.6.1)
+- macOS 12+ (tested on macOS 15.6.1 and macOS 26.2 Tahoe)
 - Apple Silicon Mac (recommended) or Intel Mac (limited functionality)
 - Baldur's Gate 3 (Steam)
 - Xcode Command Line Tools: `xcode-select --install`
@@ -100,7 +100,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 
 ## Status
 
-**Version:** v0.36.33 | **Feature Parity:** ~90%
+**Version:** v0.36.36 | **Feature Parity:** ~92%
 
 | Feature | Status |
 |---------|--------|
@@ -109,7 +109,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Mod Loading | ✅ PAK file reading, auto-detection |
 | Ext.Osiris | ✅ Event listeners, custom functions (NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions), **server context guards** |
 | Ext.Entity | ✅ GUID lookup, **Dual EntityWorld** (client + server), **1,999 components registered** (534 layouts: 169 verified + 365 generated), **1,577 ARM64 sizes** + **702 Windows estimates** = **1,730 total** (87% coverage) |
-| Ext.Stats | ✅ 15,774 stats, property read/write, Sync, **Enum lookup, Modifier attributes, Prototype cache** |
+| Ext.Stats | ✅ **100% parity** — 15,774 stats, Get/GetAll/Create/Sync, CopyFrom, SetRawAttribute, ExecuteFunctors, TreasureTable/TreasureCategory stubs |
 | Ext.Events | ✅ 33 events (13 lifecycle + 17 engine + 2 functor + 1 network) with Prevent pattern |
 | Ext.IO | ✅ LoadFile, SaveFile, **AddPathOverride, GetPathOverride** |
 | Ext.Timer | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, **MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, Persistent timers (6 functions)** |

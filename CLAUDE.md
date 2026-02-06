@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.36.33 | **Parity:** ~90% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.36.36 | **Parity:** ~92% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -78,7 +78,7 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Ext.Osiris** - RegisterListener, NewCall/NewQuery/NewEvent (server context guards)
 - **Context System** - Ext.IsServer/IsClient/GetContext, two-phase bootstrap (v0.36.4)
 - **Ext.Entity** - GUID lookup, **1,999 components registered** (462 layouts: 169 verified + 293 generated), **1,730 sizes** (1,577 Ghidra + 153 Windows-only, 87% coverage), GetByHandle, **Dual EntityWorld Complete** (client + server auto-captured)
-- **Ext.Stats** - Property read/write, Create/Sync complete, **Enum lookup** (EnumIndexToLabel/LabelToIndex), **Modifier attributes**, **Prototype cache** (GetCachedSpell/Status/Passive/Interrupt), GetStats, GetStatsManager
+- **Ext.Stats** - **100% Windows API parity** (52 functions): Get/GetAll/Create/Sync, CopyFrom, SetRawAttribute, ExecuteFunctors, TreasureTable/TreasureCategory stubs, all StatsObject methods
 - **Ext.Events** - 33 events with priority ordering, Once flag, Prevent pattern (13 lifecycle + 17 engine + 2 functor + 1 network events)
 - **Ext.Timer** - **20 functions**: WaitFor, WaitForRealtime, Cancel/Pause/Resume, GameTime/DeltaTime/Ticks, **Persistent timers** (save/load support)
 - **Ext.Vars** - PersistentVars, User Variables, Mod Variables

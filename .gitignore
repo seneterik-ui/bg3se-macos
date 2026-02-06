@@ -31,7 +31,6 @@ Makefile
 
 # Dobby build artifacts (keep source, ignore builds)
 lib/Dobby/build-*/
-lib/Dobby/libdobby-universal.a
 
 # Local scripts with hardcoded paths (use .example versions)
 scripts/bg3-wrapper.sh
