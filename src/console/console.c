@@ -367,6 +367,10 @@ static int dispatch_console_command(lua_State *L, const char *line, int client_s
     // Find the command
     for (int i = 0; i < s_command_count; i++) {
         if (strcmp(s_commands[i].name, cmd_name) == 0) {
+            // Begin lifetime scope so StatsObject etc. remain valid during callback
+            LifetimeHandle scope = lifetime_lua_begin_scope(L);
+            (void)scope;
+
             lua_rawgeti(L, LUA_REGISTRYINDEX, s_commands[i].lua_callback_ref);
             lua_pushstring(L, cmd_name);
 
@@ -385,6 +389,8 @@ static int dispatch_console_command(lua_State *L, const char *line, int client_s
                 LOG_CONSOLE_ERROR("Command error: %s", err ? err : "(unknown)");
                 lua_pop(L, 1);
             }
+
+            lifetime_lua_end_scope(L);
             return 1;
         }
     }
