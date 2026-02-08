@@ -10,6 +10,7 @@
 | [Development Guide](development.md) | Contributing, building features, debugging |
 | [Troubleshooting](troubleshooting.md) | Common issues and solutions |
 | [Reverse Engineering](reverse-engineering.md) | Ghidra workflows, offset discovery |
+| [Contributor Workflow](contributor-workflow.md) | End-to-end guide: research, Ghidra, subagents, Agent Teams |
 | [RE Acceleration Audit](re-acceleration-audit.md) | Comparative audit + high-leverage strategies to accelerate parity work |
 
 ## For Different Audiences

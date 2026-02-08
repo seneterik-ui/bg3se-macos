@@ -75,6 +75,25 @@ end
 EOF
 ```
 
+### Regression Tests
+
+Two built-in test suites validate API correctness:
+
+```bash
+# Tier 1: Always works (71 tests across 20 namespaces)
+echo '!test' | nc -U /tmp/bg3se.sock
+
+# Filter by namespace
+echo '!test Stats' | nc -U /tmp/bg3se.sock
+echo '!test Timer' | nc -U /tmp/bg3se.sock
+
+# Tier 2: Needs a loaded save (~22 tests)
+echo '!test_ingame' | nc -U /tmp/bg3se.sock
+```
+
+Tier 1 covers: Core, Json, Helpers, Stats, Timer, Events, Debug, Types, Enums, IO, Memory, Mod, Vars, Osi.
+Tier 2 covers: Entity, Level, Audio, Net, IMGUI, StaticData (each guarded by readiness checks).
+
 ### Console Commands (! prefix)
 
 ```bash

@@ -933,6 +933,87 @@ Using 10 parallel agents, extracted 438 component sizes in ~20 minutes:
 
 ---
 
+## Agent Teams (Minoan Swarm)
+
+Claude Code Agent Teams extend the subagent pattern into persistent, coordinated teams with shared task lists and bi-directional messaging. This is a paradigm shift from the subagent model above: instead of fire-and-forget tasks, agents are persistent teammates that claim work, communicate, and coordinate in real-time.
+
+### When Agent Teams Beat Subagents
+
+| Situation | Use Subagents | Use Agent Teams |
+|-----------|--------------|-----------------|
+| Bulk extraction (components, offsets) | ✅ Independent, no coordination | |
+| Multi-file feature with dependencies | | ✅ Agents need to sequence work |
+| Research + implement + review pipeline | | ✅ Pipeline stages with handoff |
+| Cross-cutting audit (security + perf + arch) | | ✅ Parallel reviewers, merged findings |
+| Same-file edits | Neither — do it sequentially | |
+
+### Team Structure
+
+Teams use the **Minoan Swarm** naming convention — names from the Minoan-Semitic divine feminine, chosen by archetype:
+
+- **Leaders** (Opus): athirat, qedesha, tiamat — orchestrate, don't implement
+- **Builders** (Sonnet): kaptaru, mami, nintu — feature implementers
+- **Researchers** (Haiku/Sonnet): devorah, melissa — exploration, API verification
+- **Testers** (Sonnet): sassuratu, phikola — live testing, regression validation
+
+### File Ownership Matrix
+
+**Critical:** Two agents editing the same file causes overwrites. Every team plan must include an explicit ownership matrix:
+
+```
+| Agent      | Owns                      | Must NOT Touch        |
+|------------|---------------------------|-----------------------|
+| kaptaru    | lua_ext.c lines 1126-1220 | console_cmds[] array  |
+| sassuratu  | lua_ext.c lines 1221-1300 | lines above 1220      |
+| athirat    | console_cmds[] array only | test string variables |
+```
+
+### Workflow: Plan → Research → Build → Review
+
+Every non-trivial feature follows this pipeline:
+
+1. **Plan**: Write a plan file to `plans/`. Include constraints, test inventory, team structure, file ownership, and execution pipeline.
+2. **Research**: Launch research agents to verify assumptions before implementation. Research agents confirmed that `Ext.Stats.Get()` returns userdata (not table), `Ext.Types.TypeOf()` returns table (not string), and `Ext.Timer.Pause()` returns boolean — preventing 3 bugs.
+3. **Build**: Agents claim tasks from the shared task list. The lead orchestrates but does not implement.
+4. **Review**: Parallel review agents check code quality, constraint compliance (e.g., ISO C99 4095-char string literal limit), and API accuracy. This step caught 1 bug pre-runtime in the comprehensive test suite.
+
+### Example: Comprehensive Test Suite (v0.36.41)
+
+**Plan**: `plans/comprehensive-test-suite-swarm.md`
+**Team**: `kaptaru-test-forge` (athirat-lead + kaptaru builder + sassuratu tester)
+
+Pipeline:
+```
+Phase 1: Research agents verify API signatures across 20 namespaces
+Phase 2: kaptaru writes 7 Tier 1 test strings, sassuratu writes 2 Tier 2 strings
+Phase 3: athirat writes framework + registration, updates console_cmds[], builds
+Phase 4: 3 parallel review agents (code quality, string lengths, API signatures)
+Result:  ~94 tests, 1 bug caught pre-runtime, clean build
+```
+
+### Example: Component Size Extraction (Dec 2025)
+
+10 parallel Ghidra MCP agents, each covering a 50-function range:
+- **Input**: 2,000+ `AddComponent<T>` functions in the BG3 binary
+- **Output**: 1,577 ARM64 component sizes across 6 documentation files
+- **Time**: ~20 minutes (vs days of manual decompilation)
+
+### Starting a Team
+
+```
+1. TeamCreate: name="team-name", description="purpose"
+2. TaskCreate: create all tasks with descriptions and dependencies
+3. Task tool: spawn teammates with team_name, name, subagent_type
+4. TaskUpdate: assign tasks to idle teammates
+5. Monitor: check TaskList, respond to teammate messages
+6. Shutdown: SendMessage type="shutdown_request" to each teammate
+7. TeamDelete: clean up after all teammates confirm
+```
+
+For naming conventions, archetype mappings, and ready-to-use team templates, see the [Minoan Swarm](https://github.com/tdimino/claude-code-minoan/tree/main/skills/planning-productivity/minoan-swarm) skill documentation.
+
+---
+
 ## Getting Help
 
 - **CLAUDE.md**: Project context for AI-assisted development

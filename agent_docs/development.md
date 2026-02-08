@@ -153,6 +153,8 @@ echo '!help' > ~/Library/Application\ Support/BG3SE/commands.txt
 | `!status` | Show BG3SE status (socket, clients, commands) |
 | `!typeids` | Show TypeId resolution status |
 | `!probe_osidef [N]` | Hex dump OsiFunctionDef layout for N functions (default 5) |
+| `!test [filter]` | Run Tier 1 regression tests (71 tests, always works). Optional filter: `!test Stats` |
+| `!test_ingame [filter]` | Run Tier 2 tests (22 tests, needs loaded save). Tests Entity, Level, Audio, Net, IMGUI, StaticData |
 
 ### Crash Diagnostics (v0.36.39+)
 

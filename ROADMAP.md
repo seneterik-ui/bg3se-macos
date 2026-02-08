@@ -2,7 +2,7 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.40
+## Current Status: v0.36.41
 
 **Overall Feature Parity: ~92%** (based on comprehensive API function count analysis)
 
@@ -1527,6 +1527,7 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 | v0.36.35 | 2026-02-06 | **Issue #65 Fix + Stats 100% Parity** - Deferred session init (all ~2,800 kernel calls moved to tick loop), state corruption fix in fake_InitGame, diagnostic timing, BG3SE_MINIMAL env var, build system auto-builds Dobby+Lua from source |
 | v0.36.34 | 2026-02-06 | **Ext.Stats 100% Parity** - 22 new items: Sync, CopyFrom, SetRawAttribute, ExecuteFunctors/ExecuteFunctor, PrepareFunctorParams, TreasureTable/TreasureCategory stubs, StatsObject methods |
 | v0.36.33 | 2026-02-06 | **Deferred Net Init (Issue #65)** - Move ~65 mach_vm_read_overwrite kernel calls from COsiris::Load to tick loop, fixing game startup failure on some machines. State machine with 500ms stability gate and exponential backoff retry. |
+| v0.36.41 | 2026-02-07 | **Comprehensive Test Suite** - Expanded `!test` from 8 assertions to 71 tests across 20 namespaces (Core, Json, Helpers, Stats, Timer, Events, Debug, Types, Enums, IO, Memory, Mod, Vars, Osi). Added `!test_ingame` (22 tests: Entity, Level, Audio, Net, IMGUI, StaticData). 93 total, all passing. Multi-string architecture for ISO C99 4095-char limit. AI-orchestrated: research agents verified API signatures, review agents caught 1 bug pre-runtime. |
 | v0.36.40 | 2026-02-07 | **Mach Exception Handler** - Catches EXC_BAD_ACCESS/EXC_BAD_INSTRUCTION before CrashReporter via Mach exception ports + MIG stubs. Fixed `!probe_osidef` crash (safe_memory_read vs safe_memory_read_pointer). Three-tier crash diagnostics (Issue #66) |
 | v0.36.32 | 2026-02-06 | **Parity Push to 90%** - Ext.Stats expansion (12 new functions: enum lookup, modifier attributes, prototype cache), Ext.Level (9 functions: raycasting, overlap tests, tile queries), Ext.Audio (13 functions: WWise playback, state/switch, RTPC, event management) |
 | v0.36.31 | 2026-02-06 | **NetChannel API Phase 4I** - Handshake + version negotiation: JSON hello exchange, CanSendExtenderMessages gating, Ext.Net.IsReady/PeerVersion, auto-switch timing fix (Issue #6) |

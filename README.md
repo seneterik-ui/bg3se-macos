@@ -100,7 +100,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 
 ## Status
 
-**Version:** v0.36.40 | **Feature Parity:** ~92%
+**Version:** v0.36.41 | **Feature Parity:** ~92%
 
 | Feature | Status |
 |---------|--------|
@@ -129,7 +129,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Lifetime Scoping | ✅ Prevents stale object access |
 | Context System | ✅ **Server/Client context awareness**, Ext.IsServer/IsClient/GetContext, two-phase bootstrap |
 | Debug Console | ✅ Socket + file + in-game overlay |
-| Testing | ✅ `!test` suite, Debug.* helpers, Frida scripts |
+| Testing | ✅ `!test` suite (71 tests), `!test_ingame` (22 tests), Debug.* helpers, Frida scripts |
 
 See [ROADMAP.md](ROADMAP.md) for detailed progress.
 

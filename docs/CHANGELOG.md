@@ -13,6 +13,29 @@ Each entry includes:
 
 ---
 
+## [v0.36.41] - 2026-02-07
+
+**Parity:** ~92% | **Category:** Comprehensive Test Suite | **Issues:** #67
+
+### Added
+- **Comprehensive regression test suite** (`!test`): Expanded from 8 basic assertions to 71 tests across 20 namespaces — Core, Json, Helpers, Stats, Timer, Events, Debug, Types, Enums, IO, Memory, Mod, Vars, Osi. Each test validates existence, return types, basic functionality, or no-crash guarantees.
+- **In-game test suite** (`!test_ingame`): ~22 tests requiring a loaded save — Entity (GUID lookup, component access), Level (IsReady, physics scene, heights), Audio (readiness, sound objects), Net (IsHost, version), IMGUI (readiness), StaticData (types). Each test guarded by readiness checks.
+- **Test filtering**: Both commands accept an optional filter argument — `!test Stats` runs only Stats.* tests.
+- **Multi-string test framework**: Global `BG3SE_Tests` table with `BG3SE_AddTest(tier, name, fn)` / `BG3SE_RunTests(tier, filter)` allows tests defined across 12 separate C string variables to run together with ordered execution via `ipairs`.
+
+### Fixed
+- **`_H()` hex formatter broken**: `lua_pushfstring` does not support `%x` format specifier. Changed to `snprintf` + `lua_pushstring`.
+- **`Stats.GetAllFiltered` hangs game**: `Ext.Stats.GetAll('Weapon')` is O(n^2) — iterates 15,774 stats twice (count + name lookup). Downgraded test to function existence check; underlying performance bug tracked separately.
+
+### Technical
+- 12 C string variables replace the single `console_cmd_test`, each under the ISO C99 4095-character string literal limit
+- Two-tier architecture: Tier 1 (always works, client context) and Tier 2 (needs loaded save, readiness-guarded)
+- API signatures verified by research agents before implementation: `Ext.Stats.Get` returns userdata (not table), `Ext.Types.TypeOf` returns table (not string), `Ext.Timer.Pause` returns boolean
+- Review agents caught 1 bug before runtime: `Types.TypeOf` assertion expected string but API returns table
+- **Confirmed in-game**: 71/71 Tier 1 + 22/22 Tier 2 = 93/93 all passing on v0.36.41
+
+---
+
 ## [v0.36.40] - 2026-02-07
 
 **Parity:** ~92% | **Category:** Mach Exception Handler | **Issues:** #66
