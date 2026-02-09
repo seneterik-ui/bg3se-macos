@@ -140,6 +140,7 @@ add_library(bg3se SHARED
     src/entity/component_lookup.c
     src/entity/component_typeid.c
     src/entity/component_property.c
+    src/entity/entity_events.c
     src/stats/stats_manager.c
     src/stats/prototype_managers.c
     src/stats/functor_hooks.c

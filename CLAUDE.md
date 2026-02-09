@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.36.42 | **Parity:** ~92% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.36.47 | **Parity:** ~93% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -79,7 +79,7 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Osi.*** - Dynamic metatable (40+ functions), **OsirisFunctionHandle encoding** (v0.36.39), crash-resilient dispatch with breadcrumbs
 - **Ext.Osiris** - RegisterListener, NewCall/NewQuery/NewEvent (server context guards)
 - **Context System** - Ext.IsServer/IsClient/GetContext, two-phase bootstrap (v0.36.4)
-- **Ext.Entity** - GUID lookup, **1,999 components registered** (462 layouts: 169 verified + 293 generated), **1,730 sizes** (1,577 Ghidra + 153 Windows-only, 87% coverage), GetByHandle, **Dual EntityWorld Complete** (client + server auto-captured)
+- **Ext.Entity** - GUID lookup, **1,999 components registered** (462 layouts: 169 verified + 293 generated), **1,730 sizes** (1,577 Ghidra + 153 Windows-only, 87% coverage), GetByHandle, **Dual EntityWorld Complete** (client + server auto-captured), **Entity Events** (Subscribe/OnCreate/OnDestroy + 8 variants, Unsubscribe — salted pool, deferred queue, per-entity hooks)
 - **Ext.Stats** - **100% Windows API parity** (52 functions): Get/GetAll/Create/Sync, CopyFrom, SetRawAttribute, ExecuteFunctors, TreasureTable/TreasureCategory stubs, all StatsObject methods
 - **Ext.Events** - 33 events with priority ordering, Once flag, Prevent pattern (13 lifecycle + 17 engine + 2 functor + 1 network events), **runtime mod attribution** (per-handler mod tracking, soft-disable, health stats)
 - **Ext.Timer** - **20 functions**: WaitFor, WaitForRealtime, Cancel/Pause/Resume, GameTime/DeltaTime/Ticks, **Persistent timers** (save/load support)
@@ -94,7 +94,11 @@ Use `bg3se-macos-ghidra` skill for Ghidra workflows and ARM64 patterns.
 - **Ext.Level** - **9 functions**: RaycastClosest, RaycastAny, TestBox, TestSphere, GetHeightsAt, GetCurrentLevel, GetPhysicsScene, GetAiGrid, IsReady
 - **Ext.Audio** - **13 functions**: PostEvent, Stop, PauseAllSounds, ResumeAllSounds, SetSwitch, SetState, SetRTPC, GetRTPC, ResetRTPC, LoadEvent, UnloadEvent, GetSoundObjectId, IsReady
 - **Ext.Net** - Network messaging (8 functions): PostMessageToServer, PostMessageToUser, PostMessageToClient, BroadcastMessage, Version, IsHost, IsReady, PeerVersion, **Request/Reply Callbacks**, **RakNet Backend** (Phase 4I)
+- **Ext.RegisterNetListener** - Per-channel network message listener (MCM backbone)
 - **Net.CreateChannel** - High-level NetChannel API for multiplayer mod sync (SetHandler, **SetRequestHandler**, SendToServer, **RequestToServer with callbacks**, SendToClient, Broadcast)
+- **Ext.Utils** - Compatibility aliases (6 functions): Print, PrintWarning, PrintError, Version, MonotonicTime, GetGameState
+- **Ext.Math** - Math utilities: Random
+- **Ext.ModEvents** - Per-mod cross-mod event system: Subscribe, Throw, Unsubscribe (MCM compat)
 
 ## Conventions
 

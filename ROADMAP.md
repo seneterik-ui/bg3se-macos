@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.42
+## Current Status: v0.36.47
 
-**Overall Feature Parity: ~92%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~93%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -36,7 +36,7 @@ This document tracks the development roadmap for achieving feature parity with W
 | `Ext.Osiris` | ✅ Full | ✅ RegisterListener + NewCall/NewQuery/NewEvent/RaiseEvent/GetCustomFunctions | **100%** | 1 |
 | `Ext.Json` | ✅ Full (2) | ✅ Parse, Stringify | **100%** | 1 |
 | `Ext.IO` | ✅ Full (4) | ✅ LoadFile, SaveFile, AddPathOverride, GetPathOverride (4) | **100%** | 1 |
-| `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, **Dual EntityWorld**, components, enumeration (22) | **85%** | 2 |
+| `Ext.Entity` | ✅ Full (26) | ⚠️ Get, GetByHandle, **Dual EntityWorld**, components, enumeration, **Entity Events** (Subscribe/OnCreate/OnDestroy + 8 variants, Unsubscribe) (24) | **92%** | 2 |
 | `Ext.Stats` | ✅ Full (52) | ✅ **100% parity** — Get, GetAll, Create, Sync, CopyFrom, SetRawAttribute, ExecuteFunctors, TreasureTable stubs (52) | **100%** | 3 |
 | `Ext.Events` | ✅ Full (~33) | ✅ 33 events (13 lifecycle + 17 engine + 2 functor + 1 network) + Subscribe/Unsubscribe/Prevent | **100%** | 2.5 |
 | `Ext.Timer` | ✅ Full (13) | ✅ WaitFor, WaitForRealtime, Cancel, Pause, Resume, IsPaused, MonotonicTime, MicrosecTime, ClockEpoch, ClockTime, GameTime, DeltaTime, Ticks, IsGamePaused, +6 persistent (20) | **100%** | 2.3 |
@@ -1520,6 +1520,11 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.47 | 2026-02-09 | **Signal Integration Crash Fix** - ARM64 EntityRef by-value calling convention (16B struct in x1+x2), client world offset 0x1B0→0x1D0, memory leak fix, CCR validation hardening (Issue #69) |
+| v0.36.46 | 2026-02-09 | **Signal Integration** - Entity events fire automatically via Connection injection into game's CCR. Lazy hook install, clean removal on shutdown (Issue #69) |
+| v0.36.45 | 2026-02-09 | **Entity Event System** - 11 Ext.Entity event functions (Subscribe/OnCreate/OnDestroy + 8 variants), salted pool, deferred queue, component name resolution (Issue #69) |
+| v0.36.44 | 2026-02-09 | **Review Fixes (Windows Compat)** - `Ext.Utils.Version()` returns integer, `GetGameState()` returns enum string, `Ext.Math.Random` returns integers in 1/2-arg modes, `Ext.ModEvents` Unsubscribe hole fix, `Ext.Utils.GameTime/Round/Random` aliases, 12 `Ext.Entity` companion stubs (Issues #68, #69) |
+| v0.36.43 | 2026-02-09 | **MCM Support & Mod Compatibility** - `Ext.Utils` namespace (Print/PrintWarning/PrintError/Version/MonotonicTime/GetGameState), `Ext.RegisterNetListener`, `Ext.ModEvents`, `Ext.IMGUI.GetViewportSize`, `Ext.Math.Random`, `Ext.Debug.IsDeveloperMode/Reset`, `Ext.Types.Serialize/Unserialize`, `Ext.Entity.Subscribe` stub (Issues #68, #69) |
 | v0.36.42 | 2026-02-07 | **Mod Crash Attribution** - Runtime mod tracking in all 30 event dispatch paths (14 fire functions + 15 oneframe handlers + ONEFRAME_DISPATCH macro), per-mod health stats, `!mod_diag` console command (health/errors/disable/enable), soft-disable for crash isolation, enhanced Mach exception reports with mod context, `Ext.Debug.ModHealthAll/ModDisable` APIs (Issue #66) |
 | v0.36.39 | 2026-02-07 | **Issue #66: Handle Encoding + Crash Diagnostics** - Read FunctionType from OsiFunctionDef +0x28 (fixes funcType=0 bug), encode OsirisFunctionHandle from Key[0..3], crash-resilient mmap ring buffer + SIGSEGV handler + breadcrumbs, `!probe_osidef` console command |
 | v0.36.38 | 2026-02-06 | **Issue #66 Fix: Osiris Call Crash** - Hook RegisterDIVFunctions to capture DivFunctions::Call/Query (correct OsiArgumentDesc* signature). Fixes SIGSEGV on AddGold, TemplateAddTo, and all Osi.* calls on ARM64. |

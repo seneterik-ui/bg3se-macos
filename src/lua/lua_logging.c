@@ -74,7 +74,7 @@ static const char *concat_args_to_message(lua_State *L, int start_arg) {
  * Ext.Log.Print(...) - Log info message to console (varargs, no module required)
  * Matches Windows BG3SE's Ext.Log.Print() API
  */
-static int lua_log_print(lua_State *L) {
+int lua_log_print(lua_State *L) {
     const char *message = concat_args_to_message(L, 1);
 
     if (!log_should_write(LOG_LEVEL_INFO, LOG_MODULE_LUA)) {
@@ -88,7 +88,7 @@ static int lua_log_print(lua_State *L) {
 /**
  * Ext.Log.PrintWarning(...) - Log warning message (varargs, no module required)
  */
-static int lua_log_print_warning(lua_State *L) {
+int lua_log_print_warning(lua_State *L) {
     const char *message = concat_args_to_message(L, 1);
 
     if (!log_should_write(LOG_LEVEL_WARN, LOG_MODULE_LUA)) {
@@ -102,7 +102,7 @@ static int lua_log_print_warning(lua_State *L) {
 /**
  * Ext.Log.PrintError(...) - Log error message (varargs, no module required)
  */
-static int lua_log_print_error(lua_State *L) {
+int lua_log_print_error(lua_State *L) {
     const char *message = concat_args_to_message(L, 1);
 
     if (!log_should_write(LOG_LEVEL_ERROR, LOG_MODULE_LUA)) {

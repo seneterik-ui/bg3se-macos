@@ -893,17 +893,20 @@ static int lua_math_isinf(lua_State *L) {
 static int lua_math_random(lua_State *L) {
     int nargs = lua_gettop(L);
     if (nargs == 0) {
-        // Random [0, 1)
+        // Random() → float in [0.0, 1.0) — same as Windows BG3SE
         lua_pushnumber(L, math_random());
     } else if (nargs == 1) {
-        // Random [0, max)
-        float max = luaL_checknumber(L, 1);
-        lua_pushnumber(L, math_random_range(0.0f, max));
+        // Random(upper) → integer in [1, upper] — match Windows/Lua convention
+        lua_Integer upper = luaL_checkinteger(L, 1);
+        if (upper < 1) return luaL_error(L, "Random: upper bound must be >= 1");
+        lua_pushinteger(L, 1 + (lua_Integer)(math_random() * upper));
     } else {
-        // Random [min, max)
-        float min = luaL_checknumber(L, 1);
-        float max = luaL_checknumber(L, 2);
-        lua_pushnumber(L, math_random_range(min, max));
+        // Random(lower, upper) → integer in [lower, upper] — match Windows/Lua convention
+        lua_Integer lower = luaL_checkinteger(L, 1);
+        lua_Integer upper = luaL_checkinteger(L, 2);
+        if (lower > upper) return luaL_error(L, "Random: lower bound must be <= upper bound");
+        lua_Integer range = upper - lower + 1;
+        lua_pushinteger(L, lower + (lua_Integer)(math_random() * range));
     }
     return 1;
 }

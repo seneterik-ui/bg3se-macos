@@ -143,6 +143,15 @@ void imgui_metal_process_mouse_move(float x, float y);
 void imgui_metal_process_mouse_move_direct(float x, float y);
 
 /**
+ * Get the current viewport (display) size.
+ * Returns the ImGui DisplaySize from the Metal backend.
+ *
+ * @param width Output: viewport width in points (set to 0 if not ready)
+ * @param height Output: viewport height in points (set to 0 if not ready)
+ */
+void imgui_metal_get_viewport_size(float *width, float *height);
+
+/**
  * Process scroll event.
  *
  * @param dx Horizontal scroll delta

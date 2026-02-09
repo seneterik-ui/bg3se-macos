@@ -1903,6 +1903,37 @@ static int lua_imgui_new_window(lua_State *L) {
 }
 
 // ============================================================================
+// Ext.IMGUI.GetViewportSize() — MCM compatibility (Issue #68)
+// ============================================================================
+
+/**
+ * Returns {width, height} of the game viewport.
+ * MCM uses this for responsive window sizing.
+ */
+static int lua_imgui_get_viewport_size(lua_State *L) {
+    float width = 1920.0f;
+    float height = 1080.0f;
+
+#ifndef IMGUI_TEST_STANDALONE
+    // Get from Metal backend (C-callable wrapper around ImGui::GetIO().DisplaySize)
+    float bw = 0.0f, bh = 0.0f;
+    imgui_metal_get_viewport_size(&bw, &bh);
+    if (bw > 0 && bh > 0) {
+        width = bw;
+        height = bh;
+    }
+#endif
+
+    // Return as Lua table {width, height}
+    lua_createtable(L, 2, 0);
+    lua_pushnumber(L, width);
+    lua_rawseti(L, -2, 1);
+    lua_pushnumber(L, height);
+    lua_rawseti(L, -2, 2);
+    return 1;
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -1916,6 +1947,7 @@ static const luaL_Reg imgui_functions[] = {
     {"SetInputCapture", lua_imgui_set_input_capture},
     {"IsCapturingInput", lua_imgui_is_capturing_input},
     {"NewWindow", lua_imgui_new_window},
+    {"GetViewportSize", lua_imgui_get_viewport_size},
     {NULL, NULL}
 };
 

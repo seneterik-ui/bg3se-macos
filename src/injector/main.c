@@ -42,6 +42,7 @@ extern "C" {
 
 // Entity Component System
 #include "entity_system.h"
+#include "entity_events.h"
 
 // Core modules
 #include "version.h"
@@ -678,6 +679,46 @@ static int lua_ext_require(lua_State *L) {
 // Track last tick time for delta calculation
 static uint64_t g_last_tick_time_ms = 0;
 
+// ============================================================================
+// Ext.RegisterNetListener (per-channel callback, Issue #68)
+// ============================================================================
+
+static int lua_ext_register_net_listener(lua_State *L) {
+    const char *channel = luaL_checkstring(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+
+    // Store the callback in the Lua registry
+    lua_pushvalue(L, 2);
+    int callback_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+
+    events_register_net_listener(L, channel, callback_ref);
+    return 0;
+}
+
+// ============================================================================
+// Ext.Utils.GetGameState (Issue #68) — returns enum string like Windows BG3SE
+// ============================================================================
+
+static int lua_ext_utils_get_game_state(lua_State *L) {
+    int state = events_get_current_game_state();
+    const char *name = game_state_get_name((ServerGameState)state);
+    lua_pushstring(L, name);
+    return 1;
+}
+
+// ============================================================================
+// Ext.Utils.Version — returns integer build number (Windows BG3SE compat)
+// ============================================================================
+
+static int lua_ext_utils_version(lua_State *L) {
+    // Parse "0.36.43" → 3643 (minor*100 + patch)
+    // This matches the Windows convention of returning an integer >= 20
+    int major = 0, minor = 0, patch = 0;
+    sscanf(BG3SE_VERSION, "%d.%d.%d", &major, &minor, &patch);
+    lua_pushinteger(L, (lua_Integer)(minor * 100 + patch));
+    return 1;
+}
+
 /**
  * Register the Ext API in Lua
  */
@@ -763,16 +804,130 @@ static void register_ext_api(lua_State *L) {
     // Ext.Audio namespace (WWise audio engine control)
     lua_audio_register(L, -1);
 
+    // Ext.RegisterNetListener (global, per-channel callback, Issue #68 MCM compat)
+    lua_pushcfunction(L, lua_ext_register_net_listener);
+    lua_setfield(L, -2, "RegisterNetListener");
+
+    // Ext.Utils namespace (Issue #69 - mod compatibility aliases)
+    lua_newtable(L);
+    lua_pushcfunction(L, lua_log_print);
+    lua_setfield(L, -2, "Print");
+    lua_pushcfunction(L, lua_log_print_warning);
+    lua_setfield(L, -2, "PrintWarning");
+    lua_pushcfunction(L, lua_log_print_error);
+    lua_setfield(L, -2, "PrintError");
+    lua_pushcfunction(L, lua_ext_utils_version);
+    lua_setfield(L, -2, "Version");
+    lua_pushcfunction(L, lua_ext_utils_get_game_state);
+    lua_setfield(L, -2, "GetGameState");
+    lua_setfield(L, -2, "Utils");
+
+    // Ext.Math namespace (Issue #69 - mod compatibility)
+    lua_newtable(L);
+    lua_setfield(L, -2, "Math");
+
     // Set Ext as global
     lua_setglobal(L, "Ext");
 
     // Load Net library scripts (must be after Ext is global - scripts use Ext.*)
     lua_net_load_scripts(L);
 
+    // Register Ext.Utils.MonotonicTime alias (must be after Ext is global)
+    // Note: GameTime, Random, Round aliases are set later after lua_math_register()
+    luaL_dostring(L,
+        "Ext.Utils.MonotonicTime = Ext.Timer.MonotonicTime\n"
+        "Ext.Utils.GameTime = Ext.Timer.GameTime\n"
+    );
+
+    // Register Ext.ModEvents (Issue #68 - MCM event system)
+    // Per-mod event tables with :Throw(data) and :Subscribe(callback)
+    // Uses max_id tracking to avoid ipairs hole bug when Unsubscribe sets entries to nil
+    luaL_dostring(L,
+        "do\n"
+        "  local mod_events = {}\n"
+        "  local mt = {\n"
+        "    __index = function(self, mod_table)\n"
+        "      if not mod_events[mod_table] then\n"
+        "        local events = {}\n"
+        "        mod_events[mod_table] = setmetatable({}, {\n"
+        "          __index = function(_, event_name)\n"
+        "            if not events[event_name] then\n"
+        "              local handlers = {}\n"
+        "              local max_id = 0\n"
+        "              events[event_name] = {\n"
+        "                Subscribe = function(_, callback)\n"
+        "                  max_id = max_id + 1\n"
+        "                  handlers[max_id] = callback\n"
+        "                  return max_id\n"
+        "                end,\n"
+        "                Throw = function(_, data)\n"
+        "                  for i = 1, max_id do\n"
+        "                    local cb = handlers[i]\n"
+        "                    if cb then\n"
+        "                      local ok, err = pcall(cb, data)\n"
+        "                      if not ok then\n"
+        "                        Ext.Log.Error('Lua', 'ModEvent error ('..mod_table..'.'..event_name..'): '..tostring(err))\n"
+        "                      end\n"
+        "                    end\n"
+        "                  end\n"
+        "                end,\n"
+        "                Unsubscribe = function(_, id)\n"
+        "                  if id and handlers[id] then\n"
+        "                    handlers[id] = nil\n"
+        "                  end\n"
+        "                end,\n"
+        "              }\n"
+        "            end\n"
+        "            return events[event_name]\n"
+        "          end,\n"
+        "        })\n"
+        "      end\n"
+        "      return mod_events[mod_table]\n"
+        "    end,\n"
+        "  }\n"
+        "  Ext.ModEvents = setmetatable({}, mt)\n"
+        "end\n"
+    );
+
+    // Register Ext.Types.Serialize/Unserialize stubs (Issue #69)
+    // Note: Windows BG3SE operates on C++ proxy userdata; we provide JSON fallback
+    // with a warning so mods know the semantics differ
+    luaL_dostring(L,
+        "Ext.Types.Serialize = Ext.Types.Serialize or function(obj)\n"
+        "  Ext.Log.Warn('Lua', 'Ext.Types.Serialize: using JSON fallback (proxy userdata not supported on macOS)')\n"
+        "  return Ext.Json.Stringify(obj)\n"
+        "end\n"
+        "Ext.Types.Unserialize = Ext.Types.Unserialize or function(str)\n"
+        "  Ext.Log.Warn('Lua', 'Ext.Types.Unserialize: using JSON fallback (proxy userdata not supported on macOS)')\n"
+        "  return Ext.Json.Parse(str)\n"
+        "end\n"
+    );
+
+    // NOTE: entity_events_register_lua() moved after entity_register_lua() below
+    // (Ext.Entity table must exist before we can register event functions on it)
+
+    // Remaining entity stubs that don't have real implementations yet
+    luaL_dostring(L,
+        "do\n"
+        "  local function entity_stub(name)\n"
+        "    return function(...)\n"
+        "      Ext.Log.Warn('Lua', 'Ext.Entity.' .. name .. ' is not yet implemented on macOS')\n"
+        "      return nil\n"
+        "    end\n"
+        "  end\n"
+        "  local stubs = {'EnableTracing', 'DisableTracing',\n"
+        "    'GetAllEntities', 'GetAllEntitiesWithComponent', 'GetAllComponents',\n"
+        "    'GetReplicationFlags'}\n"
+        "  for _, name in ipairs(stubs) do\n"
+        "    Ext.Entity[name] = Ext.Entity[name] or entity_stub(name)\n"
+        "  end\n"
+        "end\n"
+    );
+
     // Register global helper functions (must be after Ext is set as global)
     lua_ext_register_global_helpers(L);
 
-    LOG_LUA_INFO("Ext API registered in Lua");
+    LOG_LUA_INFO("Ext API registered in Lua (with Utils, Math, ModEvents, RegisterNetListener)");
 }
 
 // ============================================================================
@@ -1737,6 +1892,9 @@ static void init_lua(void) {
     // Initialize context system (client/server tracking)
     lua_context_init();
 
+    // Initialize entity event system (Subscribe/OnCreate/OnDestroy)
+    entity_events_init();
+
     // Initialize lifetime scoping system
     lifetime_lua_init(L);
 
@@ -1802,6 +1960,12 @@ static void init_lua(void) {
     }
     lua_pop(L, 1);  // pop Ext
 
+    // Register Ext.Utils aliases that depend on Ext.Math (must be after lua_math_register)
+    luaL_dostring(L,
+        "Ext.Utils.Random = Ext.Math.Random\n"
+        "Ext.Utils.Round = Ext.Math.Round\n"
+    );
+
     // Add GetDiscoveredPlayers to Ext.Entity (uses main.c's player tracking)
     lua_getglobal(L, "Ext");
     if (lua_istable(L, -1)) {
@@ -1813,6 +1977,10 @@ static void init_lua(void) {
         lua_pop(L, 1);  // pop Entity
     }
     lua_pop(L, 1);  // pop Ext
+
+    // Register Ext.Entity event functions (Subscribe, OnCreate, OnDestroy, etc.)
+    // Must be after entity_register_lua() which creates the Ext.Entity table
+    entity_events_register_lua(L);
 
     // Run a test script (context is NONE at init, before mod loading sets it)
     const char *test_script =
@@ -1943,6 +2111,9 @@ static bool deferred_session_init_tick(void) {
     entity_on_session_loaded();
     t1 = (uint64_t)timer_get_monotonic_ms();
     LOG_GAME_INFO("  entity_on_session_loaded: %llums", (unsigned long long)(t1 - t0));
+
+    // Note: entity_events_bind() is called from entity_system.c during world discovery
+    // (both server and client). No need to call it again here.
 
     // Step 3: Stats system validation
     t0 = t1;
@@ -2490,6 +2661,9 @@ static void fake_Event(void *thisPtr, uint32_t funcId, OsiArgumentDesc *args) {
         timer_tick(delta_ms);
 
         events_fire_tick(L, delta_seconds);
+
+        // Fire deferred entity component events (Issue #69)
+        entity_events_fire_deferred(L);
 
         // Poll for one-frame event components (Issue #51)
         events_poll_oneframe_components(L);

@@ -1254,6 +1254,19 @@ bool imgui_metal_is_capturing_input(void) {
     return s_state.capturing_input && s_state.visible;
 }
 
+void imgui_metal_get_viewport_size(float *width, float *height) {
+    if (s_state.state == IMGUI_METAL_STATE_READY) {
+        ImGuiIO& io = ImGui::GetIO();
+        if (io.DisplaySize.x > 0 && io.DisplaySize.y > 0) {
+            *width = io.DisplaySize.x;
+            *height = io.DisplaySize.y;
+            return;
+        }
+    }
+    *width = 0.0f;
+    *height = 0.0f;
+}
+
 // ============================================================================
 // Input Processing
 // ============================================================================

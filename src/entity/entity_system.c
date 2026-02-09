@@ -6,6 +6,7 @@
  */
 
 #include "entity_system.h"
+#include "entity_events.h"
 #include "component_registry.h"
 #include "component_lookup.h"
 #include "component_typeid.h"
@@ -96,10 +97,10 @@ static int g_TypeIdRetryCount = 0;
 // See ghidra/offsets/ENTITY_SYSTEM.md for discovery details
 #define OFFSET_EOCCLIENT_SINGLETON_PTR 0x10898c968
 
-// Offset of EntityWorld* within EoCClient struct (estimated from Windows BG3SE)
-// PermissionsManager is at +0x1B8 (verified), EntityWorld should be at +0x1B0
-// May need verification via runtime probing if this offset doesn't work
-#define OFFSET_ENTITYWORLD_IN_EOCCLIENT 0x1B0
+// Offset of EntityWorld* within EoCClient struct
+// Windows BG3SE: EntityWorld at +0x1D0, PermissionsManager at +0x1D8
+// Previous 0x1B0 was wrong (overlapped with Array fields before PermissionsManager)
+#define OFFSET_ENTITYWORLD_IN_EOCCLIENT 0x1D0
 
 // eoc::CombatHelpers::LEGACY_IsInCombat(EntityHandle, EntityWorld&)
 // Note: Hooking this causes crashes during save load - DO NOT USE
@@ -633,6 +634,9 @@ bool entity_discover_world(void) {
                 LOG_ENTITY_DEBUG("WARNING: TypeId discovery init failed - indices remain UNDEFINED");
             }
 
+            // Bind entity events to server world
+            entity_events_bind(g_ServerEntityWorld, true);
+
             // Also try to discover client EntityWorld
             entity_discover_client_world();
 
@@ -671,6 +675,10 @@ bool entity_discover_client_world(void) {
         g_ClientEntityWorld = entityworld;
         LOG_ENTITY_DEBUG("SUCCESS: Discovered EoCClient=%p, ClientEntityWorld=%p",
                    g_EoCClient, g_ClientEntityWorld);
+
+        // Bind entity events to client world
+        entity_events_bind(g_ClientEntityWorld, false);
+
         return true;
     } else {
         LOG_ENTITY_DEBUG("Found EoCClient but EntityWorld at +0x%x is NULL or invalid",

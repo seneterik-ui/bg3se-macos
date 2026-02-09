@@ -97,6 +97,25 @@ int lua_log_set_global_level(lua_State *L);
 int lua_log_get_modules(lua_State *L);
 
 // ============================================================================
+// Convenience Print Functions (non-static for use by Ext.Utils aliases)
+// ============================================================================
+
+/**
+ * Ext.Log.Print(...) / Ext.Utils.Print(...) - Log info message (varargs)
+ */
+int lua_log_print(lua_State *L);
+
+/**
+ * Ext.Log.PrintWarning(...) / Ext.Utils.PrintWarning(...) - Log warning
+ */
+int lua_log_print_warning(lua_State *L);
+
+/**
+ * Ext.Log.PrintError(...) / Ext.Utils.PrintError(...) - Log error
+ */
+int lua_log_print_error(lua_State *L);
+
+// ============================================================================
 // Registration
 // ============================================================================
 

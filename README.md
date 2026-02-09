@@ -100,7 +100,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 
 ## Status
 
-**Version:** v0.36.42 | **Feature Parity:** ~92%
+**Version:** v0.36.47 | **Feature Parity:** ~93%
 
 | Feature | Status |
 |---------|--------|
@@ -124,7 +124,10 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Ext.Level | ✅ **9 functions** - RaycastClosest, RaycastAny, TestBox, TestSphere, GetHeightsAt, singleton accessors |
 | Ext.Audio | ✅ **13 functions** - PostEvent, Stop, PauseAll, ResumeAll, SetSwitch, SetState, SetRTPC, GetRTPC, ResetRTPC, LoadEvent, UnloadEvent |
 | Ext.Net | ✅ **Phase 4I Complete** - Full RakNet backend, PostMessageToServer/User/Client, BroadcastMessage, IsHost, IsReady, PeerVersion, **Request/Reply Callbacks** |
+| Ext.RegisterNetListener | ✅ Per-channel network message listener (MCM backbone) |
 | Net.CreateChannel | ✅ **Phase 4I Complete** - High-level channel API with SetHandler, **SetRequestHandler**, SendToServer, **RequestToServer with callbacks**, Broadcast |
+| Ext.Utils | ✅ Print, PrintWarning, PrintError, Version, MonotonicTime, GetGameState |
+| Ext.ModEvents | ✅ Per-mod cross-mod event system (Subscribe, Throw, Unsubscribe) |
 | Ext.Mod | ✅ IsModLoaded, GetLoadOrder, GetMod, GetBaseMod |
 | Lifetime Scoping | ✅ Prevents stale object access |
 | Context System | ✅ **Server/Client context awareness**, Ext.IsServer/IsClient/GetContext, two-phase bootstrap |

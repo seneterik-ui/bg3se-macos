@@ -13,6 +13,117 @@ Each entry includes:
 
 ---
 
+## [v0.36.47] - 2026-02-09
+
+**Parity:** ~93% | **Category:** Signal Integration Fix | **Issues:** #69
+
+### Fixed
+- **ARM64 calling convention crash** (SIGSEGV in `signal_destroy_handler+72`): `ecs::EntityRef` is a 16-byte struct (`{Handle, World*}`) passed by value on ARM64, expanding to two registers (x1=Handle, x2=World*). Our handler had 3 params and dereferenced x1 as a pointer — now correctly accepts 4 params (self, handle, world, component) and uses the handle value directly.
+- **Component pointer shifted to x3**: With EntityRef occupying x1+x2, the component data pointer moves to x3. Previous code read x2 as component (actually World*).
+- **Client EntityWorld offset**: Changed `OFFSET_ENTITYWORLD_IN_EOCCLIENT` from 0x1B0 (wrong, overlapped PermissionsManager) to 0x1D0 (matches Windows BG3SE struct layout).
+- **Memory leak in Connection array grow path**: Old `conn_buf` not freed when Signal array was reallocated.
+- **CCR validation before g_bound_world commit**: Prevents bad client world from overwriting valid server world.
+- **Race safety in cleanup**: `g_lua_state` nulled before signal hook removal so handlers exit immediately if they fire during teardown.
+
+### Technical
+- Signal type corrected: `Signal<EntityRef, void*>` (by value), not `Signal<EntityRef*, void*>` (by pointer)
+- Game's own handler symbol confirms: `OnComponentRemoved(ecs::EntityRef, eoc::HealthComponent&)`
+- CCR range validation widened to 100–65535 (was 1000–10000)
+- Confirmed via crash report register analysis: x1=handle, x2=world*, x3=component, x4=game's handler
+
+---
+
+## [v0.36.46] - 2026-02-09
+
+**Parity:** ~93% | **Category:** Signal Integration | **Issues:** #69
+
+### Added
+- **Signal Integration** (Issue #69 Phase 2): Entity event subscriptions now fire automatically. `Ext.Entity.OnCreate("Health", callback)` hooks directly into the game's `ComponentCallbackRegistry` at EntityWorld+0x240.
+- **Connection injection**: Injects handler Connections into the game's `Signal<EntityRef, void*>` arrays. The game's inlined `Signal::Invoke` during AddComponent/RemoveComponent naturally calls our handlers — no Dobby hook needed.
+- **Lazy hook installation**: Signal hooks are only installed for component types that have active subscriptions (not all ~2709 types).
+- **CCR validation**: `entity_events_bind()` validates the CCR pointer chain before enabling signal hooks; graceful fallback to no-op on failure.
+- **Clean removal**: All injected Connections are removed from the game's arrays during `entity_events_cleanup()` (Lua state shutdown), preventing stale callbacks.
+
+### Technical
+- `entity_events_bind()` now called after EntityWorld + TypeId discovery during session init
+- Connection structs include valid `copy_`/`move_` procs for game's Array<Connection> reallocation safety
+- `g_lua_state` cached each tick in `entity_events_fire_deferred()` for signal handler access
+- Runtime-verified offsets: EntityWorld+0x240 = CCR, ComponentCallbacks at +0x08/+0x20 for OnConstruct/OnDestroy
+
+---
+
+## [v0.36.45] - 2026-02-09
+
+**Parity:** ~93% | **Category:** Entity Event System | **Issues:** #69
+
+### Added
+- **`Ext.Entity` Event System** (Issue #69): Real C implementation replacing Lua stubs. 11 functions now backed by `entity_events.c` (~500 lines): `Subscribe`, `OnChange`, `OnCreate`, `OnCreateDeferred`, `OnCreateOnce`, `OnCreateDeferredOnce`, `OnDestroy`, `OnDestroyDeferred`, `OnDestroyOnce`, `OnDestroyDeferredOnce`, `Unsubscribe`.
+- **Subscription pool**: Salted pool (256 slots) with safe handle reuse matching Windows BG3SE `SaltedPool<ComponentHook>` pattern.
+- **Per-component-type tracking**: Global hooks (all entities) and per-entity hooks, matching Windows `ComponentHooks` architecture.
+- **Deferred event queue**: Events flagged as deferred are queued and fired once per tick via `entity_events_fire_deferred()`, matching Windows swap-and-process pattern.
+- **One-shot subscriptions**: `ENTITY_EVENT_FLAG_ONCE` auto-unsubscribes after first fire.
+- **Flexible component name resolution**: Supports both full names (`eoc::HealthComponent`) and short names (`Health`) with automatic prefix/suffix probing.
+
+### Technical
+- New files: `src/entity/entity_events.h`, `src/entity/entity_events.c`
+- `entity_events_init()` called during Lua state init
+- `entity_events_bind()` called when server/client EntityWorld is captured
+- `entity_events_fire_deferred(L)` called each tick after event processing
+- `entity_events_register_lua(L)` overwrites Ext.Entity stubs with real C functions
+- Signal integration (auto-fire on component create/destroy) requires future RE of `ComponentCallbackRegistry` offset in EntityWorld — currently events are managed through the subscription layer
+
+---
+
+## [v0.36.44] - 2026-02-09
+
+**Parity:** ~93% | **Category:** Review Fixes (Windows Compat) | **Issues:** #68, #69
+
+### Fixed
+- **`Ext.Utils.Version()`**: Now returns integer build number (e.g. `3644`) instead of string. Fixes mod version checks (`if Ext.Utils.Version() >= 20`).
+- **`Ext.Utils.GetGameState()`**: Now returns enum string ("Running", "Paused", "LoadSession") instead of integer. Matches Windows BG3SE convention.
+- **`Ext.Math.Random()`**: 1-arg and 2-arg modes now return integers matching Lua/Windows convention. `Random(10)` → `[1,10]`, `Random(5,10)` → `[5,10]`. 0-arg mode still returns float `[0,1)`.
+- **`Ext.ModEvents` Unsubscribe**: Fixed ipairs hole bug where `handlers[id] = nil` broke iteration. Now uses max_id tracking with numeric for loop, safely skipping nil entries.
+- **`Ext.Types.Serialize/Unserialize`**: Now logs warning about JSON fallback semantics (Windows operates on C++ proxy userdata).
+
+### Added
+- **`Ext.Utils.GameTime`**: Alias to `Ext.Timer.GameTime` (missing backward-compat alias).
+- **`Ext.Utils.Round`**: Alias to `Ext.Math.Round` (missing backward-compat alias).
+- **`Ext.Utils.Random`**: Alias to `Ext.Math.Random` (missing backward-compat alias).
+- **`Ext.Entity` companion stubs**: `Unsubscribe`, `OnCreate`, `OnDestroy`, `OnCreateDeferred`, `OnDestroyDeferred`, `EnableTracing`, `DisableTracing`, `GetAllEntities`, `GetAllEntitiesWithComponent`, `GetAllComponents`, `GetReplicationFlags` — all log warning and return nil.
+
+### Technical
+- `lua_ext_utils_version()` parses `BG3SE_VERSION` string → `minor*100 + patch` integer.
+- `lua_ext_utils_get_game_state()` calls `game_state_get_name()` to convert integer → string.
+- `lua_math_random()` in `lua_math.c` uses `luaL_checkinteger` + `lua_pushinteger` for 1/2-arg modes.
+- `Ext.Utils.Random/Round` aliases set after `lua_math_register()` to avoid referencing empty table.
+
+---
+
+## [v0.36.43] - 2026-02-09
+
+**Parity:** ~93% | **Category:** MCM Support & Mod Compatibility | **Issues:** #68, #69
+
+### Added
+- **`Ext.Utils` namespace** (Issue #69): `Print`, `PrintWarning`, `PrintError`, `Version`, `MonotonicTime`, `GetGameState` — aliases to existing implementations. Fixes crash-on-load for Community Library, 5e Spells, and Compatibility Framework mods.
+- **`Ext.RegisterNetListener(channel, callback)`** (Issue #68): Per-channel network message listener. MCM's backbone for client-server sync. Callbacks receive `(channel, payload, userId)`.
+- **`Ext.ModEvents`** (Issue #68): Per-mod cross-mod event system with `:Subscribe(callback)`, `:Throw(data)`, `:Unsubscribe(id)`. MCM uses `Ext.ModEvents['BG3MCM'][name]:Throw(data)`.
+- **`Ext.IMGUI.GetViewportSize()`** (Issue #68): Returns `{width, height}` of game viewport from Metal backend's `DisplaySize`. MCM uses for responsive window sizing.
+- **`Ext.Utils.GetGameState()`** (Issue #68): Returns cached game state enum string (updated on every `GameStateChanged` event).
+- **`Ext.Math.Random(min, max)`** (Issue #69): Integer-returning random matching Windows/Lua convention. Used by Community Library.
+- **`Ext.Debug.IsDeveloperMode()`** (Issue #68): Returns `false` (stub). MCM uses for conditional loca loading.
+- **`Ext.Debug.Reset()`** (Issue #68): Logs warning (stub). MCM binds this to a keybinding.
+- **`Ext.Types.Serialize/Unserialize`** (Issue #69): JSON fallback with warning. Used by 5e Spells.
+- **`Ext.Entity.Subscribe` + 11 companions** (Issue #69): Stubs with warnings. Used by Community Library.
+
+### Technical
+- `imgui_metal_get_viewport_size()` C wrapper in `imgui_metal_backend.mm` reads `ImGui::GetIO().DisplaySize` — callable from C files without cimgui.
+- `events_get_current_game_state()` caches `toState` from `events_fire_game_state_changed()`.
+- Per-channel listener registry in `lua_events.c`: Lua registry table keyed by channel name, each containing an array of callback functions. Fired before `NetModMessage`/`NetMessage` event handlers.
+- `Ext.ModEvents` implemented as pure Lua using metatables for lazy initialization of mod and event tables with max_id tracking.
+- Made `lua_log_print`, `lua_log_print_warning`, `lua_log_print_error` non-static for cross-module aliasing.
+
+---
+
 ## [v0.36.42] - 2026-02-07
 
 **Parity:** ~92% | **Category:** Mod Crash Attribution | **Issues:** #66

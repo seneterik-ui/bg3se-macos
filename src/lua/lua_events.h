@@ -127,6 +127,14 @@ void events_fire_key_input(lua_State *L, int keyCode, bool pressed, int modifier
 void lua_events_register(lua_State *L, int ext_table_index);
 
 /**
+ * Get the current (cached) game state.
+ * Updated each time GameStateChanged fires.
+ *
+ * @return Last game state value (0=Unknown, 13=Running, etc.)
+ */
+int events_get_current_game_state(void);
+
+/**
  * Get handler count for an event (for debugging).
  *
  * @param event Event type
@@ -250,6 +258,27 @@ void events_fire_turn_ended_from_osiris(lua_State *L, const char *characterGuid)
 void events_fire_net_mod_message(lua_State *L, const char *channel, const char *payload,
                                   const char *module, int userId, uint64_t requestId,
                                   uint64_t replyId, bool binary);
+
+/**
+ * Register a per-channel net listener (for Ext.RegisterNetListener compatibility).
+ * These fire in addition to Ext.Events.NetMessage/NetModMessage handlers.
+ *
+ * @param L            Lua state
+ * @param channel      Channel name to listen on
+ * @param callback_ref Lua registry reference to the callback function
+ */
+void events_register_net_listener(lua_State *L, const char *channel, int callback_ref);
+
+/**
+ * Fire per-channel net listeners for a message.
+ * Called internally from events_fire_net_mod_message.
+ *
+ * @param L       Lua state
+ * @param channel Channel name
+ * @param payload Message payload
+ * @param userId  User ID
+ */
+void events_fire_net_listeners(lua_State *L, const char *channel, const char *payload, int userId);
 
 /**
  * Fire the legacy NetMessage event (for mods that don't use module UUIDs).

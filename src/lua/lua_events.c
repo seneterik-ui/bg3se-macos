@@ -51,6 +51,7 @@ static uint64_t g_next_handler_id = 1;  // Global counter, never reuse
 static int g_dispatch_depth[EVENT_MAX] = {0};  // Reentrancy tracking
 static int g_initialized = 0;
 static bool g_trace_enabled = false;  // Event tracing for debugging
+static int g_current_game_state = 0;  // Cached from GameStateChanged (for Ext.Utils.GetGameState)
 
 // Per-mod health tracking (for crash attribution and !mod_diag)
 #define MAX_MOD_HEALTH 128
@@ -461,6 +462,9 @@ void events_fire_tick(lua_State *L, float delta_time) {
 // ============================================================================
 
 void events_fire_game_state_changed(lua_State *L, int fromState, int toState) {
+    // Cache the current game state for Ext.Utils.GetGameState()
+    g_current_game_state = toState;
+
     if (!L) return;
 
     int count = g_handler_counts[EVENT_GAME_STATE_CHANGED];
@@ -525,6 +529,10 @@ void events_fire_game_state_changed(lua_State *L, int fromState, int toState) {
     if (g_dispatch_depth[EVENT_GAME_STATE_CHANGED] == 0) {
         process_deferred_unsubscribes(L, EVENT_GAME_STATE_CHANGED);
     }
+}
+
+int events_get_current_game_state(void) {
+    return g_current_game_state;
 }
 
 void events_fire_key_input(lua_State *L, int keyCode, bool pressed, int modifiers, const char *character) {
@@ -1456,6 +1464,9 @@ void events_fire_net_mod_message(lua_State *L, const char *channel, const char *
                                   uint64_t replyId, bool binary) {
     if (!L) return;
 
+    // Fire per-channel listeners (Ext.RegisterNetListener)
+    events_fire_net_listeners(L, channel, payload, userId);
+
     // Legacy compatibility (Issue #6): If no module and no requestId,
     // fire the legacy NetMessage event. Most existing mods use this.
     if ((!module || module[0] == '\0') && requestId == 0 && replyId == 0) {
@@ -1549,6 +1560,10 @@ void events_fire_net_message(lua_State *L, const char *channel, const char *payl
                               int userId) {
     if (!L) return;
 
+    // Note: per-channel listeners are fired from events_fire_net_mod_message
+    // (which calls this function for legacy messages). Don't fire them again here
+    // to avoid double-firing.
+
     int count = g_handler_counts[EVENT_NET_MESSAGE];
     if (count == 0) return;
 
@@ -1611,6 +1626,80 @@ void events_fire_net_message(lua_State *L, const char *channel, const char *payl
     if (g_dispatch_depth[EVENT_NET_MESSAGE] == 0) {
         process_deferred_unsubscribes(L, EVENT_NET_MESSAGE);
     }
+}
+
+// ============================================================================
+// Per-Channel Net Listener Registry (Ext.RegisterNetListener)
+// ============================================================================
+
+// Registry key for the per-channel listener table
+// Layout: g_net_listener_registry_ref -> { [channel] = { callback1, callback2, ... } }
+static int g_net_listener_registry_ref = LUA_NOREF;
+
+void events_register_net_listener(lua_State *L, const char *channel, int callback_ref) {
+    if (!L || !channel) return;
+
+    // Initialize registry table on first use
+    if (g_net_listener_registry_ref == LUA_NOREF) {
+        lua_newtable(L);
+        g_net_listener_registry_ref = luaL_ref(L, LUA_REGISTRYINDEX);
+    }
+
+    // Get the registry table
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_net_listener_registry_ref);
+
+    // Get or create the channel's listener array
+    lua_getfield(L, -1, channel);
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 1);  // pop nil
+        lua_newtable(L);
+        lua_pushvalue(L, -1);  // duplicate for setfield
+        lua_setfield(L, -3, channel);
+    }
+
+    // Append the callback ref to the channel's array
+    int len = (int)lua_rawlen(L, -1);
+    lua_rawgeti(L, LUA_REGISTRYINDEX, callback_ref);
+    lua_rawseti(L, -2, len + 1);
+
+    lua_pop(L, 2);  // pop channel table + registry table
+
+    LOG_EVENTS_DEBUG("Registered net listener for channel '%s' (ref=%d)", channel, callback_ref);
+}
+
+void events_fire_net_listeners(lua_State *L, const char *channel, const char *payload, int userId) {
+    if (!L || !channel || g_net_listener_registry_ref == LUA_NOREF) return;
+
+    // Get the registry table
+    lua_rawgeti(L, LUA_REGISTRYINDEX, g_net_listener_registry_ref);
+    lua_getfield(L, -1, channel);
+
+    if (!lua_istable(L, -1)) {
+        lua_pop(L, 2);
+        return;
+    }
+
+    int len = (int)lua_rawlen(L, -1);
+    for (int i = 1; i <= len; i++) {
+        lua_rawgeti(L, -1, i);
+        if (lua_isfunction(L, -1)) {
+            // Call with (channel, payload, userId)
+            lua_pushstring(L, channel);
+            lua_pushstring(L, payload ? payload : "{}");
+            lua_pushinteger(L, userId);
+
+            if (lua_pcall(L, 3, 0, 0) != LUA_OK) {
+                const char *err = lua_tostring(L, -1);
+                LOG_EVENTS_ERROR("RegisterNetListener handler error (channel=%s): %s",
+                           channel, err ? err : "unknown");
+                lua_pop(L, 1);
+            }
+        } else {
+            lua_pop(L, 1);
+        }
+    }
+
+    lua_pop(L, 2);  // pop channel table + registry table
 }
 
 // ============================================================================

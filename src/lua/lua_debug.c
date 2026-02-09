@@ -758,6 +758,22 @@ static int lua_debug_mod_disable(lua_State *L) {
 }
 
 // ============================================================================
+// Ext.Debug.IsDeveloperMode / Reset (MCM compatibility)
+// ============================================================================
+
+static int lua_debug_is_developer_mode(lua_State *L) {
+    // Return false by default — mods use this for conditional debug features
+    lua_pushboolean(L, 0);
+    return 1;
+}
+
+static int lua_debug_reset(lua_State *L) {
+    // Stub — full Lua state reset is complex; log a warning
+    LOG_LUA_WARN("Ext.Debug.Reset() called — Lua state reset not yet supported on macOS");
+    return 0;
+}
+
+// ============================================================================
 // Registration
 // ============================================================================
 
@@ -847,6 +863,13 @@ void lua_ext_register_debug(lua_State *L, int ext_table_index) {
 
     lua_pushcfunction(L, lua_debug_mod_disable);
     lua_setfield(L, -2, "ModDisable");
+
+    // MCM compatibility (Issue #68)
+    lua_pushcfunction(L, lua_debug_is_developer_mode);
+    lua_setfield(L, -2, "IsDeveloperMode");
+
+    lua_pushcfunction(L, lua_debug_reset);
+    lua_setfield(L, -2, "Reset");
 
     // Set Ext.Debug = table
     lua_setfield(L, ext_table_index, "Debug");
