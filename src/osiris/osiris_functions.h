@@ -122,6 +122,15 @@ void osi_func_cache_set_handle(uint32_t funcId, uint32_t handle);
 void osi_func_probe_layout(int count);
 
 /**
+ * Probe a function by name and print detailed info to console.
+ * Shows cached arity/type/handle, known table match, and re-probes
+ * the pointer chain (Signature→ParamList→Size) for live offset validation.
+ * @param name Function name to probe
+ * @param out Function pointer for console output (must not be NULL)
+ */
+void osi_func_probe_info(const char *name, void (*out)(const char *fmt, ...));
+
+/**
  * Update a known event's function ID when discovered at runtime.
  * This fixes placeholder entries (funcId=0) in the known events table.
  */

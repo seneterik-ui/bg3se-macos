@@ -499,19 +499,29 @@ static int lua_stats_getall(lua_State *L) {
         return 1;
     }
 
-    int count = stats_get_count(type);
-    if (count < 0) {
-        lua_newtable(L);
-        return 1;
-    }
-
-    lua_createtable(L, count, 0);
-
-    for (int i = 0; i < count; i++) {
-        const char *name = stats_get_name_at(type, i);
-        if (name) {
-            lua_pushstring(L, name);
-            lua_rawseti(L, -2, i + 1);  // Lua arrays are 1-indexed
+    if (!type) {
+        // Unfiltered: direct index access, O(n)
+        int count = stats_get_count(NULL);
+        if (count < 0) { lua_newtable(L); return 1; }
+        lua_createtable(L, count, 0);
+        for (int i = 0; i < count; i++) {
+            const char *name = stats_get_name_at(NULL, i);
+            if (name) {
+                lua_pushstring(L, name);
+                lua_rawseti(L, -2, i + 1);
+            }
+        }
+    } else {
+        // Filtered: use single-pass collector, O(n) instead of O(n*m)
+        int out_count = 0;
+        const char **names = stats_get_all_names_filtered(type, &out_count);
+        lua_createtable(L, out_count, 0);
+        if (names) {
+            for (int i = 0; i < out_count; i++) {
+                lua_pushstring(L, names[i]);
+                lua_rawseti(L, -2, i + 1);
+            }
+            free(names);
         }
     }
 

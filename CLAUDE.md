@@ -2,7 +2,7 @@
 
 macOS port of Norbyte's Script Extender for Baldur's Gate 3. Goal: feature parity with Windows BG3SE.
 
-**Version:** v0.36.47 | **Parity:** ~93% | **Target:** Full Windows BG3SE mod compatibility
+**Version:** v0.36.50 | **Parity:** ~94% | **Target:** Full Windows BG3SE mod compatibility
 
 ## Stack
 
@@ -126,7 +126,7 @@ tail -f "/Users/tomdimino/Library/Application Support/BG3SE/logs/latest.log"
 ls "/Users/tomdimino/Library/Application Support/BG3SE/logs/"
 ```
 
-Use `!test` to run Tier 1 regression tests (71 tests, always works). Use `!test_ingame` for Tier 2 tests (22 tests, needs loaded save). Use `Debug.*` helpers for memory probing.
+Use `!test` to run Tier 1 regression tests (85 tests, always works). Use `!test_ingame` for Tier 2 tests (40 tests, needs loaded save). Use `Debug.*` helpers for memory probing.
 
 ## Reverse Engineering
 

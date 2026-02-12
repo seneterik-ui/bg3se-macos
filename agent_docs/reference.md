@@ -1,6 +1,6 @@
 # Reference Implementation
 
-**Local clone:** `/Users/tomdimino/Desktop/Programming/bg3se` (Norbyte's Windows BG3SE)
+**Local clone:** `/Users/tomdimino/Desktop/Programming/game-modding/bg3/bg3se` (Norbyte's Windows BG3SE)
 **GitHub:** https://github.com/Norbyte/bg3se
 
 ## Key Directories
@@ -12,13 +12,19 @@
 - `BG3Extender/GameDefinitions/Components/Components.h` - Component structs
 - `CoreLib/` - Core utilities, memory patterns
 
-## Searching with osgrep
+## Searching with RLAMA
+
+**Prefer RLAMA** for semantic search over the reference implementation.
+
 ```bash
-# Search reference implementation
-osgrep "entity component access" -p /Users/tomdimino/Desktop/Programming/bg3se
-osgrep "GUID to entity handle lookup" -p /Users/tomdimino/Desktop/Programming/bg3se
-osgrep "Lua component binding" -p /Users/tomdimino/Desktop/Programming/bg3se
-osgrep "stats property resolution" -p /Users/tomdimino/Desktop/Programming/bg3se
+# Semantic queries against Windows BG3SE reference
+rlama run bg3se-windows --query "how does entity component access work?"
+rlama run bg3se-windows --query "GUID to entity handle lookup"
+rlama run bg3se-windows --query "Lua component binding pattern"
+rlama run bg3se-windows --query "Osiris query output parameters and OutParamList"
+
+# Compare with macOS port
+rlama run bg3se-macos --query "how does Osiris dispatch work?"
 ```
 
 ## Technical Patterns from Reference

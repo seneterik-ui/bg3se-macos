@@ -1533,6 +1533,35 @@ const char* stats_get_name_at(const char *type, int index) {
     return NULL;
 }
 
+const char** stats_get_all_names_filtered(const char *type, int *out_count) {
+    *out_count = 0;
+    if (!type || !stats_manager_ready()) return NULL;
+
+    void *objects = get_objects_manager();
+    if (!objects) return NULL;
+
+    int total = get_manager_count(objects);
+    if (total <= 0) return NULL;
+
+    // Allocate worst-case array (all stats match)
+    const char **names = (const char **)malloc(total * sizeof(const char *));
+    if (!names) return NULL;
+
+    int idx = 0;
+    for (int i = 0; i < total; i++) {
+        void *obj = get_manager_element(objects, i);
+        if (!obj) continue;
+        const char *obj_type = stats_get_type(obj);
+        if (obj_type && strcmp(obj_type, type) == 0) {
+            const char *name = stats_get_name(obj);
+            if (name) names[idx++] = name;
+        }
+    }
+
+    *out_count = idx;
+    return names;
+}
+
 // ============================================================================
 // Stat Creation
 // ============================================================================

@@ -125,18 +125,22 @@ typedef struct {
 // ============================================================================
 // OsirisFunctionHandle Encoding
 // ============================================================================
-// Windows BG3SE packs Key[0..3] into a 32-bit handle for DivFunctions dispatch.
-// Layout: bits 0-2 = type, bits 3-27 = funcId (type<4) or 3-19 + 20-27 (type>=4),
+// Game's OsirisFunctionHandle (Osiris.h) packs Key[0..3] into a 32-bit handle.
+// Key[0]=type, Key[1]=Part2, Key[2]=functionIndex, Key[3]=Part4
+// Layout: bits 0-2 = type, bits 3-27 = funcIndex (type<4) or 3-19 + 20-27,
 // bit 31 = Part4.
+//
+// NOTE: The game's OsirisFunctionHandle.Handle often equals OsiFunctionId
+// because OsiFunctionId is itself derived from the same Key encoding.
 
 // Encode Key[0..3] into a 32-bit handle
 static inline uint32_t osi_encode_handle(uint32_t type, uint32_t part2,
-                                          uint32_t funcId, uint32_t part4) {
+                                          uint32_t funcIndex, uint32_t part4) {
     uint32_t h = (type & 7) | ((part4 & 1) << 31);
     if (type < 4)
-        h |= (funcId & 0x1FFFFFF) << 3;       // 25-bit funcId
+        h |= (funcIndex & 0x1FFFFFF) << 3;       // 25-bit funcIndex
     else
-        h |= ((funcId & 0x1FFFF) << 3) | ((part2 & 0xFF) << 20);
+        h |= ((funcIndex & 0x1FFFF) << 3) | ((part2 & 0xFF) << 20);
     return h;
 }
 

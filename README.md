@@ -100,7 +100,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 
 ## Status
 
-**Version:** v0.36.47 | **Feature Parity:** ~93%
+**Version:** v0.36.50 | **Feature Parity:** ~94%
 
 | Feature | Status |
 |---------|--------|
@@ -133,7 +133,7 @@ This is just a sample—many more mods work out of the box. See **[docs/supporte
 | Context System | ✅ **Server/Client context awareness**, Ext.IsServer/IsClient/GetContext, two-phase bootstrap |
 | Debug Console | ✅ Socket + file + in-game overlay |
 | Crash Attribution | ✅ **Runtime mod tracking** — per-handler mod name, `!mod_diag` console, soft-disable, enhanced crash reports with mod context |
-| Testing | ✅ `!test` suite (71 tests), `!test_ingame` (22 tests), Debug.* helpers, Frida scripts |
+| Testing | ✅ `!test` suite (85 tests), `!test_ingame` (40 tests), Debug.* helpers, Frida scripts |
 
 See [ROADMAP.md](ROADMAP.md) for detailed progress.
 

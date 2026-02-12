@@ -13,6 +13,75 @@ Each entry includes:
 
 ---
 
+## [v0.36.50] - 2026-02-11
+
+**Parity:** ~94% | **Category:** Osiris Crash Fix, Test Fixes, Init Timing | **Issues:** #66, #68
+
+### Fixed
+- **Osiris TooManyArgs crash** (Issue #66): Passing more arguments than a function's arity to `Osi.*` queries caused EXC_BAD_ACCESS (NULL+0xC) as the game walked past the arg chain. Now clamps `numArgs` to `arity` before dispatch, extra args silently discarded.
+- **3 MCM test failures**: `ModEvents.Subscribe/Throw/Unsubscribe` are table namespaces (with `__index`), not plain functions. Tests now correctly assert `type == 'table'`.
+- **Stats.SetRawAttribute test**: Was testing nonexistent `Ext.Stats.SetRawAttribute` function. Now tests stat object access.
+- **MCM.EventRoundtrip test**: Rewritten with safe pcall pattern for table-based callable API.
+
+### Added
+- **Osi.TooManyArgs regression test** (Tier 2): Validates that `Osi.GetHostCharacter('extra', 'args')` does not crash, documents the exact failure scenario (arity=1, 2 string args → NULL dereference).
+- **Init timing instrumentation**: All init phases now log elapsed milliseconds — `luaL_openlibs`, `enum_registry`, `register_ext_api`, `entity_register_lua`, `input_init + overlay`, `console_cmds`, `mod_detect_enabled`, `enumerate_loaded_images`, `check_osiris_library`, `install_hooks`. Total init time logged at end.
+
+### Resolved Issues
+- **Issue #66 (Osiris dispatch) — CLOSED**: `Osi.GetHostCharacter()` returns valid GUID, 13 Osi tests pass (8 dispatch + 5 edge cases), arg clamping prevents crashes.
+- **Issue #68 (MCM support) — CLOSED**: All 10 MCM compatibility tests pass — ModEvents, RegisterNetListener, NetCreateChannel, PostMessageToServer, Osiris.RegisterListener, Osiris.NewCall.
+
+### Technical
+- Test count: 125/125 (85 Tier 1 + 40 Tier 2) — all passing
+
+---
+
+## [v0.36.49] - 2026-02-10
+
+**Parity:** ~94% | **Category:** Test Suite Expansion | **Issues:** #66, #68, #8
+
+### Added
+- **Assertion helpers**: AssertNotNil, AssertEquals, AssertType, AssertContains, AssertEqualsFloat, AssertGUID — loaded before all tests for consistent failure reporting
+- **Osiris dispatch tests** (8 Tier 2): GetHostCharacter, MetatableIndex, IsInCombat, NonexistentSafe, CacheConsistency, GetLevel, GetHitpoints, IsAlive (Issue #66)
+- **Osiris edge-case tests** (5 Tier 2): WrongArgCount, WrongArgType, NilArg, TooManyArgs, LongStringArg — crash-safety validation for malformed calls
+- **MCM compatibility tests** (10 Tier 1): ModEvents namespace (Subscribe/Throw/Unsubscribe/EventRoundtrip), RegisterNetListener, NetCreateChannel, PostMessageToServer, Osiris.RegisterListener, Osiris.NewCall (Issue #68)
+- **Entity Events tests** (5 Tier 2): Subscribe, OnCreate, OnDestroy, SubscribeReturnsHandle, UnsubscribeWorks
+- **Stats.CreateSync** and **Stats.SetRawAttribute** tests (Tier 1)
+- **Osi.MetatableExists** and **Osi.IndexReturnsFunction** tests (Tier 1)
+
+### Fixed
+- **4 vacuous tests eliminated**: Entity.HostChar, Entity.ComponentAccess, Level.GetHeightsAt, Net.Version — previously passed silently when features were broken due to `if ok and host then` guards
+- **~15 additional weak tests hardened**: Json.ParseInvalid (now asserts pcall fails), Stats.Sync/GetAllFiltered (removed `if s then` guards), Types.GetComponentLayout/TypeOf/GenerateIdeHelpers (now actually call functions), IO.LoadFile/Mod.GetModManager (call + assert), Memory tests (assert expected values), all Tier 2 readiness guards (Level, Audio, Net, IMGUI, StaticData) now assert function existence AND return values
+
+### Technical
+- Test count: 93 → 125 (85 Tier 1 + 40 Tier 2)
+- All new string constants stay under 4095-char ISO C99 limit
+- Assertion helpers loaded via `console_cmd_test_assertions` before all test definitions
+- Codex planner agent identified vacuous patterns beyond initial 4; all incorporated
+
+---
+
+## [v0.36.48] - 2026-02-09
+
+**Parity:** ~94% | **Category:** Osi Command Fix + MCM Compatibility | **Issues:** #66, #68
+
+### Fixed
+- **Console commands now execute in Server context** (Issue #66): Console `luaL_dostring` was running in CLIENT context after mod loading. Windows BG3SE defaults console to SERVER via `serverContext_ = true`. Now saves/restores context around both single-line and multi-line execution.
+- **Diagnostic warnings for NULL g_divCall**: If `RegisterDIVFunctions` hook never fires, Osi Call/Event/Proc types now log a warning instead of silently returning nil.
+- **Context warning in Osi dispatch**: Logs when Osi.* functions are called from non-server context.
+
+### Added
+- **Ext.UI namespace** (Noesis stubs for MCM): GetRoot, RegisterType, Instantiate, IsReady, SetValue, GetValue — all return nil/false. MCM detects nil and degrades to IMGUI-only mode.
+- **entity:Replicate() stub**: Community Library calls `entity:Replicate("ActionResources")` for multiplayer sync. Stub no-op with one-time log.
+
+### Technical
+- Console context fix: save/restore `LuaContext` at both `process_line()` sites (lines 512 and 569)
+- `osi_dynamic_call` now warns when `callFn` is NULL for Call/SysCall/Event/Proc dispatch
+- Ext.UI registered after Ext.Loca in main.c namespace setup
+- entity:Replicate added to entity __index handler alongside GetAllComponents
+
+---
+
 ## [v0.36.47] - 2026-02-09
 
 **Parity:** ~93% | **Category:** Signal Integration Fix | **Issues:** #69

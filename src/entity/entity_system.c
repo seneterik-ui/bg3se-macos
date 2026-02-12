@@ -1622,6 +1622,22 @@ static int lua_entity_get_component(lua_State *L) {
 }
 
 // ============================================================================
+// entity:Replicate(component_name) - Stub for Community Library compatibility
+// ============================================================================
+
+static int s_replicate_warned = 0;
+
+static int lua_entity_replicate(lua_State *L) {
+    (void)luaL_checkudata(L, 1, "BG3Entity");
+    const char *component = luaL_optstring(L, 2, "unknown");
+    if (!s_replicate_warned) {
+        log_message("[INFO] [Entity] entity:Replicate(\"%s\") called — replication not yet supported on macOS (stub no-op)", component);
+        s_replicate_warned = 1;
+    }
+    return 0;
+}
+
+// ============================================================================
 // GetAllComponents / GetAllComponentNames
 // ============================================================================
 
@@ -1759,6 +1775,10 @@ static int lua_entity_index(lua_State *L) {
     }
     if (strcmp(key, "GetAllComponentNames") == 0) {
         lua_pushcfunction(L, lua_entity_get_all_component_names);
+        return 1;
+    }
+    if (strcmp(key, "Replicate") == 0) {
+        lua_pushcfunction(L, lua_entity_replicate);
         return 1;
     }
 

@@ -114,11 +114,18 @@ static int is_valid_name_start(char c) {
 #define OSIFUNCDEF_VMT_OFFSET        0x00
 #define OSIFUNCDEF_LINE_OFFSET       0x08  /* uint32_t Line (NOT a name pointer!) */
 #define OSIFUNCDEF_SIGNATURE_OFFSET  0x18  /* FunctionSignature* */
-#define OSIFUNCDEF_PARAMCOUNT_OFFSET 0x20  /* uint32_t ParamCount (may need verification) */
 
-/* FunctionSignature field offsets */
+/* FunctionSignature field offsets (from Windows Osiris.h FunctionSignature struct) */
 #define FUNCSIG_VMT_OFFSET           0x00
 #define FUNCSIG_NAME_OFFSET          0x08  /* const char* Name */
+#define FUNCSIG_PARAMS_OFFSET        0x10  /* FunctionParamList* Params */
+#define FUNCSIG_OUTPARAMLIST_OFFSET  0x18  /* FuncSigOutParamList.Params* (bitmask) */
+#define FUNCSIG_OUTPARAMCOUNT_OFFSET 0x20  /* FuncSigOutParamList.Count (uint32_t) */
+
+/* FunctionParamList field offsets */
+#define PARAMLIST_VMT_OFFSET         0x00
+#define PARAMLIST_HEAD_OFFSET        0x08  /* List<FunctionParamDesc>.Head* */
+#define PARAMLIST_SIZE_OFFSET        0x10  /* List<FunctionParamDesc>.Size (uint32_t, total in+out) */
 
 /* Thread-local buffer for extracted function names */
 static __thread char s_extractedName[128];
@@ -374,12 +381,25 @@ int osi_func_cache_by_id(uint32_t funcId) {
         /* extract_func_name_from_def now uses safe memory APIs */
         const char *name = extract_func_name_from_def(funcDef);
         if (name && name[0]) {
-            /* Safely read arity from offset 0x20 (ParamCount from Ghidra analysis) */
-            uint32_t paramCount = 0;
-            if (!safe_memory_read_u32((mach_vm_address_t)funcDef + 0x20, &paramCount)) {
-                paramCount = 0;
+            /* Read total param count (in+out) via pointer chain:
+             * funcDef+0x18 → Signature → Signature+0x10 → ParamList* → ParamList+0x10 → Size
+             * This gives Params.Size which includes both input AND output params.
+             * Windows BG3SE uses this for query dispatch (Function.inl:OsiQuery). */
+            uint8_t arity = 0;
+            {
+                /* We already know funcDef+0x18 → Signature works (name extraction uses it).
+                 * Re-read Signature pointer for the param chain. */
+                void *sigPtr = NULL;
+                if (safe_memory_read_pointer((mach_vm_address_t)funcDef + OSIFUNCDEF_SIGNATURE_OFFSET, &sigPtr) && sigPtr) {
+                    void *paramListPtr = NULL;
+                    if (safe_memory_read_pointer((mach_vm_address_t)sigPtr + FUNCSIG_PARAMS_OFFSET, &paramListPtr) && paramListPtr) {
+                        uint32_t paramSize = 0;
+                        if (safe_memory_read_u32((mach_vm_address_t)paramListPtr + PARAMLIST_SIZE_OFFSET, &paramSize)) {
+                            arity = (paramSize <= 20) ? (uint8_t)paramSize : 0;
+                        }
+                    }
+                }
             }
-            uint8_t arity = (paramCount <= 20) ? (uint8_t)paramCount : 0;
 
             /* Read FunctionType from funcDef + 0x28 (Windows layout: Osiris.h)
              * Validated by safe_memory_read — same pattern as paramCount above.
@@ -398,34 +418,34 @@ int osi_func_cache_by_id(uint32_t funcId) {
                 }
             }
 
-            /* Read Key[4] from funcDef + 0x2C to compute the real handle.
-             * Key[0]=type, Key[1]=Part2, Key[2]=funcId, Key[3]=Part4
-             * Cross-validate Key[0] against the type we read from +0x28. */
+            /* Read Key[4] from funcDef + 0x28 to compute the real handle.
+             * Key[0]=type, Key[1]=Part2, Key[2]=funcIndex, Key[3]=Part4
+             * Handle = OsirisFunctionHandle(Key[0..3]) — typically equals funcId.
+             *
+             * NOTE: Windows layout has Key at +0x28 (after Type at +0x24).
+             * Previously we read from +0x2C which was off by 4. */
             uint32_t keys[4] = {0};
             uint32_t handle = 0;
-            if (safe_memory_read((mach_vm_address_t)funcDef + 0x2C,
+            if (safe_memory_read((mach_vm_address_t)funcDef + 0x28,
                                  keys, sizeof(keys))) {
-                /* Cross-validate: Key[0] should match type from +0x28.
-                 * If they differ, the ARM64 layout is different from Windows. */
-                if (keys[0] != type && keys[0] <= OSI_FUNC_USERQUERY) {
-                    if (s_diagLogCount < MAX_DIAG_LOGS) {
-                        LOG_OSIRIS_WARN("funcId=0x%08x '%s': Key[0]=%u != type=%u at +0x28 "
-                                       "(ARM64 offset mismatch?)", funcId, name, keys[0], type);
-                    }
-                    /* Use fallback — offsets are probably wrong */
-                    handle = osi_encode_handle(type, 0, funcId, 0);
-                } else if (keys[0] > OSI_FUNC_USERQUERY) {
-                    if (s_diagLogCount < MAX_DIAG_LOGS) {
-                        LOG_OSIRIS_WARN("funcId=0x%08x '%s': Key[0]=%u out of range "
-                                       "(offset 0x2C wrong?)", funcId, name, keys[0]);
-                    }
-                    handle = osi_encode_handle(type, 0, funcId, 0);
-                } else {
+                /* Cross-validate: Key[0] should match type from +0x24/+0x28. */
+                if (keys[0] <= OSI_FUNC_USERQUERY) {
                     handle = osi_encode_handle(keys[0], keys[1], keys[2], keys[3]);
+                    if (s_diagLogCount < MAX_DIAG_LOGS && keys[0] != type) {
+                        LOG_OSIRIS_WARN("funcId=0x%08x '%s': Key[0]=%u != type=%u "
+                                       "(using Key[0])", funcId, name, keys[0], type);
+                    }
+                } else {
+                    if (s_diagLogCount < MAX_DIAG_LOGS) {
+                        LOG_OSIRIS_WARN("funcId=0x%08x '%s': Key[0]=%u out of range, "
+                                       "using funcId as handle", funcId, name, keys[0]);
+                    }
+                    /* Fallback: funcId IS the handle for Osiris functions */
+                    handle = funcId;
                 }
             } else {
-                /* Fallback: encode from type + raw funcId */
-                handle = osi_encode_handle(type, 0, funcId, 0);
+                /* Fallback: funcId IS the handle (OsirisFunctionHandle(Key[0..3]) == funcId) */
+                handle = funcId;
             }
 
             /* Log success for first few */
@@ -748,11 +768,12 @@ void osi_func_probe_layout(int count) {
                                " | +0x20(ParamCount?)=%u", node_or_param);
             }
             if (off == 0x30) {
-                // Key[0..3] at 0x2C-0x3B if Windows layout holds on ARM64
-                uint32_t k0 = *(uint32_t *)(raw + 0x2C);
-                uint32_t k2 = *(uint32_t *)(raw + 0x34);
+                // Key[0..3] at 0x28-0x37 (verified via runtime probe)
+                uint32_t k0 = *(uint32_t *)(raw + 0x28);
+                uint32_t k2 = *(uint32_t *)(raw + 0x30);
+                uint32_t k3 = *(uint32_t *)(raw + 0x34);
                 pos += snprintf(hexline + pos, sizeof(hexline) - pos,
-                               " | Key[0]?=%u Key[2/funcId]?=0x%08x", k0, k2);
+                               " | Key[0]=%u Key[2/funcIdx]=0x%x Key[3/part4]=%u", k0, k2, k3);
             }
             LOG_OSIRIS_INFO("%s", hexline);
         }
@@ -760,4 +781,110 @@ void osi_func_probe_layout(int count) {
     }
 
     LOG_OSIRIS_INFO("PROBE: dumped %d/%d functions", probed, count);
+}
+
+void osi_func_probe_info(const char *name, void (*out)(const char *fmt, ...)) {
+    if (!name || !out) return;
+
+    /* 1. Cache lookup */
+    uint32_t funcId = osi_func_lookup_id(name);
+    uint8_t cachedArity = 0, cachedType = 0;
+    int infoFound = osi_func_get_info(name, &cachedArity, &cachedType);
+    uint32_t handle = osi_func_get_handle(name);
+
+    out("=== !osi_info %s ===", name);
+    out("  funcId: 0x%08x (%s)", funcId, funcId == INVALID_FUNCTION_ID ? "NOT FOUND" : "found");
+    out("  arity: %d (from %s)", cachedArity, infoFound ? "known table or cache" : "unknown");
+    out("  type: %s[%d]", osi_func_type_str(cachedType), cachedType);
+    out("  handle: 0x%08x", handle);
+
+    /* 2. Re-probe the pointer chain from live memory */
+    if (funcId == INVALID_FUNCTION_ID) {
+        out("  [Cannot probe pointer chain - funcId unknown]");
+        return;
+    }
+
+    if (!s_pfn_pFunctionData || !s_ppOsiFunctionMan) {
+        out("  [Cannot probe - runtime pointers not set]");
+        return;
+    }
+
+    void *funcMan = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)s_ppOsiFunctionMan, &funcMan) || !funcMan) {
+        out("  [Cannot probe - OsiFunctionMan NULL]");
+        return;
+    }
+
+    void *funcDef = s_pfn_pFunctionData(funcMan, funcId);
+    if (!funcDef) {
+        out("  [pFunctionData returned NULL for funcId=0x%08x]", funcId);
+        return;
+    }
+    out("  funcDef: %p", funcDef);
+
+    /* Step 1: Signature pointer at funcDef+0x18 */
+    void *sigPtr = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)funcDef + OSIFUNCDEF_SIGNATURE_OFFSET, &sigPtr) || !sigPtr) {
+        out("  Signature: FAILED to read at funcDef+0x%x", OSIFUNCDEF_SIGNATURE_OFFSET);
+        return;
+    }
+    out("  Signature: %p (at funcDef+0x%x)", sigPtr, OSIFUNCDEF_SIGNATURE_OFFSET);
+
+    /* Step 2: Name at Signature+0x08 (sanity check) */
+    void *namePtr = NULL;
+    char nameBuf[64] = {0};
+    if (safe_memory_read_pointer((mach_vm_address_t)sigPtr + FUNCSIG_NAME_OFFSET, &namePtr) && namePtr) {
+        safe_memory_read((mach_vm_address_t)namePtr, nameBuf, sizeof(nameBuf) - 1);
+        out("  Sig.Name: '%s' (at Sig+0x%x -> %p)", nameBuf, FUNCSIG_NAME_OFFSET, namePtr);
+    } else {
+        out("  Sig.Name: FAILED at Sig+0x%x", FUNCSIG_NAME_OFFSET);
+    }
+
+    /* Step 3: ParamList pointer at Signature+0x10 */
+    void *paramListPtr = NULL;
+    if (!safe_memory_read_pointer((mach_vm_address_t)sigPtr + FUNCSIG_PARAMS_OFFSET, &paramListPtr)) {
+        out("  ParamList: FAILED to read at Sig+0x%x", FUNCSIG_PARAMS_OFFSET);
+        return;
+    }
+    out("  ParamList: %p (at Sig+0x%x) %s", paramListPtr, FUNCSIG_PARAMS_OFFSET,
+        paramListPtr ? "" : "*** NULL ***");
+
+    if (!paramListPtr) {
+        out("  [ParamList is NULL - arity will be 0]");
+        /* Try reading alternative: OutParamList.Count at Sig+0x20 */
+        uint32_t outCount = 0;
+        if (safe_memory_read_u32((mach_vm_address_t)sigPtr + FUNCSIG_OUTPARAMCOUNT_OFFSET, &outCount)) {
+            out("  OutParamList.Count: %u (at Sig+0x%x)", outCount, FUNCSIG_OUTPARAMCOUNT_OFFSET);
+        }
+        return;
+    }
+
+    /* Step 4: Size at ParamList+0x10 */
+    uint32_t paramSize = 0;
+    if (safe_memory_read_u32((mach_vm_address_t)paramListPtr + PARAMLIST_SIZE_OFFSET, &paramSize)) {
+        out("  ParamList.Size: %u (at PL+0x%x) <- THIS IS ARITY", paramSize, PARAMLIST_SIZE_OFFSET);
+    } else {
+        out("  ParamList.Size: FAILED to read at PL+0x%x", PARAMLIST_SIZE_OFFSET);
+    }
+
+    /* Also read OutParamList.Count for cross-reference */
+    uint32_t outCount = 0;
+    void *outBitmapPtr = NULL;
+    if (safe_memory_read_pointer((mach_vm_address_t)sigPtr + FUNCSIG_OUTPARAMLIST_OFFSET, &outBitmapPtr)) {
+        out("  OutParamList.Params: %p (bitmap at Sig+0x%x)", outBitmapPtr, FUNCSIG_OUTPARAMLIST_OFFSET);
+    }
+    if (safe_memory_read_u32((mach_vm_address_t)sigPtr + FUNCSIG_OUTPARAMCOUNT_OFFSET, &outCount)) {
+        out("  OutParamList.Count: %u (bitmap bytes at Sig+0x%x)", outCount, FUNCSIG_OUTPARAMCOUNT_OFFSET);
+    }
+
+    /* Also probe nearby offsets for Size discovery if ParamList.Size looks wrong */
+    if (paramSize == 0 || paramSize > 20) {
+        out("  [ParamList.Size=%u looks wrong, probing nearby offsets:]", paramSize);
+        for (int off = 0; off <= 0x20; off += 4) {
+            uint32_t val = 0;
+            if (safe_memory_read_u32((mach_vm_address_t)paramListPtr + off, &val)) {
+                out("    PL+0x%02x: 0x%08x (%u)", off, val, val);
+            }
+        }
+    }
 }

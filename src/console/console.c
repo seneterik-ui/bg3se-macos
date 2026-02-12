@@ -11,6 +11,7 @@
 #include "console.h"
 #include "../core/logging.h"
 #include "../lua/lua_events.h"
+#include "../lua/lua_context.h"
 #include "../overlay/overlay.h"
 #include "../lifetime/lifetime.h"
 #include "../entity/component_typeid.h"
@@ -85,6 +86,9 @@ static char *s_overlay_cmd_queue[OVERLAY_COMMAND_QUEUE_CAPACITY];
 static uint32_t s_overlay_cmd_head = 0;
 static uint32_t s_overlay_cmd_tail = 0;
 
+// Forward declaration — process_line handles ! commands, multi-line, server context
+static void process_line(lua_State *L, char *line, int client_slot);
+
 /**
  * Drain queued overlay commands and execute on the calling thread.
  */
@@ -102,7 +106,10 @@ static void drain_overlay_command_queue(void) {
 
         if (!cmd) break;
 
-        (void)console_execute_lua(cmd);
+        // Route through process_line so ! commands, multi-line, comments,
+        // and server context all work from the overlay console (Issue #66).
+        // client_slot=-1 means "overlay console" (no socket client).
+        process_line(s_lua_state, cmd, -1);
         free(cmd);
     }
 }
@@ -403,6 +410,7 @@ static int dispatch_console_command(lua_State *L, const char *line, int client_s
         console_printf("  !status - Show BG3SE status");
         console_printf("  !typeids - Show TypeId resolution status");
         console_printf("  !probe_osidef [N] - Dump OsiFunctionDef layout for N functions (default 5)");
+        console_printf("  !osi_info <name> - Probe Osiris function cache + pointer chain for <name>");
         for (int i = 0; i < s_command_count; i++) {
             console_printf("  !%s", s_commands[i].name);
         }
@@ -436,6 +444,18 @@ static int dispatch_console_command(lua_State *L, const char *line, int client_s
     // Built-in !typeids command
     if (strcmp(cmd_name, "typeids") == 0) {
         component_typeid_dump_to_console();
+        return 1;
+    }
+
+    // Built-in !osi_info command (Issue #66: probe function cache + pointer chain)
+    if (strcmp(cmd_name, "osi_info") == 0) {
+        char *func_name = strtok(NULL, " \t");
+        if (!func_name || !func_name[0]) {
+            console_printf("Usage: !osi_info <function_name>");
+            console_printf("Example: !osi_info GetHostCharacter");
+            return 1;
+        }
+        osi_func_probe_info(func_name, console_printf);
         return 1;
     }
 
@@ -509,6 +529,10 @@ static void process_line(lua_State *L, char *line, int client_slot) {
         LifetimeHandle scope = lifetime_lua_begin_scope(L);
         (void)scope;
 
+        // Issue #66: Console defaults to server context (matches Windows BG3SE behavior)
+        LuaContext saved_ctx = lua_context_get();
+        lua_context_set(LUA_CONTEXT_SERVER);
+
         int result = luaL_dostring(L, s_multiline_buffer);
         if (result != LUA_OK) {
             const char *err = lua_tostring(L, -1);
@@ -518,6 +542,8 @@ static void process_line(lua_State *L, char *line, int client_slot) {
             LOG_CONSOLE_ERROR("Error: %s", err ? err : "(unknown)");
             lua_pop(L, 1);
         }
+
+        lua_context_set(saved_ctx);
 
         // End lifetime scope
         lifetime_lua_end_scope(L);
@@ -566,6 +592,10 @@ static void process_line(lua_State *L, char *line, int client_slot) {
     LifetimeHandle scope = lifetime_lua_begin_scope(L);
     (void)scope;
 
+    // Issue #66: Console defaults to server context (matches Windows BG3SE behavior)
+    LuaContext saved_ctx = lua_context_get();
+    lua_context_set(LUA_CONTEXT_SERVER);
+
     int result = luaL_dostring(L, line);
     if (result != LUA_OK) {
         const char *err = lua_tostring(L, -1);
@@ -575,6 +605,8 @@ static void process_line(lua_State *L, char *line, int client_slot) {
         LOG_CONSOLE_ERROR("Error: %s", err ? err : "(unknown)");
         lua_pop(L, 1);
     }
+
+    lua_context_set(saved_ctx);
 
     // End lifetime scope
     lifetime_lua_end_scope(L);

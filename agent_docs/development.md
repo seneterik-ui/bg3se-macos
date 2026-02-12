@@ -153,8 +153,25 @@ echo '!help' > ~/Library/Application\ Support/BG3SE/commands.txt
 | `!status` | Show BG3SE status (socket, clients, commands) |
 | `!typeids` | Show TypeId resolution status |
 | `!probe_osidef [N]` | Hex dump OsiFunctionDef layout for N functions (default 5) |
-| `!test [filter]` | Run Tier 1 regression tests (71 tests, always works). Optional filter: `!test Stats` |
-| `!test_ingame [filter]` | Run Tier 2 tests (22 tests, needs loaded save). Tests Entity, Level, Audio, Net, IMGUI, StaticData |
+| `!test [filter]` | Run Tier 1 regression tests (85 tests, always works). Optional filter: `!test Stats`, `!test MCM` |
+| `!test_ingame [filter]` | Run Tier 2 tests (40 tests, needs loaded save). Tests Entity, Level, Audio, Net, IMGUI, StaticData, Osi dispatch, EntityEvents |
+
+### Test Suite (125 tests)
+
+Two tiers, 125 total tests. Defined as Lua C string constants compiled at init, registered via `BG3SE_AddTest(tier, name, fn)`.
+
+| Tier | Command | Tests | Requires |
+|------|---------|-------|----------|
+| 1 | `!test` | 85 | Console only (no save needed) |
+| 2 | `!test_ingame` | 40 | Loaded save game |
+
+**Categories (Tier 1):** Stats (12), Entity (8), Events (7), Timer (6), Types (5), Vars (3), MCM (4), Utils (4), Debug (5), Ext.Mod (5), Ext.Level (2), Ext.Audio (2), Ext.Net (4), Context (3), StaticData (6), Template (3), Resource (3), Console (1), Localization (1), IMGUI (1)
+
+**Categories (Tier 2):** Entity (10), Level (3), Audio (3), Net (3), IMGUI (3), StaticData (7), Osi dispatch (8), EntityEvents (3)
+
+**Filtering:** `!test Stats` runs only tests with "Stats" in the name. Same for `!test_ingame Entity`.
+
+**Full reference:** See [`docs/testing.md`](../docs/testing.md) for complete test catalog, assertion helpers, writing guide, and init timing details.
 
 ### Crash Diagnostics (v0.36.39+)
 

@@ -223,6 +223,16 @@ int stats_get_count(const char *type);
  */
 const char* stats_get_name_at(const char *type, int index);
 
+/**
+ * Get all stat names matching a type filter in a single pass (O(n)).
+ * Caller must free() the returned array (but NOT the strings in it).
+ *
+ * @param type Type filter (e.g., "Weapon"). Must not be NULL.
+ * @param out_count Set to number of matching stats
+ * @return Heap-allocated array of name pointers, or NULL on error
+ */
+const char** stats_get_all_names_filtered(const char *type, int *out_count);
+
 // ============================================================================
 // Stat Creation - Phase 5
 // ============================================================================

@@ -122,6 +122,9 @@ extern "C" {
 #include "localization.h"
 #include "lua_localization.h"
 
+// UI stubs (Noesis - MCM compatibility)
+#include "lua_ui.h"
+
 // StaticData system
 #include "staticdata_manager.h"
 #include "lua_staticdata.h"
@@ -247,21 +250,36 @@ static KnownFunction g_knownFunctions[] = {
 
     // =========================================================================
     // Queries (OSI_FUNC_QUERY = 2) - return values
+    // Arity = total params (input + output). Used by dispatch to allocate
+    // OsiArgumentDesc slots for DivQuery. Names MUST match the actual Osiris
+    // function names (what the game registers), not BG3SE aliases.
     // =========================================================================
-    {"CharacterGetLevel", 0, 2, OSI_FUNC_QUERY},
-    {"GetDistanceTo", 0, 3, OSI_FUNC_QUERY},
+    // Output-only queries (0 input, N output)
+    {"GetHostCharacter", 0, 1, OSI_FUNC_QUERY},  // () → guid
+    // Input+output queries
+    {"IsInCombat", 0, 2, OSI_FUNC_QUERY},         // (guid) → bool
+    {"IsAlive", 0, 2, OSI_FUNC_QUERY},             // (guid) → bool
+    {"IsDead", 0, 2, OSI_FUNC_QUERY},              // (guid) → bool
     {"IsTagged", 0, 2, OSI_FUNC_QUERY},
     {"GetUUID", 0, 2, OSI_FUNC_QUERY},
+    {"GetDistanceTo", 0, 3, OSI_FUNC_QUERY},
+    {"GetPosition", 0, 4, OSI_FUNC_QUERY},
+    {"HasActiveStatus", 0, 2, OSI_FUNC_QUERY},
+    {"GetHitpoints", 0, 2, OSI_FUNC_QUERY},        // (guid) → int
+    {"GetMaxHitpoints", 0, 2, OSI_FUNC_QUERY},     // (guid) → int
+    {"GetLevel", 0, 2, OSI_FUNC_QUERY},             // (guid) → int
+    {"GetDisplayName", 0, 2, OSI_FUNC_QUERY},       // (guid) → string
+    {"IsPartyMember", 0, 2, OSI_FUNC_QUERY},        // (guid) → bool
+    {"IsPlayer", 0, 2, OSI_FUNC_QUERY},             // (guid) → bool
+    {"GetAbility", 0, 3, OSI_FUNC_QUERY},           // (guid, ability) → int
+    // Legacy aliases (Character-prefixed, may exist in some game versions)
+    {"CharacterGetLevel", 0, 2, OSI_FUNC_QUERY},
     {"CharacterGetDisplayName", 0, 2, OSI_FUNC_QUERY},
-    {"IsAlive", 0, 1, OSI_FUNC_QUERY},
-    {"IsDead", 0, 1, OSI_FUNC_QUERY},
-    {"CharacterIsPartyMember", 0, 1, OSI_FUNC_QUERY},
-    {"CharacterIsPlayer", 0, 1, OSI_FUNC_QUERY},
-    {"CharacterIsInCombat", 0, 1, OSI_FUNC_QUERY},
+    {"CharacterIsPartyMember", 0, 2, OSI_FUNC_QUERY},
+    {"CharacterIsPlayer", 0, 2, OSI_FUNC_QUERY},
+    {"CharacterIsInCombat", 0, 2, OSI_FUNC_QUERY},
     {"CharacterGetAbility", 0, 3, OSI_FUNC_QUERY},
     {"CharacterGetHostCharacter", 0, 1, OSI_FUNC_QUERY},
-    {"HasActiveStatus", 0, 2, OSI_FUNC_QUERY},
-    {"GetPosition", 0, 4, OSI_FUNC_QUERY},
     {"QRY_IsTagged", 0, 2, OSI_FUNC_QUERY},
     {"QRY_StartDialog_Fixed", 0, 4, OSI_FUNC_QUERY},
 
@@ -778,6 +796,9 @@ static void register_ext_api(lua_State *L) {
 
     // Ext.Loca namespace (localization system)
     lua_ext_register_loca(L, -1);
+
+    // Ext.UI namespace (Noesis stubs - MCM graceful degradation)
+    lua_ext_register_ui(L, -1);
 
     // Ext.StaticData namespace (immutable game data)
     lua_staticdata_register(L, -1);
@@ -1339,8 +1360,8 @@ static int osi_dynamic_call(lua_State *L) {
     osi_func_get_info(funcName, &arity, &funcType);
 
     int numArgs = lua_gettop(L);
-    LOG_OSIRIS_DEBUG("Osi.%s: Called with %d args (funcId=0x%x, type=%s[%d])",
-                funcName, numArgs, funcId, osi_func_type_str(funcType), funcType);
+    LOG_OSIRIS_DEBUG("Osi.%s: Called with %d args (funcId=0x%x, type=%s[%d], arity=%d)",
+                funcName, numArgs, funcId, osi_func_type_str(funcType), funcType, arity);
 
     // Check if we have the required function pointers
     if (!pfn_InternalQuery && !pfn_InternalCall) {
@@ -1349,15 +1370,36 @@ static int osi_dynamic_call(lua_State *L) {
         return 1;
     }
 
-    // Allocate arguments
+    // Validate argument count against arity.
+    // arity = total params (in + out) from funcDef->Signature->Params.Size.
+    // If caller passes more args than the function accepts, clamp to arity
+    // to prevent the game's OsirisQuery from walking past the arg chain
+    // into unallocated memory (crash at NULL+0xC).
+    if (arity > 0 && numArgs > arity) {
+        LOG_OSIRIS_DEBUG("Osi.%s: WARNING: %d args passed but arity=%d, clamping to %d",
+                        funcName, numArgs, arity, arity);
+        numArgs = arity;
+    }
+
+    // Allocate arguments based on clamped arg count.
+    // For queries, the full arity (in+out) is needed — this requires
+    // correct ParamCount from funcDef. See osi_func_enumerate() for offset.
+    int allocCount = numArgs;
+    if ((funcType == OSI_FUNC_QUERY || funcType == OSI_FUNC_SYSQUERY ||
+         funcType == OSI_FUNC_USERQUERY) && arity > numArgs) {
+        allocCount = arity;
+        LOG_OSIRIS_DEBUG("Osi.%s: Query allocated %d slots (luaArgs=%d, arity=%d)",
+                        funcName, allocCount, numArgs, arity);
+    }
+
     OsiArgumentDesc *args = NULL;
-    if (numArgs > 0) {
-        args = alloc_args(numArgs);
+    if (allocCount > 0) {
+        args = alloc_args(allocCount);
         if (!args) {
             return luaL_error(L, "Failed to allocate Osiris arguments");
         }
 
-        // Convert Lua arguments to Osiris arguments
+        // Convert Lua arguments to Osiris arguments (input slots only)
         for (int i = 0; i < numArgs; i++) {
             int argIdx = i + 1;  // Lua indices start at 1
             int luaType = lua_type(L, argIdx);
@@ -1396,6 +1438,19 @@ static int osi_dynamic_call(lua_State *L) {
                 }
             }
         }
+        // Pre-initialize output slot TypeIds for queries.
+        // DivQuery calls COsiArgumentDesc::GetDataSrcPtr() which needs a valid typeId
+        // to return the correct union member pointer. Without this, typeId=0 (NONE) causes
+        // a C++ exception → std::terminate → SIGABRT.
+        // Windows BG3SE reads exact types from Signature->Params (Function.inl:376).
+        // Default to GUIDSTRING (type 5) which is the most common Osiris output type.
+        // TODO: Read actual param types from funcDef->Signature->Params linked list.
+        if (funcType == OSI_FUNC_QUERY || funcType == OSI_FUNC_SYSQUERY ||
+            funcType == OSI_FUNC_USERQUERY) {
+            for (int i = numArgs; i < allocCount; i++) {
+                args[i].value.typeId = OSI_TYPE_GUIDSTRING;
+            }
+        }
     }
 
     // Call the appropriate function based on type
@@ -1408,24 +1463,25 @@ static int osi_dynamic_call(lua_State *L) {
     // Issue #66: DivFunctions pointers use correct OsiArgumentDesc* signature.
     // InternalCall takes COsipParameterList* (different struct) → SIGSEGV on ARM64.
     //
-    // Issue #66 fix: DivFunctions::Call/Query expect an encoded OsirisFunctionHandle,
-    // NOT a raw function ID. The handle packs type + funcId + Key parts into 32 bits.
-    // Passing raw funcId causes the engine to decode garbage type/funcId → SIGSEGV.
+    // Issue #66 fix: DivFunctions::Call/Query expect an encoded OsirisFunctionHandle.
+    // Runtime probe proved OsirisFunctionHandle(Key[0..3]).Handle == OsiFunctionId,
+    // so we pass funcId directly as the handle.
     int result = 0;
 
-    // Resolve the encoded OsirisFunctionHandle for dispatch
-    // This was computed from Key[0..3] during enumeration (osiris_functions.c)
-    uint32_t dispatchHandle = osi_func_get_handle(funcName);
-    if (dispatchHandle == 0) {
-        // Handle not yet computed — encode from known type + funcId as fallback
-        dispatchHandle = osi_encode_handle(funcType, 0, funcId, 0);
-        LOG_OSIRIS_DEBUG("Osi.%s: No cached handle, using fallback encode (handle=0x%08x)",
-                        funcName, dispatchHandle);
-    }
+    // Use funcId directly as the dispatch handle.
+    // Proven via runtime probe: OsirisFunctionHandle(Key[0..3]).Handle == OsiFunctionId
+    // for all Osiris functions. E.g. GetHostCharacter: Key={2,0,113,1} → Handle=0x8000038A = funcId.
+    uint32_t dispatchHandle = funcId;
 
     // Select dispatch functions: prefer DivFunctions (correct type), fall back to Internal*
     DivCallProc queryFn = g_divQuery ? g_divQuery : (DivCallProc)pfn_InternalQuery;
     DivCallProc callFn = g_divCall ? g_divCall : NULL;
+
+    // Issue #66: Warn if Osi.* called from non-server context
+    if (!lua_context_is_server()) {
+        LOG_OSIRIS_DEBUG("Osi.%s called from %s context (Osiris functions require Server context)",
+                    funcName, lua_context_get_name(lua_context_get()));
+    }
 
     BREADCRUMB_ID(dispatchHandle);
 
@@ -1439,13 +1495,15 @@ static int osi_dynamic_call(lua_State *L) {
                 LOG_OSIRIS_DEBUG("Osi.%s: Query returned %d (via %s, handle=0x%08x)", funcName, result,
                                 g_divQuery ? "DivQuery" : "InternalQuery", dispatchHandle);
 
-                if (result && numArgs > 0) {
+                if (result && allocCount > numArgs) {
+                    // Return output args (slots after the input args)
                     int returnCount = 0;
-                    for (int i = 0; i < numArgs; i++) {
+                    for (int i = numArgs; i < allocCount; i++) {
                         osi_value_to_lua(L, &args[i].value);
                         returnCount++;
                     }
-                    LOG_OSIRIS_DEBUG("Osi.%s: Returning %d values from query", funcName, returnCount);
+                    LOG_OSIRIS_DEBUG("Osi.%s: Returning %d output values from query (slots %d..%d)",
+                                    funcName, returnCount, numArgs, allocCount - 1);
                     return returnCount;
                 } else if (result) {
                     lua_pushboolean(L, 1);
@@ -1464,6 +1522,8 @@ static int osi_dynamic_call(lua_State *L) {
                 result = callFn(dispatchHandle, args);
                 LOG_OSIRIS_DEBUG("Osi.%s: Call returned %d (via DivCall, handle=0x%08x)", funcName, result, dispatchHandle);
                 return 0;
+            } else {
+                log_message("[WARN] [Osiris] Osi.%s: g_divCall is NULL — RegisterDIVFunctions may not have fired", funcName);
             }
             break;
 
@@ -1474,6 +1534,8 @@ static int osi_dynamic_call(lua_State *L) {
                 result = callFn(dispatchHandle, args);
                 LOG_OSIRIS_DEBUG("Osi.%s: Event/Proc dispatch returned %d (via DivCall, handle=0x%08x)", funcName, result, dispatchHandle);
                 return 0;
+            } else {
+                log_message("[WARN] [Osiris] Osi.%s: g_divCall is NULL — RegisterDIVFunctions may not have fired", funcName);
             }
             break;
 
@@ -1878,6 +1940,7 @@ static void overlay_toggle_hotkey(void *userData) {
  * Initialize Lua runtime
  */
 static void init_lua(void) {
+    uint64_t t_total = (uint64_t)timer_get_monotonic_ms();
     LOG_LUA_INFO("Initializing Lua runtime...");
 
     L = luaL_newstate();
@@ -1887,7 +1950,10 @@ static void init_lua(void) {
     }
 
     // Open standard libraries
+    uint64_t t0 = (uint64_t)timer_get_monotonic_ms();
     luaL_openlibs(L);
+    uint64_t t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("  luaL_openlibs: %llums", (unsigned long long)(t1 - t0));
 
     // Initialize context system (client/server tracking)
     lua_context_init();
@@ -1899,12 +1965,18 @@ static void init_lua(void) {
     lifetime_lua_init(L);
 
     // Initialize enum registry and register metatables
+    t0 = (uint64_t)timer_get_monotonic_ms();
     enum_registry_init();
     enum_register_definitions();
     enum_register_metatables(L);
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("  enum_registry: %llums", (unsigned long long)(t1 - t0));
 
     // Register our Ext API
+    t0 = (uint64_t)timer_get_monotonic_ms();
     register_ext_api(L);
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("  register_ext_api: %llums", (unsigned long long)(t1 - t0));
 
     // Register Ext.Osiris namespace (via lua_osiris module)
     lua_osiris_register(L);
@@ -1916,7 +1988,10 @@ static void init_lua(void) {
     register_global_functions(L);
 
     // Register Entity system API (Ext.Entity.*)
+    t0 = (uint64_t)timer_get_monotonic_ms();
     entity_register_lua(L);
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("  entity_register_lua: %llums", (unsigned long long)(t1 - t0));
 
     // Initialize console (file-based Lua command input)
     console_init();
@@ -1931,6 +2006,7 @@ static void init_lua(void) {
     game_state_init();
 
     // Initialize input system (NSEvent swizzling)
+    t0 = (uint64_t)timer_get_monotonic_ms();
     if (input_init()) {
         // Register Ext.Input namespace
         lua_getglobal(L, "Ext");
@@ -1952,6 +2028,8 @@ static void init_lua(void) {
         input_register_hotkey(50, INPUT_MOD_CTRL, overlay_toggle_hotkey, NULL, "ToggleConsole");
         LOG_CONSOLE_DEBUG("Registered Ctrl+` hotkey for console toggle");
     }
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("  input_init + overlay: %llums", (unsigned long long)(t1 - t0));
 
     // Register Ext.Math namespace
     lua_getglobal(L, "Ext");
@@ -2003,7 +2081,9 @@ static void init_lua(void) {
         lua_pop(L, 1);
     }
 
-    LOG_LUA_INFO("Lua %s initialized", LUA_VERSION);
+    uint64_t t_lua_total = (uint64_t)timer_get_monotonic_ms();
+    LOG_LUA_INFO("Lua %s initialized (%llums total)", LUA_VERSION,
+                 (unsigned long long)(t_lua_total - t_total));
 }
 
 /**
@@ -2693,6 +2773,16 @@ static void fake_Event(void *thisPtr, uint32_t funcId, OsiArgumentDesc *args) {
         LOG_OSIRIS_DEBUG(">>> Captured COsiris from Event: %p", g_COsiris);
     }
 
+    // Issue #66: InitGame hook may not fire — enumerate functions here.
+    // This MUST be outside the g_COsiris capture block so it retries every tick
+    // until *g_pOsiFunctionMan becomes non-null (it's 0x0 at early init).
+    static int functions_enumerated_event = 0;
+    if (!functions_enumerated_event && g_pOsiFunctionMan && *g_pOsiFunctionMan) {
+        functions_enumerated_event = 1;
+        log_message("[INFO] [Osiris] Enumerating functions from Event hook (InitGame hook did not fire)");
+        osi_func_enumerate();
+    }
+
     // Get function name if available (may trigger cache lookup)
     const char *funcName = osi_func_get_name(funcId);
     int arity = count_osi_args(args);
@@ -3245,19 +3335,37 @@ static void bg3se_init(void) {
     LOG_HOOKS_INFO("Dobby inline hooking: enabled");
 
     // Detect and log enabled mods
+    uint64_t t_init_start = (uint64_t)timer_get_monotonic_ms();
+    uint64_t t0, t1;
+
+    t0 = t_init_start;
     mod_detect_enabled();
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("  mod_detect_enabled: %llums", (unsigned long long)(t1 - t0));
 
     // Initialize Lua runtime
+    t0 = t1;
     init_lua();
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("  init_lua: %llums", (unsigned long long)(t1 - t0));
 
     // Enumerate loaded images
+    t0 = t1;
     enumerate_loaded_images();
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("  enumerate_loaded_images: %llums", (unsigned long long)(t1 - t0));
 
     // Check for Osiris library
+    t0 = t1;
     check_osiris_library();
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("  check_osiris_library: %llums", (unsigned long long)(t1 - t0));
 
     // Try to install hooks now (in case Osiris is already loaded)
+    t0 = t1;
     install_hooks();
+    t1 = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("  install_hooks: %llums", (unsigned long long)(t1 - t0));
 
     // Register callback for when new images load
     _dyld_register_func_for_add_image(image_added_callback);
@@ -3268,7 +3376,9 @@ static void bg3se_init(void) {
     // Calling imgui_metal_init() here during dylib constructor causes crashes
     // because the game's Metal rendering isn't ready yet.
 
-    LOG_CORE_INFO("=== Initialization complete ===");
+    uint64_t t_init_end = (uint64_t)timer_get_monotonic_ms();
+    LOG_CORE_INFO("=== Initialization complete (%llums total) ===",
+                  (unsigned long long)(t_init_end - t_init_start));
 }
 
 /**

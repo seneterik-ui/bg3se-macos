@@ -1,18 +1,3 @@
 {
-  "mcpServers": {
-    "pyghidra-mcp": {
-      "type": "stdio",
-      "command": "uvx",
-      "args": [
-        "pyghidra-mcp",
-        "-t",
-        "stdio",
-        "/Users/tomdimino/ghidra_projects/BG3_arm64_current.thin"
-      ],
-      "env": {
-        "GHIDRA_INSTALL_DIR": "/Users/tomdimino/ghidra",
-        "JAVA_HOME": "/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home"
-      }
-    }
-  }
+  "mcpServers": {}
 }

@@ -2,9 +2,9 @@
 
 This document tracks the development roadmap for achieving feature parity with Windows BG3SE (Norbyte's Script Extender).
 
-## Current Status: v0.36.47
+## Current Status: v0.36.50
 
-**Overall Feature Parity: ~93%** (based on comprehensive API function count analysis)
+**Overall Feature Parity: ~94%** (based on comprehensive API function count analysis)
 
 **Working Features:**
 - DYLD injection and Dobby hooking infrastructure
@@ -1520,6 +1520,9 @@ See **[docs/CHANGELOG.md](docs/CHANGELOG.md)** for detailed version history with
 
 | Version | Date | Highlights |
 |---------|------|------------|
+| v0.36.50 | 2026-02-11 | **Osiris Crash Fix + Init Timing** - Arg clamping in osi_dynamic_call prevents TooManyArgs crash (EXC_BAD_ACCESS). Fixed 5 Tier 1 test failures (MCM + Stats). Init timing instrumentation. **Issues #66 and #68 CLOSED.** 125/125 tests passing |
+| v0.36.49 | 2026-02-10 | **Test Suite Expansion** - 93→125 tests (85 Tier 1 + 40 Tier 2). Assertion helpers, fixed 19 vacuous/weak tests, added Osiris dispatch (8), MCM compat (10), Entity Events (5), Osiris edge-cases (5). Codex planner agent identified hidden vacuous patterns (Issues #66, #68, #8) |
+| v0.36.48 | 2026-02-09 | **Osi Command Fix + MCM Compat** - Console commands execute in Server context (was Client), Ext.UI namespace (Noesis stubs for MCM), entity:Replicate() stub (Issues #66, #68) |
 | v0.36.47 | 2026-02-09 | **Signal Integration Crash Fix** - ARM64 EntityRef by-value calling convention (16B struct in x1+x2), client world offset 0x1B0→0x1D0, memory leak fix, CCR validation hardening (Issue #69) |
 | v0.36.46 | 2026-02-09 | **Signal Integration** - Entity events fire automatically via Connection injection into game's CCR. Lazy hook install, clean removal on shutdown (Issue #69) |
 | v0.36.45 | 2026-02-09 | **Entity Event System** - 11 Ext.Entity event functions (Subscribe/OnCreate/OnDestroy + 8 variants), salted pool, deferred queue, component name resolution (Issue #69) |

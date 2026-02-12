@@ -165,6 +165,7 @@ add_library(bg3se SHARED
     src/lifetime/lifetime.c
     src/localization/localization.c
     src/lua/lua_localization.c
+    src/lua/lua_ui.c
     src/staticdata/staticdata_manager.c
     src/lua/lua_staticdata.c
     src/template/template_manager.c
