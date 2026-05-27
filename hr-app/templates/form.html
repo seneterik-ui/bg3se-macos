@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}{{ cfg.label }} · {{ employee.prenom }} {{ employee.nom }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb glass-soft" aria-label="Fil d'Ariane">
+    <a href="{{ url_for('index') }}">Recherche</a>
+    <span aria-hidden="true">›</span>
+    <a href="{{ url_for('employee', matricule=employee.matricule) }}">
+        {{ employee.prenom }} {{ employee.nom }}
+    </a>
+    <span aria-hidden="true">›</span>
+    <strong>{{ cfg.label }}</strong>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="stepper" aria-label="Progression">
+    <ol>
+        <li class="done"><span>1</span>Identification</li>
+        <li class="done"><span>2</span>Type de demande</li>
+        <li class="current"><span>3</span>Détails</li>
+        <li><span>4</span>Document</li>
+    </ol>
+</section>
+
+<section class="form-wrap glass">
+    <header class="form-head">
+        <span class="form-icon" aria-hidden="true">{{ cfg.icon }}</span>
+        <div>
+            <span class="form-cat">{{ cfg.category }}</span>
+            <h2>{{ cfg.label }}</h2>
+            <p>{{ cfg.description }}</p>
+        </div>
+    </header>
+
+    <div class="autofill-banner">
+        <span aria-hidden="true">✨</span>
+        Les informations personnelles de
+        <strong>{{ employee.prenom }} {{ employee.nom }}</strong>
+        (matricule {{ employee.matricule }}) seront insérées automatiquement.
+    </div>
+
+    <form method="POST" class="rh-form"
+          data-template-key="{{ template_key }}"
+          data-matricule="{{ employee.matricule }}">
+        {% for f in cfg.fields %}
+        <div class="field {% if f.required %}required{% endif %}">
+            <label for="f_{{ f.key }}">
+                {{ f.label }}
+                {% if f.required %}<span class="req" aria-hidden="true">*</span>{% endif %}
+            </label>
+            {% if f.type == 'textarea' %}
+                <textarea id="f_{{ f.key }}" name="{{ f.key }}"
+                          placeholder="{{ f.placeholder or '' }}"
+                          {% if f.required %}required{% endif %}
+                          rows="4">{{ form_data.get(f.key, '') }}</textarea>
+            {% elif f.type == 'select' %}
+                <select id="f_{{ f.key }}" name="{{ f.key }}"
+                        {% if f.required %}required{% endif %}>
+                    <option value="" disabled {% if not form_data.get(f.key) %}selected{% endif %}>
+                        — Sélectionnez —
+                    </option>
+                    {% for opt in f.options %}
+                        <option value="{{ opt }}" {% if form_data.get(f.key) == opt %}selected{% endif %}>
+                            {{ opt }}
+                        </option>
+                    {% endfor %}
+                </select>
+            {% else %}
+                <input id="f_{{ f.key }}" name="{{ f.key }}"
+                       type="{{ f.type or 'text' }}"
+                       placeholder="{{ f.placeholder or '' }}"
+                       value="{{ form_data.get(f.key, '') }}"
+                       {% if f.required %}required{% endif %}>
+            {% endif %}
+            <small class="field-feedback" data-for="{{ f.key }}"></small>
+        </div>
+        {% endfor %}
+
+        <div class="form-actions">
+            <a href="{{ url_for('employee', matricule=employee.matricule) }}"
+               class="btn btn-ghost">← Retour</a>
+            <button type="submit" class="btn btn-primary" id="submit-btn">
+                Générer le document
+                <span class="btn-spinner" aria-hidden="true"></span>
+            </button>
+        </div>
+    </form>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    HRApp.initForm();
+</script>
+{% endblock %}

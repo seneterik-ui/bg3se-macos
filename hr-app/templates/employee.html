@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}{{ employee.prenom }} {{ employee.nom }} · Demandes RH{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb glass-soft" aria-label="Fil d'Ariane">
+    <a href="{{ url_for('index') }}">Recherche</a>
+    <span aria-hidden="true">›</span>
+    <strong>{{ employee.prenom }} {{ employee.nom }}</strong>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="stepper" aria-label="Progression">
+    <ol>
+        <li class="done"><span>1</span>Identification</li>
+        <li class="current"><span>2</span>Type de demande</li>
+        <li><span>3</span>Détails</li>
+        <li><span>4</span>Document</li>
+    </ol>
+</section>
+
+<section class="employee-card glass">
+    <div class="avatar" aria-hidden="true">
+        {{ employee.prenom[:1] }}{{ employee.nom[:1] }}
+    </div>
+    <div class="employee-info">
+        <h2>{{ employee.prenom }} {{ employee.nom }}</h2>
+        <p class="employee-meta">
+            <span>Matricule <strong>{{ employee.matricule }}</strong></span>
+            <span>·</span>
+            <span>{{ employee.poste }}</span>
+            <span>·</span>
+            <span>{{ employee.service }}</span>
+        </p>
+        <p class="employee-meta-sub">
+            {{ employee.type_contrat }} · entré(e) le {{ employee.date_embauche }} · {{ employee.email }}
+        </p>
+    </div>
+</section>
+
+<section class="requests">
+    <h2 class="section-title">Quelle demande voulez-vous générer&nbsp;?</h2>
+    <div class="request-grid">
+        {% for key, t in TEMPLATES.items() %}
+        <a class="request-card glass"
+           href="{{ url_for('request_form', matricule=employee.matricule, template_key=key) }}"
+           data-template-key="{{ key }}">
+            <span class="request-icon" aria-hidden="true">{{ t.icon }}</span>
+            <span class="request-cat">{{ t.category }}</span>
+            <h3>{{ t.label }}</h3>
+            <p>{{ t.description }}</p>
+            <span class="request-cta">Continuer →</span>
+        </a>
+        {% endfor %}
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    HRApp.trackCardHovers('{{ employee.matricule }}');
+</script>
+{% endblock %}

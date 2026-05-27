@@ -1,0 +1,7 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+database/hr.db
+output/*.docx
+.DS_Store

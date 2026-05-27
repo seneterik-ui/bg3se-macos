@@ -1,0 +1,109 @@
+{% extends "base.html" %}
+{% block title %}Suivi UX · Portail RH{% endblock %}
+
+{% block content %}
+<section class="dashboard-head glass">
+    <h1>Suivi des parcours utilisateurs</h1>
+    <p>Base SQLite locale et privée — aucune donnée n'est envoyée à l'extérieur.</p>
+</section>
+
+<section class="kpis">
+    <div class="kpi glass">
+        <span class="kpi-label">Sessions</span>
+        <span class="kpi-value">{{ stats.total_sessions }}</span>
+    </div>
+    <div class="kpi glass">
+        <span class="kpi-label">Documents générés</span>
+        <span class="kpi-value">{{ stats.total_docs }}</span>
+    </div>
+    <div class="kpi glass">
+        <span class="kpi-label">Événements UX</span>
+        <span class="kpi-value">{{ stats.total_events }}</span>
+    </div>
+</section>
+
+<section class="glass card-block">
+    <h2>Entonnoir de conversion</h2>
+    <p class="hint">Sessions distinctes ayant atteint chaque étape.</p>
+    <div class="funnel">
+        {% set max_n = (stats.funnel | map(attribute='n') | max) or 1 %}
+        {% for step in stats.funnel %}
+        <div class="funnel-row">
+            <span class="funnel-step">{{ step.step }}</span>
+            <div class="funnel-bar">
+                <span style="width: {{ ((step.n / max_n) * 100) | round(1) }}%"></span>
+            </div>
+            <span class="funnel-n">{{ step.n }}</span>
+        </div>
+        {% endfor %}
+    </div>
+</section>
+
+<div class="two-col">
+    <section class="glass card-block">
+        <h2>Documents par type</h2>
+        {% if stats.docs_by_template %}
+            <table class="data-table">
+                <thead><tr><th>Type de demande</th><th>Quantité</th></tr></thead>
+                <tbody>
+                {% for row in stats.docs_by_template %}
+                    <tr>
+                        <td>{{ templates.get(row.template_key, {}).get('label', row.template_key) }}</td>
+                        <td class="num">{{ row.n }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="empty">Aucun document généré pour le moment.</p>
+        {% endif %}
+    </section>
+
+    <section class="glass card-block">
+        <h2>Top collaborateurs concernés</h2>
+        {% if stats.top_employees %}
+            <table class="data-table">
+                <thead><tr><th>Collaborateur</th><th>Demandes</th></tr></thead>
+                <tbody>
+                {% for row in stats.top_employees %}
+                    <tr>
+                        <td>{{ row.employee_name }}</td>
+                        <td class="num">{{ row.n }}</td>
+                    </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        {% else %}
+            <p class="empty">Aucune donnée.</p>
+        {% endif %}
+    </section>
+</div>
+
+<section class="glass card-block">
+    <h2>15 derniers événements</h2>
+    {% if stats.recent_events %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Événement</th>
+                    <th>Employé</th>
+                    <th>Demande</th>
+                </tr>
+            </thead>
+            <tbody>
+            {% for e in stats.recent_events %}
+                <tr>
+                    <td>{{ e.created_at }}</td>
+                    <td><span class="badge badge-{{ e.event_type }}">{{ e.event_type }}</span></td>
+                    <td>{{ e.employee_matricule or '—' }}</td>
+                    <td>{{ templates.get(e.template_key, {}).get('label', e.template_key or '—') }}</td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p class="empty">Aucun événement enregistré.</p>
+    {% endif %}
+</section>
+{% endblock %}

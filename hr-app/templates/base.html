@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Portail RH{% endblock %}</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="bg-orbs" aria-hidden="true">
+        <span class="orb orb-1"></span>
+        <span class="orb orb-2"></span>
+        <span class="orb orb-3"></span>
+    </div>
+
+    <header class="glass topbar">
+        <a class="brand" href="{{ url_for('index') }}">
+            <span class="brand-mark">RH</span>
+            <span class="brand-name">Portail RH</span>
+        </a>
+        <nav class="topnav">
+            <a href="{{ url_for('index') }}"
+               class="{{ 'active' if request.endpoint == 'index' else '' }}">Accueil</a>
+            <a href="{{ url_for('dashboard') }}"
+               class="{{ 'active' if request.endpoint == 'dashboard' else '' }}">Suivi UX</a>
+        </nav>
+    </header>
+
+    {% block breadcrumb %}{% endblock %}
+
+    <main class="page">
+        <div id="flash-zone" class="flash-zone">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% for category, message in messages %}
+                    <div class="toast toast-{{ category }}" data-auto-dismiss>
+                        <span class="toast-icon">{% if category == 'error' %}!{% else %}i{% endif %}</span>
+                        <span>{{ message }}</span>
+                        <button class="toast-close" aria-label="Fermer">×</button>
+                    </div>
+                {% endfor %}
+            {% endwith %}
+        </div>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <footer class="page-footer">
+        Portail RH local · données privées · session {{ session.get('uid', '')[:8] }}
+    </footer>
+
+    <div id="toast-host" class="toast-host" aria-live="polite"></div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

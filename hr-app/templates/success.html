@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Document généré · {{ cfg.label }}{% endblock %}
+
+{% block breadcrumb %}
+<nav class="breadcrumb glass-soft" aria-label="Fil d'Ariane">
+    <a href="{{ url_for('index') }}">Recherche</a>
+    <span aria-hidden="true">›</span>
+    <a href="{{ url_for('employee', matricule=employee.matricule) }}">
+        {{ employee.prenom }} {{ employee.nom }}
+    </a>
+    <span aria-hidden="true">›</span>
+    <strong>{{ cfg.label }}</strong>
+</nav>
+{% endblock %}
+
+{% block content %}
+<section class="stepper" aria-label="Progression">
+    <ol>
+        <li class="done"><span>1</span>Identification</li>
+        <li class="done"><span>2</span>Type de demande</li>
+        <li class="done"><span>3</span>Détails</li>
+        <li class="current done"><span>4</span>Document</li>
+    </ol>
+</section>
+
+<section class="success-card glass">
+    <div class="success-emoji" aria-hidden="true">✅</div>
+    <h2>Document prêt</h2>
+    <p>
+        Le <strong>{{ cfg.label }}</strong> de
+        <strong>{{ employee.prenom }} {{ employee.nom }}</strong> est généré.
+        Vous pouvez le télécharger maintenant.
+    </p>
+    <div class="success-actions">
+        <a class="btn btn-primary"
+           href="{{ url_for('download', filename=filename) }}">
+            ⬇ Télécharger {{ filename }}
+        </a>
+        <a class="btn btn-ghost"
+           href="{{ url_for('employee', matricule=employee.matricule) }}">
+            Nouvelle demande pour ce collaborateur
+        </a>
+        <a class="btn btn-ghost" href="{{ url_for('index') }}">
+            Rechercher un autre collaborateur
+        </a>
+    </div>
+</section>
+{% endblock %}

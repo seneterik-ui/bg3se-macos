@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Recherche · Portail RH{% endblock %}
+
+{% block content %}
+<section class="hero glass">
+    <h1 class="hero-title">Identifiez le collaborateur</h1>
+    <p class="hero-subtitle">
+        Saisissez le <strong>nom, le prénom ou le matricule</strong>.
+        Le système retrouve automatiquement la fiche dans le fichier RH
+        et pré-remplit le document choisi.
+    </p>
+
+    <form class="search-form" autocomplete="off" role="search">
+        <label for="search-input" class="visually-hidden">Rechercher un collaborateur</label>
+        <div class="search-field">
+            <span class="search-icon" aria-hidden="true">🔍</span>
+            <input id="search-input"
+                   type="search"
+                   inputmode="search"
+                   placeholder="Ex. Sophie Martin, E001, dupont…"
+                   autofocus
+                   aria-controls="search-results">
+            <span class="search-spinner" id="search-spinner" hidden>
+                <span class="spinner"></span>
+            </span>
+        </div>
+        <p class="search-hint" id="search-hint">
+            Commencez à taper — la recherche se lance toute seule.
+        </p>
+    </form>
+
+    <ul id="search-results" class="results" role="listbox" aria-label="Résultats"></ul>
+</section>
+
+<section class="reasons glass-soft">
+    <div class="reason">
+        <span class="reason-icon">💶</span>
+        <h3>Paie</h3>
+        <p>Attestations de salaire, justificatifs revenus.</p>
+    </div>
+    <div class="reason">
+        <span class="reason-icon">📜</span>
+        <h3>Arriérés</h3>
+        <p>Demandes de régularisation sur paie antérieure.</p>
+    </div>
+    <div class="reason">
+        <span class="reason-icon">🏥</span>
+        <h3>Santé</h3>
+        <p>Mutuelle, prise en charge, affiliations.</p>
+    </div>
+    <div class="reason">
+        <span class="reason-icon">⚖️</span>
+        <h3>Juridique</h3>
+        <p>Attestations employeur, démarches Pôle Emploi.</p>
+    </div>
+    <div class="reason">
+        <span class="reason-icon">📄</span>
+        <h3>Droit du travail</h3>
+        <p>Certificats, fins de contrat, ancienneté.</p>
+    </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    HRApp.initSearch();
+</script>
+{% endblock %}
